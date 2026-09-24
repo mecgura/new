@@ -1,13 +1,15 @@
+import { MotionConfig } from 'framer-motion'
 import Navbar from './components/Navbar'
 import Hero from './components/Hero'
-import './index.css'
 
 function App() {
   return (
-    <div className="w-full min-h-screen">
-      <Navbar />
-      <Hero />
-    </div>
+    <MotionConfig reducedMotion="user">
+      <div className="w-full min-h-screen">
+        <Navbar />
+        <Hero />
+      </div>
+    </MotionConfig>
   )
 }
 

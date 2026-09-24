@@ -11,3 +11,5 @@ npm run dev
 ```
 
 `public/hero.mp4` is the hero background video. If it is missing, the hero falls back to streaming it from the R2 URL above.
+
+The full one-shot rebuild prompt is in [`AURORA_PROMPT.md`](AURORA_PROMPT.md).
