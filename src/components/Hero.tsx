@@ -18,7 +18,10 @@ const socials = [
 export default function Hero() {
   return (
     <section style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden' }}>
-      <video style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} src="/hero.mp4" autoPlay muted loop playsInline />
+      <video style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} autoPlay muted loop playsInline>
+        <source src="/hero.mp4" type="video/mp4" />
+        <source src="https://pub-1e5b4001b36b47e28e6a2fb775966a79.r2.dev/templates/aurora/hero.mp4" type="video/mp4" />
+      </video>
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.10)' }} />
       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.13) 0%, transparent 22%, transparent 60%, rgba(0,0,0,0.19) 100%)' }} />
       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to right, rgba(0,0,0,0.07) 0%, transparent 18%, transparent 82%, rgba(0,0,0,0.07) 100%)' }} />

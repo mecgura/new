@@ -10,4 +10,4 @@ curl -L https://pub-1e5b4001b36b47e28e6a2fb775966a79.r2.dev/templates/aurora/her
 npm run dev
 ```
 
-`public/hero.mp4` is the hero background video (not committed yet — download it with the command above).
+`public/hero.mp4` is the hero background video. If it is missing, the hero falls back to streaming it from the R2 URL above.
