@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Trash2, Plus, CreditCard, Sparkles, Copy } from 'lucide-react'
+import { Trash2, Plus, CreditCard, Sparkles, Copy, Mail } from 'lucide-react'
 import { post, put, patch, del } from '../../lib/api'
 import { useApi } from '../../lib/hooks'
 import { useSession } from '../../lib/session'
@@ -90,10 +90,38 @@ function Integrations() {
         <div className="mt-4 flex gap-2"><Button onClick={async () => { try { await put('integrations/anthropic', { config: ai }); t.ok('Saved'); void reload() } catch (e) { t.err(e) } }}>Save</Button>
           {a && <Button variant="ghost" onClick={async () => { await del('integrations/anthropic'); setAi({ api_key: '' }); void reload() }}>Remove</Button>}</div>
       </Card>
+      <SmtpCard current={data.find((x) => x.provider === 'smtp')} onSaved={reload} />
       <Card title="Google Sheets, Zapier, Make, Shopify & more">
         <p className="text-sm text-muted">Use <b className="text-soft">API & Webhooks</b> to connect any tool: push new leads to Google Sheets via Zapier/Make, create contacts from your website forms, or send order updates from Shopify/WooCommerce. MECGURA can set these up for you — {`hello@mecgura.com`}.</p>
       </Card>
     </div>
+  )
+}
+
+function SmtpCard({ current, onSaved }: { current?: Integ; onSaved: () => void }) {
+  const t = useToast()
+  const [f, setF] = useState({ host: current?.config.host ?? 'smtp.gmail.com', port: current?.config.port ?? '465', user: current?.config.user ?? '', pass: current ? '••••••••' : '',
+    from_name: current?.config.from_name ?? '', from_email: current?.config.from_email ?? '' })
+  const [to, setTo] = useState('')
+  const presets: [string, string, string][] = [['Gmail', 'smtp.gmail.com', '465'], ['Zoho', 'smtp.zoho.in', '465'], ['Hostinger', 'smtp.hostinger.com', '465'], ['Outlook', 'smtp.office365.com', '587']]
+  return (
+    <Card title={<span className="flex items-center gap-2"><Mail className="size-4 text-brand" />Email (Gmail / SMTP)</span>} action={current && <Badge tone="green">connected</Badge>}>
+      <p className="mb-3 text-sm text-muted">Send bulk emails and email templates from your own address. For Gmail: turn on 2-Step Verification, then create an <b className="text-soft">App Password</b> at myaccount.google.com → Security → App passwords, and paste it below.</p>
+      <div className="mb-3 flex flex-wrap gap-1.5">{presets.map(([n, h, p]) => <button key={n} onClick={() => setF({ ...f, host: h, port: p })} className={`rounded-lg border px-2.5 py-1 text-xs ${f.host === h ? 'border-brand/50 bg-brand/10 text-white' : 'border-line text-muted'}`}>{n}</button>)}</div>
+      <div className="grid grid-cols-3 gap-3">
+        <Field label="SMTP host" className="col-span-2"><Input value={f.host} onChange={(e) => setF({ ...f, host: e.target.value.trim() })} /></Field>
+        <Field label="Port"><Input value={f.port} onChange={(e) => setF({ ...f, port: e.target.value.trim() })} /></Field>
+        <Field label="Email / username" className="col-span-2"><Input value={f.user} onChange={(e) => setF({ ...f, user: e.target.value.trim(), from_email: f.from_email || e.target.value.trim() })} /></Field>
+        <Field label="App password"><Input type="password" value={f.pass} onChange={(e) => setF({ ...f, pass: e.target.value.trim() })} /></Field>
+        <Field label="From name" className="col-span-2"><Input value={f.from_name} placeholder="Your business name" onChange={(e) => setF({ ...f, from_name: e.target.value })} /></Field>
+        <Field label="From email"><Input value={f.from_email} onChange={(e) => setF({ ...f, from_email: e.target.value.trim() })} /></Field>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button onClick={async () => { try { await put('integrations/smtp', { config: f }); t.ok('Email account saved'); onSaved() } catch (e) { t.err(e) } }}>Save</Button>
+        <Input className="w-52" placeholder="Send a test to…" value={to} onChange={(e) => setTo(e.target.value)} />
+        <Button variant="subtle" disabled={!to} onClick={async () => { try { await post('email/test', { to }); t.ok('Test email sent — check the inbox') } catch (e) { t.err(e) } }}>Send test</Button>
+      </div>
+    </Card>
   )
 }
 

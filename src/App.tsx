@@ -4,7 +4,7 @@ import { SessionProvider, useSession } from './lib/session'
 import { ToastProvider, Loading } from './components/ui'
 import AppShell from './components/AppShell'
 import Landing from './pages/site/Landing'
-import { Login, Signup, AcceptInvite } from './pages/site/Auth'
+import { Login, Signup, AcceptInvite, Forgot, Reset } from './pages/site/Auth'
 import { Terms, Privacy } from './pages/site/Legal'
 import Docs from './pages/site/Docs'
 
@@ -15,6 +15,7 @@ const Pipeline = lazy(() => import('./pages/app/Pipeline'))
 const Campaigns = lazy(() => import('./pages/app/Campaigns'))
 const CampaignDetail = lazy(() => import('./pages/app/CampaignDetail'))
 const Templates = lazy(() => import('./pages/app/Templates'))
+const Email = lazy(() => import('./pages/app/Email'))
 const Chatbot = lazy(() => import('./pages/app/Chatbot'))
 const Flows = lazy(() => import('./pages/app/Flows'))
 const FlowBuilder = lazy(() => import('./pages/app/FlowBuilder'))
@@ -50,6 +51,8 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/invite/:token" element={<AcceptInvite />} />
+            <Route path="/forgot" element={<Forgot />} />
+            <Route path="/reset/:token" element={<Reset />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/docs" element={<Docs />} />
@@ -60,6 +63,7 @@ export default function App() {
             <Route path="/app/campaigns" element={app(<Campaigns />)} />
             <Route path="/app/campaigns/:id" element={app(<CampaignDetail />)} />
             <Route path="/app/templates" element={app(<Templates />)} />
+            <Route path="/app/email" element={app(<Email />)} />
             <Route path="/app/chatbot" element={app(<Chatbot />)} />
             <Route path="/app/flows" element={app(<Flows />)} />
             <Route path="/app/flows/:id" element={app(<FlowBuilder />)} />

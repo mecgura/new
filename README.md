@@ -153,6 +153,15 @@ src/
 public/brand/         put the official MECGURA logo here (mecgura-logo.svg or .png)
 ```
 
+## Email
+
+- **MECGURA → clients** (welcome "set password" link, bills with Razorpay link, receipts, team invites, password
+  resets, plan reminders): set `SMTP_*` in the server `.env`. Gmail: `smtp.gmail.com`, port `465`, your address and a
+  Google **App Password** (Google Account → Security → 2-Step Verification → App passwords).
+- **Clients → their customers**: each workspace connects its own mailbox in **Settings → Integrations → Email**, writes
+  HTML templates in **Email Marketing → Templates** and sends bulk campaigns to tagged contacts. Opens are tracked
+  and an unsubscribe link is added to every email automatically.
+
 ## Public API
 
 See `/docs` in the app. Example:

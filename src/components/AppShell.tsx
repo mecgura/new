@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, MessagesSquare, Users, KanbanSquare, Megaphone, FileText, Bot, Workflow, Sparkles, Repeat, ShoppingBag,
-  BarChart3, Smartphone, UserCog, Code2, CreditCard, Settings, Bell, Menu, X, LogOut, ChevronDown, ShieldCheck, LifeBuoy, Check,
+  BarChart3, Smartphone, UserCog, Code2, CreditCard, Settings, Bell, Menu, X, LogOut, ChevronDown, ShieldCheck, LifeBuoy, Check, Mail,
 } from 'lucide-react'
 import Logo from './Logo'
 import { useSession } from '../lib/session'
@@ -23,6 +23,7 @@ const NAV: { group: string; items: Item[] }[] = [
   { group: 'Grow', items: [
     { to: '/app/campaigns', label: 'Campaigns', icon: Megaphone, perm: 'campaigns.manage' },
     { to: '/app/templates', label: 'Templates', icon: FileText, perm: 'templates.manage' },
+    { to: '/app/email', label: 'Email Marketing', icon: Mail, perm: 'campaigns.manage' },
     { to: '/app/commerce', label: 'Catalogue & Payments', icon: ShoppingBag, perm: 'commerce.manage' },
   ] },
   { group: 'Automate', items: [

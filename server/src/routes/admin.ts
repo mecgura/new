@@ -6,6 +6,8 @@ import { superAdmin } from '../lib/auth.ts'
 import { hashPassword, randomToken } from '../lib/security.ts'
 import { backupDatabase } from '../services/subscription.ts'
 import { createPaymentLink } from '../services/razorpay.ts'
+import { mailWelcome, mailInvoice, mailReceipt } from '../services/platformMail.ts'
+import { platformEmailReady } from '../services/email.ts'
 import { config } from '../config.ts'
 import type { Plan } from '../services/plans.ts'
 import { activatePlan, usageSummary } from '../services/plans.ts'
@@ -47,13 +49,14 @@ adminRoutes.get('/workspaces/:id', h((req, res) => {
     members: all('SELECT u.id, u.name, u.email, m.role, u.last_login_at FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ?', id(req.params.id)),
     owner_phone: get<{ phone: string | null }>("SELECT u.phone FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? AND m.role = 'owner' LIMIT 1", id(req.params.id))?.phone ?? null,
     razorpay_configured: !!(config.razorpay.keyId && config.razorpay.keySecret),
+    email_configured: platformEmailReady(),
     invoices: all('SELECT i.*, p.name AS plan_name FROM invoices i LEFT JOIN plans p ON p.id = i.plan_id WHERE i.workspace_id = ? ORDER BY i.id DESC', id(req.params.id)) })
 }))
 
 // Create a client workspace on behalf of a customer (agency onboarding).
 adminRoutes.post('/workspaces', h((req, res) => {
   const b = parse(z.object({ company: z.string().trim().min(2).max(80), name: z.string().trim().min(2).max(80), email: z.string().trim().toLowerCase().email(),
-    password: z.string().min(8), plan_id: z.number().optional(), cycle: z.enum(['monthly', 'yearly']).optional() }), req.body)
+    password: z.string().min(8), plan_id: z.number().optional(), cycle: z.enum(['monthly', 'yearly']).optional(), send_email: z.boolean().default(true) }), req.body)
   const wsId = tx(() => {
     let user = get<{ id: number }>('SELECT id FROM users WHERE email = ?', b.email)
     if (!user) user = { id: insert('users', { email: b.email, name: b.name, password_hash: hashPassword(b.password), created_at: now() }) }
@@ -61,7 +64,8 @@ adminRoutes.post('/workspaces', h((req, res) => {
     if (b.plan_id) activatePlan(w, b.plan_id, b.cycle ?? 'monthly')
     return w
   })
-  res.json({ id: wsId })
+  const owner = get<{ id: number; name: string; email: string }>('SELECT id, name, email FROM users WHERE email = ?', b.email)!
+  res.json({ id: wsId, email_sent: b.send_email ? mailWelcome(owner, b.company) : false })
 }))
 
 adminRoutes.patch('/workspaces/:id', h((req, res) => {
@@ -82,7 +86,9 @@ adminRoutes.post('/workspaces/:id/invoices', h((req, res) => {
   const b = parse(z.object({ plan_id: z.number(), cycle: z.enum(['monthly', 'yearly']), amount: z.number().int().min(0), reference: z.string().max(100).optional() }), req.body)
   activatePlan(wid, b.plan_id, b.cycle)
   const ws = get<{ current_period_end: string }>('SELECT current_period_end FROM workspaces WHERE id = ?', wid)!
-  insert('invoices', { workspace_id: wid, plan_id: b.plan_id, amount: b.amount, cycle: b.cycle, status: 'paid', provider_payment_id: b.reference ?? 'offline', period_end: ws.current_period_end, created_at: now() })
+  const invId = insert('invoices', { workspace_id: wid, plan_id: b.plan_id, amount: b.amount, cycle: b.cycle, status: 'paid', provider_payment_id: b.reference ?? 'offline', period_end: ws.current_period_end, created_at: now() })
+  const plan = get<{ name: string }>('SELECT name FROM plans WHERE id = ?', b.plan_id)
+  mailReceipt(wid, { id: invId, amount: b.amount, plan: plan?.name ?? 'Plan', cycle: b.cycle, validUntil: ws.current_period_end, reference: b.reference })
   res.json({ ok: true })
 }))
 
@@ -121,7 +127,8 @@ adminRoutes.post('/backup', h((_req, res) => { res.json({ file: backupDatabase(t
 adminRoutes.post('/workspaces/:id/payment-link', h(async (req, res) => {
   const wid = id(req.params.id)
   if (!config.razorpay.keyId || !config.razorpay.keySecret) throw bad('Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to the server .env first')
-  const b = parse(z.object({ plan_id: z.number(), cycle: z.enum(['monthly', 'yearly']), amount: z.number().int().positive().optional(), note: z.string().max(200).optional() }), req.body)
+  const b = parse(z.object({ plan_id: z.number(), cycle: z.enum(['monthly', 'yearly']), amount: z.number().int().positive().optional(), note: z.string().max(200).optional(),
+    send_email: z.boolean().default(true) }), req.body)
   const plan = get<Plan>('SELECT * FROM plans WHERE id = ?', b.plan_id)
   if (!plan) throw bad('Plan not found')
   const amount = b.amount ?? (b.cycle === 'yearly' ? plan.price_yearly : plan.price_monthly)
@@ -137,9 +144,14 @@ adminRoutes.post('/workspaces/:id/payment-link', h(async (req, res) => {
       amount, description, name: ownerRow?.name, email: ownerRow?.email, phone: ownerRow?.phone?.replace(/\D/g, '') || undefined,
       reference: `mecinv_${inv}`, callbackUrl: `${config.appUrl}/app?paid=1` })
     run('UPDATE invoices SET provider_order_id = ?, payment_url = ? WHERE id = ?', link.id, link.short_url, inv)
+    if (b.send_email) mailInvoice(wid, { id: inv, amount, plan: plan.name, cycle: b.cycle, url: link.short_url })
   } catch (e) {
     run('DELETE FROM invoices WHERE id = ?', inv)
     throw bad(`Razorpay: ${(e as Error).message}`)
   }
   res.json(get('SELECT * FROM invoices WHERE id = ?', inv))
+}))
+
+adminRoutes.get('/emails', h((_req, res) => {
+  res.json({ configured: platformEmailReady(), log: all('SELECT l.*, w.name AS workspace FROM email_log l LEFT JOIN workspaces w ON w.id = l.workspace_id ORDER BY l.id DESC LIMIT 200') })
 }))

@@ -6,6 +6,8 @@ import { hashPassword, verifyPassword, signJwt } from '../lib/security.ts'
 import { requireUser } from '../lib/auth.ts'
 import { ROLE_PERMISSIONS, type Role } from '../lib/permissions.ts'
 import { slugify } from '../lib/util.ts'
+import { sha256 } from '../lib/security.ts'
+import { mailReset } from '../services/platformMail.ts'
 
 export const authRoutes = Router()
 
@@ -132,4 +134,24 @@ authRoutes.post('/invites/:token/accept', h((req, res) => {
   run('INSERT OR IGNORE INTO memberships (workspace_id, user_id, role, created_at) VALUES (?, ?, ?, ?)', inv.workspace_id, user.id, inv.role, now())
   run('UPDATE invites SET accepted_at = ? WHERE id = ?', now(), inv.id)
   res.json({ token: signJwt({ uid: user.id }), ...sessionPayload(user.id) })
+}))
+
+// Forgot password: always answers the same way so it can't be used to discover accounts.
+const forgotSeen = new Map<string, number>()
+authRoutes.post('/forgot', h((req, res) => {
+  const b = parse(z.object({ email: z.string().trim().toLowerCase().email() }), req.body)
+  const last = forgotSeen.get(b.email) ?? 0
+  const user = get<{ id: number; email: string; name: string }>('SELECT id, email, name FROM users WHERE email = ?', b.email)
+  if (user && Date.now() - last > 60000) { forgotSeen.set(b.email, Date.now()); mailReset(user) }
+  res.json({ ok: true })
+}))
+
+authRoutes.post('/reset', h((req, res) => {
+  const b = parse(z.object({ token: z.string().min(10), password: z.string().min(8, 'Password must be at least 8 characters').max(200) }), req.body)
+  const r = get<{ token_hash: string; user_id: number; expires_at: string; used_at: string | null }>('SELECT * FROM password_resets WHERE token_hash = ?', sha256(b.token))
+  if (!r || r.used_at || r.expires_at < now()) throw bad('This link is invalid or has expired. Please request a new one.')
+  run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(b.password), r.user_id)
+  run('UPDATE password_resets SET used_at = ? WHERE token_hash = ?', now(), r.token_hash)
+  run('UPDATE users SET last_login_at = ? WHERE id = ?', now(), r.user_id)
+  res.json({ token: signJwt({ uid: r.user_id }), ...sessionPayload(r.user_id) })
 }))

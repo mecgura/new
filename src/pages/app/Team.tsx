@@ -50,7 +50,7 @@ export default function Team() {
         </Table>
       </Card>
       <Modal open={inv.open} onClose={() => setInv({ ...inv, open: false })} title="Invite a team member" footer={inv.link ? <Button onClick={() => setInv({ ...inv, open: false })}>Done</Button> : <Button onClick={async () => {
-        try { const r = await post<{ link: string }>('team/invites', { email: inv.email, role: inv.role }); setInv({ ...inv, link: r.link }); void reload() } catch (e) { t.err(e) }
+        try { const r = await post<{ link: string; email_sent: boolean }>('team/invites', { email: inv.email, role: inv.role }); setInv({ ...inv, link: r.link }); if (r.email_sent) t.ok(`Invite emailed to ${inv.email}`); void reload() } catch (e) { t.err(e) }
       }}>Create invite</Button>}>
         {inv.link ? <div><p className="text-sm text-soft">Share this link with <b className="text-white">{inv.email}</b> (valid 7 days):</p>
           <div className="mt-3 flex gap-2"><Input readOnly value={inv.link} /><Button variant="subtle" onClick={() => { void navigator.clipboard.writeText(inv.link); t.ok('Copied') }}><Copy className="size-4" /></Button></div>

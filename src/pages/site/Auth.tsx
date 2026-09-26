@@ -49,7 +49,7 @@ export function Login() {
         <Field label="Email"><Input type="email" required autoComplete="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
         <Field label="Password"><Input type="password" required autoComplete="current-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></Field>
         <Button className="w-full" size="lg" loading={busy}>Sign in</Button>
-        <p className="text-center text-xs text-muted">Forgot your password? Email {BRAND.email} from your registered address.</p>
+        <p className="text-center text-sm"><Link to="/forgot" className="text-brand-2">Forgot password?</Link></p>
       </form>
     </AuthFrame>
   )
@@ -107,6 +107,46 @@ export function AcceptInvite() {
         <Field label={inv.has_account ? 'Your existing password' : 'Create password'}><Input type="password" required minLength={8} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></Field>
         <Button className="w-full" size="lg" loading={busy}>Accept invite</Button>
       </form>}
+    </AuthFrame>
+  )
+}
+
+export function Forgot() {
+  const t = useToast()
+  const [email, setEmail] = useState('')
+  const [sent, setSent] = useState(false)
+  const [busy, setBusy] = useState(false)
+  return (
+    <AuthFrame title="Forgot password" subtitle={<>Remembered it? <Link to="/login" className="text-brand-2">Sign in</Link></>}>
+      {sent ? <div className="rounded-2xl border border-brand/30 bg-brand/10 p-5 text-sm text-soft">If an account exists for <b className="text-white">{email}</b>, we've emailed a link to reset your password. Check your inbox (and spam folder).
+        <p className="mt-3 text-xs text-muted">No email after a few minutes? WhatsApp {BRAND.phone}.</p></div> : (
+        <form className="space-y-4" onSubmit={async (e) => { e.preventDefault(); setBusy(true); try { await api('/api/auth/forgot', { body: { email } }); setSent(true) } catch (er) { t.err(er) } finally { setBusy(false) } }}>
+          <Field label="Your account email"><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+          <Button className="w-full" size="lg" loading={busy}>Send reset link</Button>
+        </form>)}
+    </AuthFrame>
+  )
+}
+
+export function Reset() {
+  const { token } = useParams()
+  const { setSession } = useSession()
+  const nav = useNavigate()
+  const t = useToast()
+  const [pw, setPw] = useState({ a: '', b: '' })
+  const [busy, setBusy] = useState(false)
+  return (
+    <AuthFrame title="Choose a new password" subtitle="Use at least 8 characters.">
+      <form className="space-y-4" onSubmit={async (e) => {
+        e.preventDefault()
+        if (pw.a !== pw.b) return t.err('Passwords do not match')
+        setBusy(true)
+        try { setSession(await api<Session>('/api/auth/reset', { body: { token, password: pw.a } })); t.ok('Password updated'); nav('/app') } catch (er) { t.err(er) } finally { setBusy(false) }
+      }}>
+        <Field label="New password"><Input type="password" required minLength={8} autoComplete="new-password" value={pw.a} onChange={(e) => setPw({ ...pw, a: e.target.value })} /></Field>
+        <Field label="Repeat password"><Input type="password" required minLength={8} autoComplete="new-password" value={pw.b} onChange={(e) => setPw({ ...pw, b: e.target.value })} /></Field>
+        <Button className="w-full" size="lg" loading={busy}>Save & sign in</Button>
+      </form>
     </AuthFrame>
   )
 }

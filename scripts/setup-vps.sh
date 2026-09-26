@@ -76,6 +76,14 @@ META_APP_ID=
 META_APP_SECRET=
 META_EMBEDDED_CONFIG_ID=
 
+# ---- MECGURA email: bills, receipts, welcome/invite emails, password resets ----
+# Gmail: SMTP_HOST=smtp.gmail.com, SMTP_PORT=465, SMTP_USER=you@gmail.com, SMTP_PASS=<16-char App Password>
+SMTP_HOST=
+SMTP_PORT=465
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM=MECGURA <hello@mecgura.com>
+
 # ---- AI assistant ----
 ANTHROPIC_API_KEY=
 AI_MODEL=claude-opus-5

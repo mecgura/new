@@ -10,7 +10,7 @@ import { Badge, Button, Card, Drawer, Field, Input, Loading, Modal, Select, Stat
 import type { Plan, Usage } from '../../lib/types'
 
 type WsRow = { id: number; name: string; status: string; subscription_status: string; plan: string; plan_id: number; owner_email: string; contacts: number; numbers: number; messages_month: number; current_period_end: string | null; created_at: string }
-type WsDetail = WsRow & { usage: Usage; members: { id: number; name: string; email: string; role: string; last_login_at: string | null }[]; invoices: { id: number; amount: number; cycle: string; status: string; created_at: string; plan_name: string | null; payment_url: string | null; period_end: string | null }[]; owner_phone: string | null; razorpay_configured: boolean }
+type WsDetail = WsRow & { usage: Usage; members: { id: number; name: string; email: string; role: string; last_login_at: string | null }[]; invoices: { id: number; amount: number; cycle: string; status: string; created_at: string; plan_name: string | null; payment_url: string | null; period_end: string | null }[]; owner_phone: string | null; razorpay_configured: boolean; email_configured: boolean }
 
 function Client({ id, plans, onClose, onChanged }: { id: number; plans: Plan[]; onClose: () => void; onChanged: () => void }) {
   const t = useToast()
@@ -44,7 +44,7 @@ function Client({ id, plans, onClose, onChanged }: { id: number; plans: Plan[]; 
             </div>
             <Button className="mt-3" size="sm" loading={linkBusy} disabled={!link.plan_id || !link.amount} onClick={async () => {
               setLinkBusy(true)
-              try { const inv = await post<{ payment_url: string }>(`/api/admin/workspaces/${id}/payment-link`, link); setNewLink(inv.payment_url); void reload() } catch (e) { t.err(e) } finally { setLinkBusy(false) }
+              try { const inv = await post<{ payment_url: string }>(`/api/admin/workspaces/${id}/payment-link`, { ...link, send_email: true }); setNewLink(inv.payment_url); t.ok(data.email_configured ? 'Payment link created and bill emailed to the client' : 'Payment link created'); void reload() } catch (e) { t.err(e) } finally { setLinkBusy(false) }
             }}>Create payment link</Button>
             {newLink && <div className="mt-3 rounded-xl border border-brand/30 bg-brand/10 p-3 text-sm">
               <div className="flex gap-2"><Input readOnly value={newLink} /><Button variant="subtle" onClick={() => { void navigator.clipboard.writeText(newLink); t.ok('Link copied') }}>Copy</Button></div>
@@ -91,7 +91,7 @@ function PlanEditor({ plan, onClose, onSaved }: { plan: Partial<Plan>; onClose: 
 export default function Admin() {
   const { user } = useSession()
   const t = useToast()
-  const [tab, setTab] = useState<'overview' | 'clients' | 'plans' | 'leads'>('overview')
+  const [tab, setTab] = useState<'overview' | 'clients' | 'plans' | 'leads' | 'emails'>('overview')
   const [q, setQ] = useState('')
   const dq = useDebounced(q)
   const { data: o } = useApi<Record<string, number>>('/api/admin/overview')
@@ -100,7 +100,7 @@ export default function Admin() {
   const { data: leads, reload: rl } = useApi<{ id: number; name: string; email: string; phone: string; company: string; message: string; status: string; created_at: string }[]>(tab === 'leads' ? '/api/admin/leads' : null)
   const [open, setOpen] = useState<number | null>(null)
   const [plan, setPlan] = useState<Partial<Plan> | null>(null)
-  const [nc, setNc] = useState<{ open: boolean; company: string; name: string; email: string; password: string; plan_id: number }>({ open: false, company: '', name: '', email: '', password: '', plan_id: 0 })
+  const [nc, setNc] = useState<{ open: boolean; company: string; name: string; email: string; password: string; plan_id: number; send_email: boolean }>({ open: false, company: '', name: '', email: '', password: '', plan_id: 0, send_email: true })
   if (!user?.is_super_admin) return <div className="p-10 text-center text-muted">MECGURA admin access only.</div>
   return (
     <div className="min-h-svh">
@@ -109,7 +109,7 @@ export default function Admin() {
         <span className="text-sm text-muted">{user.email}</span>
       </header>
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ id: 'overview', label: 'Overview' }, { id: 'clients', label: 'Clients' }, { id: 'plans', label: 'Plans' }, { id: 'leads', label: `Website leads${o?.new_leads ? ` (${o.new_leads})` : ''}` }]} /></div>
+        <div className="mb-6"><Tabs value={tab} onChange={setTab} tabs={[{ id: 'overview', label: 'Overview' }, { id: 'clients', label: 'Clients' }, { id: 'plans', label: 'Plans' }, { id: 'leads', label: `Website leads${o?.new_leads ? ` (${o.new_leads})` : ''}` }, { id: 'emails', label: 'Emails' }]} /></div>
         {tab === 'overview' && (!o ? <Loading /> : <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat label="Workspaces" value={num(o.workspaces)} hint={`${o.active} paid · ${o.trialing} trial · ${o.suspended} suspended`} icon={<Building2 className="size-4" />} />
           <Stat label="MRR (active plans)" value={inr(o.mrr)} icon={<IndianRupee className="size-4" />} />
@@ -135,6 +135,7 @@ export default function Admin() {
             <div className="mt-3 space-y-0.5 text-xs text-muted">{Object.entries(p.limits).map(([k, v]) => <div key={k}>{titleCase(k)}: {v < 0 ? '∞' : num(v)}</div>)}</div>
             <Button size="sm" variant="subtle" className="mt-3" onClick={() => setPlan(p)}>Edit</Button></Card>)}</div>
         </>}
+        {tab === 'emails' && <AdminEmails />}
         {tab === 'leads' && <Card pad={false}><Table head={['Lead', 'Company', 'Message', 'Received', 'Status']}>
           {leads?.map((l) => <tr key={l.id}><Td><div className="text-white">{l.name}</div><div className="text-xs text-muted">{l.email} · {l.phone}</div></Td><Td>{l.company}</Td><Td className="max-w-md text-xs">{l.message}</Td><Td className="text-xs">{dateTime(l.created_at)}</Td>
             <Td><Select className="!h-8 w-32 text-xs" value={l.status} onChange={async (e) => { await patch(`/api/admin/leads/${l.id}`, { status: e.target.value }); void rl() }}>{['new', 'contacted', 'converted', 'closed'].map((s) => <option key={s}>{s}</option>)}</Select></Td></tr>)}
@@ -143,13 +144,14 @@ export default function Admin() {
       {open && <Client id={open} plans={plans ?? []} onClose={() => setOpen(null)} onChanged={reload} />}
       {plan && <PlanEditor plan={plan} onClose={() => setPlan(null)} onSaved={rp} />}
       <Modal open={nc.open} onClose={() => setNc({ ...nc, open: false })} title="Create client workspace" footer={<Button onClick={async () => {
-        try { const r = await post<{ id: number }>('/api/admin/workspaces', { company: nc.company, name: nc.name, email: nc.email, password: nc.password, plan_id: nc.plan_id || undefined }); t.ok('Client created'); setNc({ ...nc, open: false }); void reload(); setOpen(r.id) } catch (e) { t.err(e) }
+        try { const r = await post<{ id: number; email_sent: boolean }>('/api/admin/workspaces', { company: nc.company, name: nc.name, email: nc.email, password: nc.password, plan_id: nc.plan_id || undefined, send_email: nc.send_email }); t.ok(r.email_sent ? 'Client created — welcome email sent' : 'Client created'); setNc({ ...nc, open: false }); void reload(); setOpen(r.id) } catch (e) { t.err(e) }
       }}>Create</Button>}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Business name"><Input value={nc.company} onChange={(e) => setNc({ ...nc, company: e.target.value })} /></Field>
           <Field label="Owner name"><Input value={nc.name} onChange={(e) => setNc({ ...nc, name: e.target.value })} /></Field>
           <Field label="Owner email"><Input value={nc.email} onChange={(e) => setNc({ ...nc, email: e.target.value })} /></Field>
           <Field label="Temporary password"><Input value={nc.password} onChange={(e) => setNc({ ...nc, password: e.target.value })} /></Field>
+          <label className="flex items-center gap-2 text-sm text-soft sm:col-span-2"><input type="checkbox" className="accent-emerald-500" checked={nc.send_email} onChange={(e) => setNc({ ...nc, send_email: e.target.checked })} />Email the client a "set password & sign in" link</label>
           <Field label="Activate plan (optional)" className="sm:col-span-2"><Select value={nc.plan_id} onChange={(e) => setNc({ ...nc, plan_id: Number(e.target.value) })}><option value={0}>Start with 14-day trial</option>{plans?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
         </div>
       </Modal>
@@ -157,3 +159,19 @@ export default function Admin() {
   )
 }
 
+
+function AdminEmails() {
+  const { data } = useApi<{ configured: boolean; log: { id: number; to_email: string; subject: string; kind: string; status: string; error: string | null; workspace: string | null; created_at: string }[] }>('/api/admin/emails')
+  if (!data) return <Loading />
+  return (
+    <>
+      {!data.configured && <div className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">MECGURA email is not set up yet. Add SMTP_HOST, SMTP_USER, SMTP_PASS and SMTP_FROM to the server .env (Gmail: smtp.gmail.com + App Password), then restart. Until then welcome emails, bills, receipts and password resets are not sent.</div>}
+      <Card title="Emails sent by MECGURA (bills, receipts, invites, password resets)" pad={false}>
+        <Table head={['To', 'Subject', 'Type', 'Client', 'Status', 'Time']}>
+          {data.log.map((l) => <tr key={l.id}><Td className="text-white">{l.to_email}</Td><Td className="max-w-72 truncate">{l.subject}</Td><Td>{l.kind}</Td><Td>{l.workspace ?? '—'}</Td><Td><Badge tone={statusTone(l.status)}>{l.status}</Badge>{l.error && <div className="mt-1 max-w-56 truncate text-[11px] text-red-300">{l.error}</div>}</Td><Td className="text-xs">{dateTime(l.created_at)}</Td></tr>)}
+        </Table>
+        {data.log.length === 0 && <p className="py-8 text-center text-sm text-muted">No emails yet.</p>}
+      </Card>
+    </>
+  )
+}

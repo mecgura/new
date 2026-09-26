@@ -7,6 +7,7 @@ import { get, run } from '../db.ts'
 import { verifyWebhook } from '../services/razorpay.ts'
 import { activatePlan } from '../services/plans.ts'
 import { notify } from '../services/messaging.ts'
+import { mailReceipt } from '../services/platformMail.ts'
 
 export const webhookRoutes = Router()
 
@@ -37,6 +38,8 @@ webhookRoutes.post('/razorpay-billing', (req, res) => {
       activatePlan(inv.workspace_id, inv.plan_id, inv.cycle)
       const w = get<{ current_period_end: string }>('SELECT current_period_end FROM workspaces WHERE id = ?', inv.workspace_id)!
       run("UPDATE invoices SET status = 'paid', provider_payment_id = ?, period_end = ? WHERE id = ?", ev.payload?.payment?.entity?.id ?? 'razorpay', w.current_period_end, inv.id)
+      const plan = get<{ name: string }>('SELECT name FROM plans WHERE id = ?', inv.plan_id)
+      mailReceipt(inv.workspace_id, { id: inv.id, amount: inv.amount, plan: plan?.name ?? 'Plan', cycle: inv.cycle, validUntil: w.current_period_end, reference: ev.payload?.payment?.entity?.id })
       notify(inv.workspace_id, { title: 'Payment received — thank you!', body: `Your plan is active until ${new Date(w.current_period_end).toLocaleDateString('en-IN')}.`, type: 'billing' })
     }
   }

@@ -26,6 +26,9 @@ export const config = {
     embeddedConfigId: env.META_EMBEDDED_CONFIG_ID || '',
   },
   anthropic: { apiKey: env.ANTHROPIC_API_KEY || '', model: env.AI_MODEL || 'claude-opus-5' },
+  // MECGURA's own mailbox for bills, receipts, invites and password resets (Gmail: smtp.gmail.com:465 + App Password).
+  smtp: { host: env.SMTP_HOST || '', port: Number(env.SMTP_PORT || 465), user: env.SMTP_USER || '', pass: env.SMTP_PASS || '',
+    from: env.SMTP_FROM || 'MECGURA <hello@mecgura.com>' },
   razorpay: { keyId: env.RAZORPAY_KEY_ID || '', keySecret: env.RAZORPAY_KEY_SECRET || '', webhookSecret: env.RAZORPAY_WEBHOOK_SECRET || '' },
   brand: {
     name: 'MECGURA',

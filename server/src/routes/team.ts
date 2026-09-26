@@ -8,6 +8,7 @@ import { randomToken, sha256 } from '../lib/security.ts'
 import { checkLimit, requireFeature } from '../services/plans.ts'
 import { WEBHOOK_EVENTS } from '../services/hooks.ts'
 import { config } from '../config.ts'
+import { mailInvite } from '../services/platformMail.ts'
 
 export const teamRoutes = Router()
 
@@ -29,7 +30,8 @@ teamRoutes.post('/team/invites', perm('team.manage'), h((req, res) => {
   run('DELETE FROM invites WHERE workspace_id = ? AND email = ? AND accepted_at IS NULL', req.ws!.id, b.email)
   const token = randomToken()
   insert('invites', { workspace_id: req.ws!.id, email: b.email, role: b.role, token, invited_by: req.user!.id, expires_at: new Date(Date.now() + 7 * 86400000).toISOString(), created_at: now() })
-  res.json({ link: `${config.appUrl}/invite/${token}` })
+  const link = `${config.appUrl}/invite/${token}`
+  res.json({ link, email_sent: mailInvite(b.email, req.ws!.name, b.role, link, req.user!.name) })
 }))
 teamRoutes.delete('/team/invites/:id', perm('team.manage'), h((req, res) => { run('DELETE FROM invites WHERE id = ? AND workspace_id = ?', id(req.params.id), req.ws!.id); res.json({ ok: true }) }))
 

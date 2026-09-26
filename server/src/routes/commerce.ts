@@ -110,7 +110,7 @@ export const razorpayClientWebhook = h(async (req: Request, res: Response) => {
 })
 
 // ---- Integrations ----
-const SECRET_FIELDS = ['key_secret', 'webhook_secret', 'api_key']
+const SECRET_FIELDS = ['key_secret', 'webhook_secret', 'api_key', 'pass', 'page_token']
 commerceRoutes.get('/integrations', perm('settings.manage'), h((req, res) => {
   const rows = all<{ provider: string; config: Record<string, string>; enabled: number }>('SELECT provider, config, enabled FROM integrations WHERE workspace_id = ?', req.ws!.id)
   res.json(rows.map((r) => ({ ...r, config: Object.fromEntries(Object.entries(r.config).map(([k, v]) => [k, SECRET_FIELDS.includes(k) ? (v ? '••••••••' : '') : v])),
@@ -118,7 +118,7 @@ commerceRoutes.get('/integrations', perm('settings.manage'), h((req, res) => {
 }))
 commerceRoutes.put('/integrations/:provider', perm('settings.manage'), h((req, res) => {
   const provider = String(req.params.provider)
-  if (!['razorpay', 'anthropic', 'google_sheets', 'shopify', 'woocommerce'].includes(provider)) throw bad('Unknown integration')
+  if (!['razorpay', 'anthropic', 'smtp', 'google_sheets', 'shopify', 'woocommerce'].includes(provider)) throw bad('Unknown integration')
   const b = parse(z.object({ enabled: z.boolean().default(true), config: z.record(z.string(), z.string().max(500)) }), req.body)
   const cur = get<{ config: Record<string, string> }>('SELECT config FROM integrations WHERE workspace_id = ? AND provider = ?', req.ws!.id, provider)
   const merged: Record<string, string> = { ...(cur?.config ?? {}) }

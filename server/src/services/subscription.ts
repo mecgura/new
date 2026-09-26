@@ -4,6 +4,7 @@ import { all, db, get, run, now } from '../db.ts'
 import { config } from '../config.ts'
 import { HttpError } from '../lib/http.ts'
 import { notify } from './messaging.ts'
+import { mailPlanReminder } from './platformMail.ts'
 
 // Paid plans keep working for a few days after the period ends so a late renewal does not cut customers off.
 export const GRACE_DAYS = 3
@@ -39,6 +40,7 @@ export function enforceSubscriptions() {
 
   for (const w of expiredTrials) {
     run("UPDATE workspaces SET subscription_status = 'expired' WHERE id = ?", w.id)
+    mailPlanReminder(w.id, 'Your MECGURA WhatsApp free trial has ended', 'Outgoing WhatsApp messages are paused until a plan is activated.')
     notify(w.id, { title: 'Your free trial has ended', body: renewHint('Choose a plan to keep sending WhatsApp messages.'), link: billingLink(), type: 'billing' })
   }
   for (const w of pastDue) {
@@ -47,6 +49,7 @@ export function enforceSubscriptions() {
   }
   for (const w of expiredPaid) {
     run("UPDATE workspaces SET subscription_status = 'expired' WHERE id = ?", w.id)
+    mailPlanReminder(w.id, 'Your MECGURA WhatsApp plan has expired', 'Outgoing WhatsApp messages are paused until you renew.')
     notify(w.id, { title: 'Plan expired', body: renewHint('Outgoing messages are paused until you renew.'), link: billingLink(), type: 'billing' })
   }
 
@@ -56,6 +59,7 @@ export function enforceSubscriptions() {
     FROM workspaces WHERE subscription_status IN ('trialing','active') AND COALESCE(CASE WHEN subscription_status = 'trialing' THEN trial_ends_at END, current_period_end) BETWEEN ? AND ?`, t, soon)
   for (const w of ending) {
     if (get("SELECT id FROM notifications WHERE workspace_id = ? AND type = 'billing_reminder' AND created_at > ?", w.id, new Date(Date.now() - 4 * 86400000).toISOString())) continue
+    mailPlanReminder(w.id, 'Your MECGURA WhatsApp plan ends in 3 days', `Renew before ${new Date(w.end).toLocaleDateString('en-IN')} to avoid interruption.`)
     notify(w.id, { title: 'Your plan ends in 3 days', body: `Renew before ${new Date(w.end).toLocaleDateString('en-IN')} to avoid interruption.`, link: billingLink(), type: 'billing_reminder' })
   }
 }

@@ -53,7 +53,7 @@ before(async () => {
   const rzpBase = `http://127.0.0.1:${(rzpMock.address() as { port: number }).port}`
   server = spawn(process.execPath, ['--import', 'tsx', 'server/src/index.ts'], {
     env: { ...process.env, PORT: String(PORT), DATA_DIR: dataDir, ADMIN_EMAIL: 'admin@test.local', ADMIN_PASSWORD: 'adminpass123',
-      APP_URL: BASE, META_APP_SECRET: META_SECRET, WORKER_INTERVAL_MS: '250', NODE_ENV: 'test', ANTHROPIC_API_KEY: '', RAZORPAY_KEY_ID: 'rzp_test_key', RAZORPAY_KEY_SECRET: 'rzp_test_secret', RAZORPAY_WEBHOOK_SECRET: RZP_WEBHOOK_SECRET, RAZORPAY_API_BASE: rzpBase },
+      APP_URL: BASE, META_APP_SECRET: META_SECRET, WORKER_INTERVAL_MS: '250', NODE_ENV: 'test', ANTHROPIC_API_KEY: '', RAZORPAY_KEY_ID: 'rzp_test_key', RAZORPAY_KEY_SECRET: 'rzp_test_secret', RAZORPAY_WEBHOOK_SECRET: RZP_WEBHOOK_SECRET, RAZORPAY_API_BASE: rzpBase, SMTP_HOST: 'json', SMTP_FROM: 'MECGURA <hello@mecgura.com>' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   server.stderr?.on('data', (d) => { const s = String(d); if (!s.includes('ExperimentalWarning') && !s.includes('--trace-warnings')) process.stderr.write(s) })
@@ -279,4 +279,41 @@ test('admin bills a client with a Razorpay link; paying it activates the plan on
   assert.equal((await post(sig)).status, 200) // Razorpay retries: must not extend twice
   const ws2 = (await call('GET', `/api/admin/workspaces/${c.body.id}`, undefined, A)).body
   assert.equal(ws2.current_period_end, ws1.current_period_end)
+})
+
+test('email: forgot password, admin welcome + bill emails, workspace bulk email campaign', async () => {
+  const admin = await call('POST', '/api/auth/login', { email: 'admin@test.local', password: 'adminpass123' })
+  const A = { token: admin.body.token }
+  assert.equal((await call('POST', '/api/auth/forgot', { email: 'owner@test.local' })).status, 200)
+  assert.equal((await call('POST', '/api/auth/forgot', { email: 'nobody@test.local' })).status, 200, 'same answer for unknown emails')
+  assert.equal((await call('POST', '/api/auth/reset', { token: 'not-a-real-token-123', password: 'password999' })).status, 400)
+
+  const c = await call('POST', '/api/admin/workspaces', { company: 'Mail Client', name: 'Mailer', email: 'mailer@test.local', password: 'password123' }, A)
+  assert.equal(c.body.email_sent, true)
+  const plans = (await call('GET', '/api/admin/plans', undefined, A)).body
+  await call('POST', `/api/admin/workspaces/${c.body.id}/payment-link`, { plan_id: plans[0].id, cycle: 'monthly' }, A)
+  const log = await until(async () => { const l = (await call('GET', '/api/admin/emails', undefined, A)).body; return l.log.some((e: Json) => e.kind === 'invoice') ? l : false })
+  const kinds = log.log.filter((e: Json) => e.status === 'sent').map((e: Json) => e.kind)
+  for (const k of ['password_reset', 'welcome', 'invoice']) assert.ok(kinds.includes(k), `${k} email sent`)
+  assert.ok(!log.log.some((e: Json) => e.to_email === 'nobody@test.local'))
+
+  // Workspace email: connect SMTP, template with variables, bulk campaign to contacts that have an email.
+  const mail = await call('POST', '/api/auth/signup', { name: 'Mail Owner', email: 'mailowner@test.local', password: 'password123', company: 'Mail Shop' })
+  const O = { token: mail.body.token, ws: mail.body.workspaces[0].id }
+  assert.equal((await call('POST', '/api/email/test', { to: 'x@test.local' }, O)).status, 400, 'needs SMTP first')
+  await call('PUT', '/api/integrations/smtp', { config: { host: 'json', port: '465', user: 'shop@test.local', pass: 'app-password', from_email: 'shop@test.local', from_name: 'Mail Shop' } }, O)
+  assert.equal((await call('POST', '/api/email/test', { to: 'x@test.local' }, O)).status, 200)
+  await call('POST', '/api/contacts/import', { csv: 'phone,name,email,tags\n9822200001,Asha,asha@test.local,vip\n9822200002,Bina,,vip\n9822200003,Chet,chet@test.local,vip\n', tags: [] }, O)
+  const tpl = await call('POST', '/api/email/templates', { name: 'Offer', subject: 'Hi {{first_name}}, 20% off', html: '<html><body><h1>Hello {{first_name}}</h1><p>{{name}}</p></body></html>' }, O)
+  const prev = await call('POST', '/api/email/preview', { html: tpl.body.html }, O)
+  assert.match(prev.body.html, /Unsubscribe/)
+  assert.match(prev.body.html, /\/e\/o\//)
+  assert.equal((await call('POST', '/api/email/campaigns/audience-preview', { type: 'tags', tags: ['vip'] }, O)).body.count, 2, 'only contacts with an email')
+  const camp = await call('POST', '/api/email/campaigns', { name: 'Diwali mail', template_id: tpl.body.id, audience: { type: 'tags', tags: ['vip'] }, send: 'now' }, O)
+  assert.equal(camp.status, 200, JSON.stringify(camp.body))
+  const done = await until(async () => { const r = (await call('GET', `/api/email/campaigns/${camp.body.id}`, undefined, O)).body; return r.status === 'completed' ? r : false })
+  assert.equal(done.sent, 2)
+  assert.equal(done.failed, 0)
+  const wlog = (await call('GET', '/api/email/log', undefined, O)).body
+  assert.ok(wlog.some((e: Json) => e.kind === 'campaign' && e.subject === 'Hi Asha, 20% off'))
 })

@@ -218,12 +218,34 @@ export function migrate() {
   CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY, workspace_id INTEGER, user_id INTEGER, action TEXT NOT NULL, meta TEXT DEFAULT '{}', created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS email_templates (
+    id INTEGER PRIMARY KEY, workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, name TEXT NOT NULL,
+    subject TEXT NOT NULL DEFAULT '', html TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT
+  );
+  CREATE TABLE IF NOT EXISTS email_campaigns (
+    id INTEGER PRIMARY KEY, workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, name TEXT NOT NULL,
+    template_id INTEGER, subject TEXT, audience TEXT DEFAULT '{}', status TEXT DEFAULT 'draft', scheduled_at TEXT, started_at TEXT,
+    completed_at TEXT, total INTEGER DEFAULT 0, sent INTEGER DEFAULT 0, failed INTEGER DEFAULT 0, opened INTEGER DEFAULT 0,
+    unsubscribed INTEGER DEFAULT 0, created_by INTEGER, created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS email_recipients (
+    id INTEGER PRIMARY KEY, campaign_id INTEGER NOT NULL REFERENCES email_campaigns(id) ON DELETE CASCADE, contact_id INTEGER NOT NULL,
+    email TEXT NOT NULL, token TEXT UNIQUE NOT NULL, status TEXT DEFAULT 'pending', error TEXT, sent_at TEXT, opened_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_er ON email_recipients(campaign_id, status);
+  CREATE TABLE IF NOT EXISTS email_log (
+    id INTEGER PRIMARY KEY, workspace_id INTEGER, to_email TEXT NOT NULL, subject TEXT, kind TEXT, status TEXT, error TEXT, created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS password_resets (
+    token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at TEXT NOT NULL, used_at TEXT
+  );
   CREATE TABLE IF NOT EXISTS site_leads (
     id INTEGER PRIMARY KEY, name TEXT, email TEXT, phone TEXT, company TEXT, message TEXT, status TEXT DEFAULT 'new', created_at TEXT NOT NULL
   );
   `)
   // Additive column migrations for existing databases.
-  for (const sql of ['ALTER TABLE invoices ADD COLUMN payment_url TEXT', 'ALTER TABLE invoices ADD COLUMN description TEXT']) {
+  for (const sql of ['ALTER TABLE invoices ADD COLUMN payment_url TEXT', 'ALTER TABLE invoices ADD COLUMN description TEXT',
+    'ALTER TABLE contacts ADD COLUMN email_opted_out INTEGER DEFAULT 0']) {
     try { db.exec(sql) } catch { /* column already exists */ }
   }
 }

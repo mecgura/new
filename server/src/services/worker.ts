@@ -2,6 +2,7 @@ import { processCampaigns } from './campaigns.ts'
 import { resumeSleepingRuns, processSequences } from './automation.ts'
 import { deliverPending } from './hooks.ts'
 import { enforceSubscriptions, backupDatabase } from './subscription.ts'
+import { processEmailCampaigns } from './emailCampaigns.ts'
 
 let busy = false
 let lastHourly = 0
@@ -18,6 +19,7 @@ async function tick() {
     await processCampaigns()
     await resumeSleepingRuns()
     await processSequences()
+    await processEmailCampaigns()
     await deliverPending()
   } catch (e) { console.error('worker tick failed', e) } finally { busy = false }
 }
