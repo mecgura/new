@@ -1,19 +1,40 @@
 @import "tailwindcss";
 
-@layer base {
-  *, *::before, *::after {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
-  html { scroll-behavior: smooth; }
-  body {
-    font-family: 'Inter', sans-serif;
-    background: #000;
-    color: #fff;
-    overflow-x: hidden;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-  #root { width: 100%; min-height: 100svh; }
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  --color-ink: #05080a;
+  --color-panel: #0a0f12;
+  --color-card: #0e1519;
+  --color-raised: #131c21;
+  --color-line: #1c272d;
+  --color-line-strong: #27353c;
+  --color-muted: #8a9aa3;
+  --color-soft: #c5d0d5;
+  --color-brand: #10b981;
+  --color-brand-2: #34d399;
+  --color-brand-deep: #047857;
 }
+
+@layer base {
+  html { color-scheme: dark; scroll-behavior: smooth; }
+  body { background: var(--color-ink); color: #e8eef0; font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+  #root { min-height: 100svh; }
+  ::selection { background: rgba(16, 185, 129, .35); }
+  * { scrollbar-width: thin; scrollbar-color: #26343a transparent; }
+  input, textarea, select { font: inherit; }
+}
+
+@layer components {
+  .glow { background: radial-gradient(60% 60% at 50% 0%, rgba(16,185,129,.16), transparent 70%); }
+  .grid-bg {
+    background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size: 44px 44px;
+  }
+  .text-gradient { background: linear-gradient(90deg, #fff 0%, #a7f3d0 55%, #34d399 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .wa-bg { background-color: #0b1418; background-image: radial-gradient(rgba(52,211,153,.05) 1px, transparent 1px); background-size: 18px 18px; }
+}
+
+@keyframes rise { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }
+.rise { animation: rise .6s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .rise { animation: none } }
