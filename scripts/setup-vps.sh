@@ -125,7 +125,12 @@ if ss -ltnp 2>/dev/null | grep -q ':80 ' && ! ss -ltnp 2>/dev/null | grep ':80 '
   warn "Something other than nginx is using port 80:"; ss -ltnp | grep ':80 '
   warn "Stop it (e.g. systemctl disable --now apache2) and re-run this script."; exit 1
 fi
-nginx -t -q && systemctl enable -q nginx && systemctl reload nginx 2>/dev/null || systemctl restart nginx
+if ! nginx -t -q; then warn "nginx config test failed (see above)."; exit 1; fi
+if command -v systemctl >/dev/null && systemctl is-system-running >/dev/null 2>&1 || [ "$(systemctl is-system-running 2>/dev/null)" = "degraded" ]; then
+  systemctl enable -q nginx && { systemctl reload nginx 2>/dev/null || systemctl restart nginx; }
+else
+  nginx -s reload 2>/dev/null || nginx
+fi
 if command -v ufw >/dev/null && ufw status | grep -q active; then ufw allow 'Nginx Full' >/dev/null; ufw allow OpenSSH >/dev/null; fi
 
 say "HTTPS certificate"
