@@ -6,6 +6,7 @@ import { perm } from '../lib/auth.ts'
 import { launchCampaign, resolveAudience, type Audience } from '../services/campaigns.ts'
 import { checkLimit, addUsage } from '../services/plans.ts'
 import { getNumber } from '../services/messaging.ts'
+import { assertCanSend } from '../services/subscription.ts'
 
 export const campaignRoutes = Router()
 
@@ -34,6 +35,7 @@ campaignRoutes.post('/campaigns', perm('campaigns.manage'), h((req, res) => {
   const num = getNumber(req.ws!.id, b.number_id)
   const count = resolveAudience(req.ws!.id, b.audience as Audience).length
   if (b.send !== 'draft') {
+    assertCanSend(req.ws!.id)
     if (!count) throw bad('The selected audience has no contacts (opted-out contacts are excluded)')
     checkLimit(req.ws!.id, 'campaigns'); checkLimit(req.ws!.id, 'messages', count)
   }
@@ -59,11 +61,12 @@ campaignRoutes.post('/campaigns/:id/:action', perm('campaigns.manage'), h((req, 
   if (!c) throw notFound('Campaign')
   const a = req.params.action
   if (a === 'pause' && c.status === 'running') update('campaigns', c.id, { status: 'paused' })
-  else if (a === 'resume' && c.status === 'paused') update('campaigns', c.id, { status: 'running' })
+  else if (a === 'resume' && c.status === 'paused') { assertCanSend(req.ws!.id); update('campaigns', c.id, { status: 'running' }) }
   else if (a === 'cancel' && ['scheduled', 'running', 'paused'].includes(c.status)) {
     update('campaigns', c.id, { status: 'cancelled', completed_at: now() })
     run("UPDATE campaign_recipients SET status = 'cancelled' WHERE campaign_id = ? AND status = 'pending'", c.id)
   } else if (a === 'send' && c.status === 'draft') {
+    assertCanSend(req.ws!.id)
     checkLimit(req.ws!.id, 'campaigns'); addUsage(req.ws!.id, 'campaigns')
     if (!launchCampaign(c.id)) throw bad('The audience has no contacts')
   } else throw bad(`Cannot ${a} a ${c.status} campaign`)

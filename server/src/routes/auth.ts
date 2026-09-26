@@ -31,13 +31,36 @@ export function createWorkspace(name: string, ownerId: number, business: Record<
   return wsId
 }
 
-export function sessionPayload(userId: number) {
+const WS_COLS = 'w.id, w.name, w.status, w.subscription_status, w.trial_ends_at, w.current_period_end, p.name AS plan'
+
+/** `viewWorkspaceId`: lets a MECGURA super admin open any client workspace for support. */
+export function sessionPayload(userId: number, viewWorkspaceId?: number) {
   const user = get<{ id: number; email: string; name: string; phone: string | null; is_super_admin: number }>('SELECT id, email, name, phone, is_super_admin FROM users WHERE id = ?', userId)!
-  const workspaces = all<{ id: number; name: string; role: string; status: string; plan: string }>(
-    `SELECT w.id, w.name, w.status, m.role, p.name AS plan FROM memberships m JOIN workspaces w ON w.id = m.workspace_id
+  const workspaces = all<{ id: number; name: string; role: string; status: string; plan: string; via_admin?: boolean }>(
+    `SELECT ${WS_COLS}, m.role FROM memberships m JOIN workspaces w ON w.id = m.workspace_id
      LEFT JOIN plans p ON p.id = w.plan_id WHERE m.user_id = ? ORDER BY w.id`, userId)
-    .map((w) => ({ ...w, permissions: ROLE_PERMISSIONS[w.role as Role] ?? [] }))
-  return { user, workspaces }
+  if (user.is_super_admin && viewWorkspaceId && !workspaces.some((w) => w.id === viewWorkspaceId)) {
+    const w = get<{ id: number; name: string; status: string; plan: string }>(`SELECT ${WS_COLS} FROM workspaces w LEFT JOIN plans p ON p.id = w.plan_id WHERE w.id = ?`, viewWorkspaceId)
+    if (w) workspaces.push({ ...w, role: 'owner', via_admin: true })
+  }
+  return { user, workspaces: workspaces.map((w) => ({ ...w, permissions: ROLE_PERMISSIONS[w.role as Role] ?? [] })) }
+}
+
+// Brute-force protection: 10 failed logins per email+IP in 15 minutes locks that pair temporarily.
+const failures = new Map<string, { count: number; first: number }>()
+const WINDOW = 15 * 60 * 1000
+function loginKey(ip: string, email: string) { return `${ip}|${email}` }
+function checkLocked(key: string) {
+  const f = failures.get(key)
+  if (f && Date.now() - f.first < WINDOW && f.count >= 10) {
+    throw new HttpError(429, `Too many failed attempts. Try again in ${Math.ceil((WINDOW - (Date.now() - f.first)) / 60000)} minutes.`, 'locked')
+  }
+}
+function recordFailure(key: string) {
+  const f = failures.get(key)
+  if (!f || Date.now() - f.first > WINDOW) failures.set(key, { count: 1, first: Date.now() })
+  else f.count++
+  if (failures.size > 10000) for (const [k, v] of failures) if (Date.now() - v.first > WINDOW) failures.delete(k)
 }
 
 authRoutes.post('/signup', h((req, res) => {
@@ -57,13 +80,16 @@ authRoutes.post('/signup', h((req, res) => {
 
 authRoutes.post('/login', h((req, res) => {
   const b = parse(z.object({ email: z.string().trim().toLowerCase().email(), password: z.string().min(1) }), req.body)
+  const key = loginKey(String(req.ip), b.email)
+  checkLocked(key)
   const user = get<{ id: number; password_hash: string }>('SELECT id, password_hash FROM users WHERE email = ?', b.email)
-  if (!user || !verifyPassword(b.password, user.password_hash)) throw new HttpError(401, 'Incorrect email or password')
+  if (!user || !verifyPassword(b.password, user.password_hash)) { recordFailure(key); throw new HttpError(401, 'Incorrect email or password') }
+  failures.delete(key)
   run('UPDATE users SET last_login_at = ? WHERE id = ?', now(), user.id)
   res.json({ token: signJwt({ uid: user.id }), ...sessionPayload(user.id) })
 }))
 
-authRoutes.get('/me', requireUser, h((req, res) => { res.json(sessionPayload(req.user!.id)) }))
+authRoutes.get('/me', requireUser, h((req, res) => { res.json(sessionPayload(req.user!.id, Number(req.headers['x-workspace-id']) || undefined)) }))
 
 authRoutes.patch('/me', requireUser, h((req, res) => {
   const b = parse(z.object({ name: z.string().trim().min(2).max(80).optional(), phone: z.string().max(20).optional(),

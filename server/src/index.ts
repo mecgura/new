@@ -2,7 +2,7 @@ import express from 'express'
 import path from 'node:path'
 import fs from 'node:fs'
 import { config } from './config.ts'
-import { migrate } from './db.ts'
+import { migrate, db } from './db.ts'
 import { seed } from './seed.ts'
 import { errorHandler } from './lib/http.ts'
 import { requireUser, requireWorkspace } from './lib/auth.ts'
@@ -30,6 +30,7 @@ if (config.isProd && config.appSecret.startsWith('dev-only')) {
 
 migrate()
 seed()
+if (config.isProd && !config.meta.appSecret) console.warn('WARNING: META_APP_SECRET is not set — incoming WhatsApp webhooks are not signature-verified.')
 
 const app = express()
 app.set('trust proxy', 1)
@@ -41,7 +42,9 @@ app.use((_req, res, next) => {
 // Keep the raw body for webhook signature checks (Meta, Razorpay).
 app.use(express.json({ limit: '6mb', verify: (req, _res, buf) => { (req as express.Request).rawBody = buf } }))
 
-app.get('/health', (_req, res) => { res.json({ ok: true, service: config.brand.product }) })
+app.get('/health', (_req, res) => {
+  try { db.prepare('SELECT 1').get(); res.json({ ok: true, service: config.brand.product }) } catch { res.status(503).json({ ok: false }) }
+})
 app.use('/webhooks', webhookRoutes)
 app.use('/uploads', express.static(path.join(config.dataDir, 'uploads'), { maxAge: '7d' }))
 app.use('/api/public', publicRoutes)

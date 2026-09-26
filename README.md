@@ -22,7 +22,23 @@ Contact: hello@mecgura.com · +91 78377 22567 · mecgura.tech
 | Realtime | Server-Sent Events for inbox, statuses and notifications |
 
 Background worker (in-process, every 4s): scheduled/running campaigns (throttled batches), flow delays,
-follow-up sequences, webhook deliveries with retries.
+follow-up sequences, webhook deliveries with retries. Hourly: trial/plan expiry, renewal reminders and a
+daily database backup to `DATA_DIR/backups` (last 7 kept; admins can also trigger one via `POST /api/admin/backup`).
+
+## Plans & expiry
+
+- New workspaces get a 14-day trial of Growth. 3 days before a trial or plan ends, owners get a reminder.
+- When a trial ends the workspace becomes `expired`; paid plans go `past_due` at period end and `expired` after a
+  3-day grace period. Expired workspaces keep **receiving** messages but cannot **send** (inbox, bots, campaigns,
+  API) until renewed. Running campaigns pause and resume from where they stopped.
+- Renew online (Razorpay) from Plan & Billing, or record a UPI/bank payment in **Admin → Clients**.
+
+## Security
+
+Passwords hashed with scrypt; WhatsApp and integration tokens encrypted with AES-256-GCM; JWT sessions;
+role-based permissions checked on every route; every query scoped to the workspace; Meta webhook signature
+check (`META_APP_SECRET`); Razorpay webhook signature check; signed outgoing webhooks; login lockout after
+10 failed attempts in 15 minutes. Admins can reset a client's password from **Admin → Clients**.
 
 ## Run locally
 
@@ -30,8 +46,8 @@ follow-up sequences, webhook deliveries with retries.
 npm install
 cp .env.example .env            # fill ADMIN_PASSWORD at least
 set -a; source .env; set +a
-SEED_DEMO=1 npm run dev:api      # API on :8080 (creates admin + demo data)
-npm run dev                      # dashboard on :5173 (proxies /api to :8080)
+SEED_DEMO=1 npm run dev:all      # API on :8080 + dashboard on :5173, both auto-reload
+npm test                         # end-to-end API tests on a temporary database
 ```
 
 Sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`. Every workspace can add a **sandbox number** and use the

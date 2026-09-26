@@ -5,6 +5,7 @@ import { normalizePhone, isValidPhone } from '../lib/util.ts'
 import { sendMessage, previewOf, type OutMessage, type WaNumber, WhatsAppError } from './whatsapp.ts'
 import { addUsage, checkLimit } from './plans.ts'
 import { emitEvent } from './hooks.ts'
+import { assertCanSend } from './subscription.ts'
 
 export type Contact = {
   id: number; workspace_id: number; wa_id: string; name: string | null; email: string | null; tags: string[]
@@ -73,6 +74,7 @@ export function messageRow(id: number) {
 
 /** Single entry point for every outbound WhatsApp message on the platform. */
 export async function sendToContact(o: SendOpts) {
+  assertCanSend(o.workspaceId)
   const contact = get<Contact>('SELECT * FROM contacts WHERE id = ? AND workspace_id = ?', o.contactId, o.workspaceId)
   if (!contact) throw bad('Contact not found')
   if (contact.opted_out && o.marketing) throw bad('Contact has opted out of messages', 'opted_out')

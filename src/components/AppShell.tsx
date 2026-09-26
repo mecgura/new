@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import Logo from './Logo'
 import { useSession } from '../lib/session'
-import { useApi, useEvents } from '../lib/hooks'
+import { useApi, useEvents, useNow } from '../lib/hooks'
 import { post } from '../lib/api'
 import { ago } from '../lib/format'
 import { Avatar, cx } from './ui'
@@ -107,6 +107,27 @@ function WorkspaceMenu() {
   )
 }
 
+function PlanBanner() {
+  const { ws, can } = useSession()
+  const now = useNow(60000)
+  if (!ws) return null
+  const end = ws.subscription_status === 'trialing' ? ws.trial_ends_at : ws.current_period_end
+  const days = end ? Math.ceil((new Date(end).getTime() - now) / 86400000) : null
+  let tone = '', text = ''
+  if (ws.status === 'suspended') { tone = 'red'; text = `Workspace suspended. Contact MECGURA at ${BRAND.phone}.` }
+  else if (ws.subscription_status === 'expired') { tone = 'red'; text = 'Your plan has expired — outgoing messages are paused. Incoming messages are still saved.' }
+  else if (ws.subscription_status === 'cancelled') { tone = 'red'; text = 'Your plan is cancelled — outgoing messages are paused.' }
+  else if (ws.subscription_status === 'past_due') { tone = 'amber'; text = 'Your plan period has ended. Renew within 3 days to avoid interruption.' }
+  else if (ws.subscription_status === 'trialing' && days !== null && days <= 5) { tone = 'amber'; text = `Free trial ends in ${Math.max(0, days)} day${days === 1 ? '' : 's'}.` }
+  if (!text) return null
+  return (
+    <div className={cx('flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-2 text-center text-sm', tone === 'red' ? 'bg-red-500/15 text-red-100' : 'bg-amber-400/15 text-amber-100')}>
+      <span>{text}</span>
+      {can('billing.manage') ? <Link to="/app/billing" className="font-semibold underline">Choose a plan</Link> : <span className="opacity-80">Ask your workspace owner to renew.</span>}
+    </div>
+  )
+}
+
 export default function AppShell({ children }: { children: ReactNode }) {
   const { can, ws } = useSession()
   const [mobile, setMobile] = useState(false)
@@ -148,13 +169,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <aside className="h-full w-72 border-r border-line bg-panel" onClick={(e) => { e.stopPropagation(); if ((e.target as HTMLElement).closest('a')) setMobile(false) }}>{sidebar}</aside>
       </div>}
       <div className="flex min-w-0 flex-1 flex-col">
+        {ws?.via_admin && <div className="flex items-center justify-center gap-3 bg-sky-500/15 px-4 py-1.5 text-xs text-sky-100">Viewing {ws.name} as MECGURA admin<Link to="/admin" className="font-semibold underline">Back to admin</Link></div>}
+        <PlanBanner />
         <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-line bg-ink/80 px-4 backdrop-blur sm:px-6">
           <div className="flex items-center gap-2">
             <button className="rounded-xl p-2 text-soft hover:bg-white/5 lg:hidden" onClick={() => setMobile(true)} aria-label="Menu">{mobile ? <X className="size-5" /> : <Menu className="size-5" />}</button>
             <div className="lg:hidden"><Logo className="h-6" showProduct={false} /></div>
           </div>
           <div className="flex items-center gap-1">
-            {ws?.status === 'suspended' && <span className="mr-2 rounded-full bg-red-500/15 px-3 py-1 text-xs text-red-300">Workspace suspended</span>}
             <Notifications />
             <WorkspaceMenu />
           </div>

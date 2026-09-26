@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, store, setUnauthorizedHandler } from './api'
 
-export type Workspace = { id: number; name: string; role: string; status: string; plan: string; permissions: string[] }
+export type Workspace = { id: number; name: string; role: string; status: string; plan: string; permissions: string[]; subscription_status: string; trial_ends_at: string | null; current_period_end: string | null; via_admin?: boolean }
 export type User = { id: number; email: string; name: string; phone: string | null; is_super_admin: number }
 type SessionData = { user: User; workspaces: Workspace[] }
 

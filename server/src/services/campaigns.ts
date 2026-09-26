@@ -88,10 +88,14 @@ export async function processCampaigns() {
         update('campaign_recipients', r.id, { status: ok ? 'sent' : 'failed', message_id: msg.id, error: msg.error, sent_at: now() })
         run(`UPDATE campaigns SET ${ok ? 'sent' : 'failed'} = ${ok ? 'sent' : 'failed'} + 1 WHERE id = ?`, c.id)
       } catch (e) {
-        const err = (e as Error).message
-        update('campaign_recipients', r.id, { status: 'failed', error: err })
+        // Plan limit or expired subscription: pause and keep this recipient pending so "Resume" continues from here.
+        if (['limit_reached', 'subscription_inactive'].includes(String((e as { code?: string }).code))) {
+          update('campaigns', c.id, { status: 'paused' })
+          notify(c.workspace_id, { title: `Campaign "${c.name}" paused`, body: (e as Error).message, link: `/app/campaigns/${c.id}`, type: 'campaign' })
+          break
+        }
+        update('campaign_recipients', r.id, { status: 'failed', error: (e as Error).message })
         run('UPDATE campaigns SET failed = failed + 1 WHERE id = ?', c.id)
-        if ((e as { code?: string }).code === 'limit_reached') { update('campaigns', c.id, { status: 'paused' }); break }
       }
     }
     publish(c.workspace_id, 'campaign', get('SELECT * FROM campaigns WHERE id = ?', c.id))

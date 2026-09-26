@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Building2, Users, Smartphone, IndianRupee, Send, Inbox, Plus } from 'lucide-react'
-import { post, patch, put } from '../../lib/api'
+import { post, patch, put, store } from '../../lib/api'
 import { useApi, useDebounced } from '../../lib/hooks'
 import { useSession } from '../../lib/session'
 import { date, dateTime, inr, num, titleCase } from '../../lib/format'
@@ -16,6 +16,7 @@ function Client({ id, plans, onClose, onChanged }: { id: number; plans: Plan[]; 
   const t = useToast()
   const { data, reload } = useApi<WsDetail>(`/api/admin/workspaces/${id}`)
   const [pay, setPay] = useState({ plan_id: 0, cycle: 'monthly', amount: 0, reference: '' })
+  const [reset, setReset] = useState<{ email: string; password: string } | null>(null)
   const act = async (body: Record<string, unknown>) => { try { await patch(`/api/admin/workspaces/${id}`, body); t.ok('Updated'); void reload(); onChanged() } catch (e) { t.err(e) } }
   return (
     <Drawer open onClose={onClose} title={data?.name ?? 'Client'}>
@@ -23,11 +24,12 @@ function Client({ id, plans, onClose, onChanged }: { id: number; plans: Plan[]; 
         <div className="flex flex-wrap gap-2"><Badge tone={statusTone(data.status)}>{data.status}</Badge><Badge tone={statusTone(data.subscription_status)}>{data.subscription_status}</Badge><Badge>until {date(data.current_period_end)}</Badge></div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Plan"><Select value={data.plan_id} onChange={(e) => act({ plan_id: Number(e.target.value) })}>{plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
-          <Field label="Subscription"><Select value={data.subscription_status} onChange={(e) => act({ subscription_status: e.target.value })}>{['trialing', 'active', 'past_due', 'cancelled'].map((s) => <option key={s}>{s}</option>)}</Select></Field>
+          <Field label="Subscription"><Select value={data.subscription_status} onChange={(e) => act({ subscription_status: e.target.value })}>{['trialing', 'active', 'past_due', 'expired', 'cancelled'].map((s) => <option key={s}>{s}</option>)}</Select></Field>
         </div>
         <div className="flex flex-wrap gap-2">
           {data.status === 'active' ? <Button size="sm" variant="danger" onClick={() => act({ status: 'suspended' })}>Suspend workspace</Button> : <Button size="sm" onClick={() => act({ status: 'active' })}>Re-activate</Button>}
           <Button size="sm" variant="subtle" onClick={() => act({ trial_days: 14 })}>Extend trial 14 days</Button>
+          <Button size="sm" variant="outline" onClick={() => { store.ws = id; window.location.assign('/app') }}>Open workspace</Button>
         </div>
         <Card title="Record offline payment (UPI / bank)">
           <div className="grid grid-cols-2 gap-3">
@@ -39,7 +41,10 @@ function Client({ id, plans, onClose, onChanged }: { id: number; plans: Plan[]; 
           <Button className="mt-3" size="sm" disabled={!pay.plan_id} onClick={async () => { try { await post(`/api/admin/workspaces/${id}/invoices`, pay); t.ok('Payment recorded & plan activated'); void reload(); onChanged() } catch (e) { t.err(e) } }}>Record & activate</Button>
         </Card>
         <Card title="Usage">{Object.entries(data.usage).map(([k, u]) => <div key={k} className="flex justify-between py-1 text-sm"><span className="text-muted">{titleCase(k)}</span><span className="text-white">{num(u.used)} / {u.limit < 0 ? '∞' : num(u.limit)}</span></div>)}</Card>
-        <Card title="Members" pad={false}><Table head={['Name', 'Role', 'Last login']}>{data.members.map((m) => <tr key={m.id}><Td><div className="text-white">{m.name}</div><div className="text-xs text-muted">{m.email}</div></Td><Td>{m.role}</Td><Td className="text-xs">{dateTime(m.last_login_at)}</Td></tr>)}</Table></Card>
+        <Card title="Members" pad={false}><Table head={['Name', 'Role', 'Last login', '']}>{data.members.map((m) => <tr key={m.id}><Td><div className="text-white">{m.name}</div><div className="text-xs text-muted">{m.email}</div></Td><Td>{m.role}</Td><Td className="text-xs">{dateTime(m.last_login_at)}</Td>
+          <Td className="text-right"><Button size="sm" variant="ghost" onClick={async () => { try { const r = await post<{ email: string; password: string }>(`/api/admin/users/${m.id}/reset-password`); setReset(r) } catch (e) { t.err(e) } }}>Reset password</Button></Td></tr>)}</Table></Card>
+        {reset && <div className="rounded-xl border border-brand/30 bg-brand/10 p-4 text-sm"><div className="text-soft">New password for <b className="text-white">{reset.email}</b> (shown once — share it securely):</div>
+          <div className="mt-2 flex gap-2"><Input readOnly value={reset.password} className="font-mono" /><Button variant="subtle" onClick={() => { void navigator.clipboard.writeText(reset.password); t.ok('Copied') }}>Copy</Button></div></div>}
         <Card title="Invoices" pad={false}><Table head={['Date', 'Amount', 'Cycle', 'Status']}>{data.invoices.map((i) => <tr key={i.id}><Td>{date(i.created_at)}</Td><Td>{inr(i.amount)}</Td><Td>{i.cycle}</Td><Td><Badge tone={statusTone(i.status)}>{i.status}</Badge></Td></tr>)}</Table></Card>
       </div>}
     </Drawer>

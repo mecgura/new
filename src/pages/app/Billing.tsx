@@ -68,7 +68,7 @@ export default function Billing() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {data.plans.map((p) => {
           const price = yearly ? p.price_yearly : p.price_monthly
-          const current = p.id === data.plan.id && !trialing
+          const current = p.id === data.plan.id && data.subscription_status === 'active'
           return (
             <Card key={p.id} className={cx(p.id === data.plan.id && 'border-brand/50')}>
               <div className="font-display text-lg font-bold text-white">{p.name}</div>
@@ -78,7 +78,7 @@ export default function Billing() {
               </ul>
               <div className="mt-5">
                 {current ? <Button className="w-full" variant="subtle" disabled>Current plan</Button>
-                  : price && data.online_payments ? <Button className="w-full" loading={busy === p.id} onClick={() => checkout(p)}>{trialing && p.id === data.plan.id ? 'Activate' : 'Choose'} {p.name}</Button>
+                  : price && data.online_payments ? <Button className="w-full" loading={busy === p.id} onClick={() => checkout(p)}>{p.id === data.plan.id ? (trialing ? 'Activate' : 'Renew') : 'Choose'} {p.name}</Button>
                     : <a href={`mailto:${BRAND.email}?subject=${encodeURIComponent(`Activate ${p.name} plan`)}`}><Button className="w-full" variant="outline">Contact sales</Button></a>}
               </div>
             </Card>

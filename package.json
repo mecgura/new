@@ -9,7 +9,9 @@
     "build": "tsc -b && tsc -p tsconfig.server.json && vite build",
     "start": "NODE_ENV=production tsx server/src/index.ts",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:all": "node scripts/dev.mjs",
+    "test": "node --import tsx --test server/test/*.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { all, get, insert, run, update, now, tx } from '../db.ts'
 import { h, parse, bad, id, notFound } from '../lib/http.ts'
 import { superAdmin } from '../lib/auth.ts'
-import { hashPassword } from '../lib/security.ts'
+import { hashPassword, randomToken } from '../lib/security.ts'
+import { backupDatabase } from '../services/subscription.ts'
 import { activatePlan, usageSummary } from '../services/plans.ts'
 import { createWorkspace } from './auth.ts'
 
@@ -61,7 +62,7 @@ adminRoutes.post('/workspaces', h((req, res) => {
 adminRoutes.patch('/workspaces/:id', h((req, res) => {
   const wid = id(req.params.id)
   const b = parse(z.object({ status: z.enum(['active', 'suspended']).optional(), plan_id: z.number().optional(), cycle: z.enum(['monthly', 'yearly']).optional(),
-    subscription_status: z.enum(['trialing', 'active', 'past_due', 'cancelled']).optional(), current_period_end: z.string().optional(), trial_days: z.number().int().min(1).max(90).optional() }), req.body)
+    subscription_status: z.enum(['trialing', 'active', 'past_due', 'expired', 'cancelled']).optional(), current_period_end: z.string().optional(), trial_days: z.number().int().min(1).max(90).optional() }), req.body)
   if (b.plan_id && b.cycle) activatePlan(wid, b.plan_id, b.cycle)
   else if (b.plan_id) update('workspaces', wid, { plan_id: b.plan_id })
   if (b.trial_days) { const end = new Date(Date.now() + b.trial_days * 86400000).toISOString(); update('workspaces', wid, { subscription_status: 'trialing', trial_ends_at: end, current_period_end: end }) }
@@ -98,3 +99,15 @@ adminRoutes.patch('/leads/:id', h((req, res) => {
   const b = parse(z.object({ status: z.enum(['new', 'contacted', 'converted', 'closed']) }), req.body)
   update('site_leads', id(req.params.id), b); res.json({ ok: true })
 }))
+
+// Support tools: reset a client's password (shown once to the admin) and trigger an on-demand backup.
+adminRoutes.post('/users/:id/reset-password', h((req, res) => {
+  const u = get<{ id: number; email: string }>('SELECT id, email FROM users WHERE id = ?', id(req.params.id))
+  if (!u) throw notFound('User')
+  const password = `Mec-${randomToken(6)}`
+  run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(password), u.id)
+  run('INSERT INTO audit_logs (user_id, action, meta, created_at) VALUES (?, ?, ?, ?)', req.user!.id, 'admin.password_reset', JSON.stringify({ user: u.email }), now())
+  res.json({ email: u.email, password })
+}))
+
+adminRoutes.post('/backup', h((_req, res) => { res.json({ file: backupDatabase(true) }) }))
