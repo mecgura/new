@@ -122,9 +122,9 @@ export default function Numbers() {
         <div className="mb-4 flex gap-3 rounded-xl border border-line bg-panel p-3 text-sm text-muted"><BadgeCheck className="size-5 shrink-0 text-sky-400" /><span>From <b className="text-soft">Meta Developers → your app → WhatsApp → API Setup</b>. Use a permanent <b className="text-soft">System User access token</b> with whatsapp_business_messaging and whatsapp_business_management permissions.</span></div>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Label"><Input value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} placeholder="Main / Sales / Branch 2" /></Field>
-          <Field label="Phone number ID"><Input value={f.phone_number_id} onChange={(e) => setF({ ...f, phone_number_id: e.target.value.trim() })} /></Field>
-          <Field label="WhatsApp Business Account ID"><Input value={f.waba_id} onChange={(e) => setF({ ...f, waba_id: e.target.value.trim() })} /></Field>
-          <Field label="Access token" className="sm:col-span-2"><div className="relative"><KeyRound className="absolute left-3 top-3 size-4 text-muted" /><Input className="pl-9" type="password" value={f.access_token} onChange={(e) => setF({ ...f, access_token: e.target.value.trim() })} /></div></Field>
+          <Field label="Phone number ID"><Input name="wa_phone_number_id" autoComplete="off" inputMode="numeric" data-lpignore="true" data-1p-ignore placeholder="e.g. 1287994967722691" value={f.phone_number_id} onChange={(e) => setF({ ...f, phone_number_id: e.target.value.trim() })} /></Field>
+          <Field label="WhatsApp Business Account ID"><Input name="wa_business_account_id" autoComplete="off" inputMode="numeric" data-lpignore="true" data-1p-ignore placeholder="Numbers only, from API Setup" value={f.waba_id} onChange={(e) => setF({ ...f, waba_id: e.target.value.trim() })} /></Field>
+          <Field label="Access token" className="sm:col-span-2"><div className="relative"><KeyRound className="absolute left-3 top-3 size-4 text-muted" /><Textarea name="wa_access_token" autoComplete="off" spellCheck={false} data-lpignore="true" data-1p-ignore rows={3} className="pl-9 font-mono text-xs" placeholder="EAA… (System User token from Meta Business Settings)" value={f.access_token} onChange={(e) => setF({ ...f, access_token: e.target.value.trim() })} /></div></Field>
         </div>
         <p className="mt-3 text-xs text-muted">Tokens are encrypted at rest and never shown again.</p>
       </Modal>
