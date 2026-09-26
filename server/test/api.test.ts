@@ -338,3 +338,34 @@ test('templates: image header sample is uploaded to Meta and attached as header_
   const header = tpl.body.components.find((c: Json) => c.type === 'HEADER')
   assert.match(header.example.header_handle[0], /^handle_/)
 })
+
+test('auto-assign: new chats are routed to eligible agents, least busy first, respecting max open', async () => {
+  const su = await call('POST', '/api/auth/signup', { name: 'AA Owner', email: 'aa-owner@test.local', password: 'password123', company: 'AA Co' })
+  const o = { token: su.body.token, ws: su.body.workspaces[0].id }
+  await call('POST', '/api/numbers/demo', {}, o)
+  const ids: number[] = []
+  for (const e of ['aa1@test.local', 'aa2@test.local']) {
+    const inv = await call('POST', '/api/team/invites', { email: e, role: 'agent' }, o)
+    const acc = await call('POST', `/api/auth/invites/${inv.body.link.split('/invite/')[1]}/accept`, { name: e, password: 'password123' })
+    ids.push(acc.body.user.id)
+  }
+  // off by default: chat stays unassigned
+  let sim = await call('POST', '/api/simulate', { phone: '9811100000', text: 'hi' }, o)
+  assert.equal((await call('GET', `/api/conversations/${sim.body.conversation_id}`, undefined, o)).body.assigned_to, null)
+  const agent = { token: (await call('POST', '/api/auth/login', { email: 'aa1@test.local', password: 'password123' })).body.token, ws: o.ws }
+  assert.equal((await call('PUT', '/api/team/auto-assign', { mode: 'least_busy', members: ids }, agent)).status, 403)
+  const set = await call('PUT', '/api/team/auto-assign', { mode: 'least_busy', members: [...ids, 999999], max_open: 2 }, o)
+  assert.equal(set.status, 200, JSON.stringify(set.body))
+  assert.deepEqual(set.body.members, ids, 'unknown users are dropped')
+  const got: number[] = []
+  for (let i = 1; i <= 5; i++) {
+    sim = await call('POST', '/api/simulate', { phone: `98111000${10 + i}`, text: 'hello' }, o)
+    got.push((await call('GET', `/api/conversations/${sim.body.conversation_id}`, undefined, o)).body.assigned_to)
+  }
+  assert.equal(got.filter((g) => g === ids[0]).length, 2)
+  assert.equal(got.filter((g) => g === ids[1]).length, 2)
+  assert.equal(got[4], null, 'everyone is at max open chats')
+  // returning customer keeps the same agent
+  sim = await call('POST', '/api/simulate', { phone: '9811100011', text: 'again' }, o)
+  assert.equal((await call('GET', `/api/conversations/${sim.body.conversation_id}`, undefined, o)).body.assigned_to, got[0])
+})

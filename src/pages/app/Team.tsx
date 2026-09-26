@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { UserPlus, Copy, Trash2, Check, X as XIcon, Circle } from 'lucide-react'
-import { post, patch, del } from '../../lib/api'
+import { UserPlus, Copy, Trash2, Check, X as XIcon, Circle, Shuffle } from 'lucide-react'
+import { post, patch, put, del } from '../../lib/api'
 import { useApi } from '../../lib/hooks'
 import { useSession } from '../../lib/session'
 import { ago, date, titleCase } from '../../lib/format'
@@ -37,6 +37,7 @@ export default function Team() {
           ))}
         </Table>
       </Card>
+      <AutoAssignCard members={data.members} manage={manage} />
       {data.invites.length > 0 && <Card className="mt-5" title="Pending invites" pad={false}>
         <Table head={['Email', 'Role', 'Expires', '']}>
           {data.invites.map((i) => <tr key={i.id}><Td className="text-white">{i.email}</Td><Td><Badge>{i.role}</Badge></Td><Td className="text-xs">{date(i.expires_at)}</Td>
@@ -63,5 +64,47 @@ export default function Team() {
       </Modal>
       <Confirm open={!!rm} onClose={() => setRm(null)} title="Remove member?" text="They lose access immediately. Their open chats become unassigned." confirmLabel="Remove" onConfirm={async () => { await del(`team/members/${rm}`); void reload() }} />
     </>
+  )
+}
+
+type AutoAssign = { mode: 'off' | 'round_robin' | 'least_busy'; members: number[]; max_open: number; only_online: boolean }
+
+function AutoAssignCard({ members, manage }: { members: Member[]; manage: boolean }) {
+  const { data } = useApi<AutoAssign>('team/auto-assign')
+  if (!data) return null
+  return <AutoAssignForm key={JSON.stringify(data)} initial={data} members={members} manage={manage} />
+}
+
+function AutoAssignForm({ initial, members, manage }: { initial: AutoAssign; members: Member[]; manage: boolean }) {
+  const t = useToast()
+  const [s, setS] = useState(initial)
+  const [busy, setBusy] = useState(false)
+  const toggle = (uid: number) => setS({ ...s, members: s.members.includes(uid) ? s.members.filter((m) => m !== uid) : [...s.members, uid] })
+  const save = async () => {
+    setBusy(true)
+    try { setS(await put<AutoAssign>('team/auto-assign', s)); t.ok('Auto-assign saved') } catch (e) { t.err(e) } finally { setBusy(false) }
+  }
+  return (
+    <Card className="mt-5" title="Auto-assign chats" action={<Shuffle className="size-4 text-brand" />}>
+      <p className="text-sm text-soft">New WhatsApp chats go straight to an agent, so no customer waits in the unassigned queue. A returning customer stays with the same agent.</p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <Field label="Method"><Select disabled={!manage} value={s.mode} onChange={(e) => setS({ ...s, mode: e.target.value as AutoAssign['mode'] })}>
+          <option value="off">Off — agents pick chats manually</option>
+          <option value="round_robin">Round robin — take turns</option>
+          <option value="least_busy">Least busy — fewest open chats</option>
+        </Select></Field>
+        <Field label="Max open chats per agent" hint="0 = no limit"><Input disabled={!manage} type="number" min={0} value={s.max_open} onChange={(e) => setS({ ...s, max_open: Math.max(0, Number(e.target.value) || 0) })} /></Field>
+        <Field label="Availability"><label className="flex h-10 items-center gap-2 text-sm text-soft"><input disabled={!manage} type="checkbox" checked={s.only_online} onChange={(e) => setS({ ...s, only_online: e.target.checked })} className="accent-emerald-500" />Only agents marked Available</label></Field>
+      </div>
+      <div className="mt-4">
+        <div className="text-xs font-medium text-muted">Who receives chats <span className="font-normal">(none selected = everyone)</span></div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {members.map((m) => <button key={m.user_id} disabled={!manage} onClick={() => toggle(m.user_id)}
+            className={cx('flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs', s.members.includes(m.user_id) ? 'border-brand bg-brand/10 text-white' : 'border-line text-soft hover:border-line-strong')}>
+            {s.members.includes(m.user_id) && <Check className="size-3 text-brand" />}{m.name} <span className="text-muted capitalize">· {m.role}</span></button>)}
+        </div>
+      </div>
+      {manage && <div className="mt-4"><Button loading={busy} onClick={save}>Save</Button></div>}
+    </Card>
   )
 }

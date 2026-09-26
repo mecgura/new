@@ -147,11 +147,46 @@ export function notify(workspaceId: number, n: { title: string; body?: string; l
   publish(workspaceId, 'notification', get('SELECT * FROM notifications WHERE id = ?', nid))
 }
 
-export function roundRobinAgent(workspaceId: number): number | null {
-  const agents = all<{ user_id: number }>("SELECT user_id FROM memberships WHERE workspace_id = ? AND role IN ('agent','manager','admin','owner') AND is_online = 1 ORDER BY user_id", workspaceId)
+export type AutoAssign = { mode: 'off' | 'round_robin' | 'least_busy'; members: number[]; max_open: number; only_online: boolean }
+export const AUTO_ASSIGN_DEFAULT: AutoAssign = { mode: 'off', members: [], max_open: 0, only_online: true }
+
+export function autoAssignSettings(workspaceId: number): AutoAssign {
+  const ws = get<{ settings: { auto_assign?: Partial<AutoAssign> } }>('SELECT settings FROM workspaces WHERE id = ?', workspaceId)
+  return { ...AUTO_ASSIGN_DEFAULT, ...(ws?.settings?.auto_assign ?? {}) }
+}
+
+/** Picks the next agent using the workspace's auto-assign rules (eligible members, availability, max open chats). */
+export function pickAgent(workspaceId: number, mode: 'round_robin' | 'least_busy' = 'round_robin'): number | null {
+  const s = autoAssignSettings(workspaceId)
+  let agents = all<{ user_id: number; open: number }>(`SELECT m.user_id,
+      (SELECT COUNT(*) FROM conversations c WHERE c.workspace_id = m.workspace_id AND c.assigned_to = m.user_id AND c.status != 'resolved') AS open
+    FROM memberships m WHERE m.workspace_id = ? AND m.role IN ('agent','manager','admin','owner') ${s.only_online ? 'AND m.is_online = 1' : ''} ORDER BY m.user_id`, workspaceId)
+  if (s.members.length) agents = agents.filter((a) => s.members.includes(a.user_id))
+  if (s.max_open > 0) agents = agents.filter((a) => Number(a.open) < s.max_open)
   if (!agents.length) return null
   const ws = get<{ rr_cursor: number }>('SELECT rr_cursor FROM workspaces WHERE id = ?', workspaceId)!
-  const pick = agents[ws.rr_cursor % agents.length].user_id
   run('UPDATE workspaces SET rr_cursor = rr_cursor + 1 WHERE id = ?', workspaceId)
-  return pick
+  if (mode === 'least_busy') {
+    const min = Math.min(...agents.map((a) => Number(a.open)))
+    agents = agents.filter((a) => Number(a.open) === min)
+  }
+  return agents[ws.rr_cursor % agents.length].user_id
+}
+
+export function roundRobinAgent(workspaceId: number): number | null {
+  return pickAgent(workspaceId, autoAssignSettings(workspaceId).mode === 'least_busy' ? 'least_busy' : 'round_robin')
+}
+
+/** Assigns an unassigned conversation per the workspace's auto-assign setting. Returns the agent, if any. */
+export function autoAssign(workspaceId: number, conversationId: number): number | null {
+  const s = autoAssignSettings(workspaceId)
+  if (s.mode === 'off') return null
+  const conv = get<{ assigned_to: number | null }>('SELECT assigned_to FROM conversations WHERE id = ?', conversationId)
+  if (!conv || conv.assigned_to) return null
+  const agent = pickAgent(workspaceId, s.mode)
+  if (!agent) return null
+  update('conversations', conversationId, { assigned_to: agent })
+  notify(workspaceId, { title: 'New chat assigned to you', body: 'Auto-assigned', link: `/app/inbox?c=${conversationId}`, userId: agent, type: 'assign' })
+  publish(workspaceId, 'conversation', { id: conversationId })
+  return agent
 }

@@ -9,6 +9,7 @@ import { checkLimit, requireFeature } from '../services/plans.ts'
 import { WEBHOOK_EVENTS } from '../services/hooks.ts'
 import { config } from '../config.ts'
 import { mailInvite } from '../services/platformMail.ts'
+import { autoAssignSettings } from '../services/messaging.ts'
 
 export const teamRoutes = Router()
 
@@ -20,6 +21,19 @@ teamRoutes.get('/team', h((req, res) => {
     .map((i) => ({ ...i, link: `${config.appUrl}/invite/${(i as { token: string }).token}` }))
   const permissions = Object.fromEntries(Object.entries(PERMISSIONS).filter(([k]) => k !== 'billing.manage' || config.clientBilling))
   res.json({ members, invites, roles: ROLES, permissions, role_permissions: ROLE_PERMISSIONS })
+}))
+
+teamRoutes.get('/team/auto-assign', h((req, res) => { res.json(autoAssignSettings(req.ws!.id)) }))
+teamRoutes.put('/team/auto-assign', perm('team.manage'), h((req, res) => {
+  const b = parse(z.object({
+    mode: z.enum(['off', 'round_robin', 'least_busy']), members: z.array(z.number().int()).max(500).default([]),
+    max_open: z.number().int().min(0).max(1000).default(0), only_online: z.boolean().default(true),
+  }), req.body)
+  const valid = new Set(all<{ user_id: number }>('SELECT user_id FROM memberships WHERE workspace_id = ?', req.ws!.id).map((m) => m.user_id))
+  const auto_assign = { ...b, members: b.members.filter((m) => valid.has(m)) }
+  const cur = get<{ settings: Record<string, unknown> }>('SELECT settings FROM workspaces WHERE id = ?', req.ws!.id)!
+  update('workspaces', req.ws!.id, { settings: { ...cur.settings, auto_assign } })
+  res.json(auto_assign)
 }))
 
 teamRoutes.post('/team/invites', perm('team.manage'), h((req, res) => {

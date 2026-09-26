@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import { get, insert, run, update, now } from '../db.ts'
 import { publish } from '../lib/events.ts'
 import { markRead, type WaNumber } from './whatsapp.ts'
-import { upsertContact, getOrCreateConversation, applyStatus, messageRow, notify, type Conversation } from './messaging.ts'
+import { upsertContact, getOrCreateConversation, applyStatus, messageRow, notify, autoAssign, type Conversation } from './messaging.ts'
 import { handleInbound, type Inbound } from './automation.ts'
 import { emitEvent } from './hooks.ts'
 
@@ -61,6 +61,8 @@ export async function processInboundMessage(num: WaNumber, m: WaMsg, profileName
   const row = messageRow(msgId)
   publish(workspaceId, 'message', { conversation_id: conv.id, message: row, contact })
   emitEvent(workspaceId, 'message.received', { ...row, from: contact.wa_id, contact_name: contact.name })
+  const agent = autoAssign(workspaceId, conv.id)
+  if (agent) emitEvent(workspaceId, 'conversation.assigned', { conversation_id: conv.id, assigned_to: agent })
   if (!num.is_demo) void markRead(num, m.id)
 
   if (m.type === 'order' && m.order) {
