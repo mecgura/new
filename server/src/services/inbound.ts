@@ -5,6 +5,7 @@ import { markRead, type WaNumber } from './whatsapp.ts'
 import { upsertContact, getOrCreateConversation, applyStatus, messageRow, notify, autoAssign, type Conversation } from './messaging.ts'
 import { handleInbound, type Inbound } from './automation.ts'
 import { emitEvent } from './hooks.ts'
+import { processMessagingWebhook, type MessagingWebhook } from './channels.ts'
 
 type WaMsg = {
   id: string; from: string; timestamp?: string; type: string
@@ -85,6 +86,8 @@ export async function processInboundMessage(num: WaNumber, m: WaMsg, profileName
 type WebhookBody = { object?: string; entry?: { id: string; changes?: { field: string; value: Record<string, unknown> }[] }[] }
 
 export async function processWebhook(body: WebhookBody) {
+  // The same Meta app webhook also carries Facebook Page (Messenger) and Instagram DMs.
+  if (body.object === 'page' || body.object === 'instagram') return processMessagingWebhook(body as MessagingWebhook)
   for (const entry of body.entry ?? []) {
     for (const change of entry.changes ?? []) {
       const v = change.value as {

@@ -1,12 +1,13 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { all, get } from '../db.ts'
+import { all, get, insert, now } from '../db.ts'
 import { h, parse, bad, id, notFound, paginate } from '../lib/http.ts'
 import { requireApiKey } from '../lib/auth.ts'
 import { upsertContact, sendToContact, getNumber, type Contact } from '../services/messaging.ts'
 import { startFlow, onTagAdded } from '../services/automation.ts'
 import { buildOutMessage } from './inbox.ts'
 import { normalizePhone } from '../lib/util.ts'
+import { processChannelInbound, type Channel } from '../services/channels.ts'
 
 // Public REST API for client developers, CRMs, Zapier/Make and website forms.
 export const apiV1 = Router()
@@ -76,4 +77,28 @@ apiV1.post('/flows/:id/trigger', h(async (req, res) => {
   const conv = get<{ id: number }>('SELECT id FROM conversations WHERE contact_id = ? ORDER BY last_message_at DESC LIMIT 1', (contact as Contact).id)
   await startFlow(flow.id, contact.id, conv?.id ?? null)
   res.json({ ok: true, contact_id: contact.id })
+}))
+
+// ---- Custom channel: connect any website, app or CRM chat to the Team Inbox ----
+// Messages you POST here run through the same bots, flows, AI and agents as WhatsApp. Bot replies come back in
+// the response; later agent replies arrive via the `message.sent` webhook (channel "api") or by polling below.
+apiV1.post('/inbound', h(async (req, res) => {
+  const b = parse(z.object({
+    user_id: z.string().trim().min(1).max(120), text: z.string().max(4096).default(''), button_id: z.string().max(256).optional(),
+    name: z.string().max(120).optional(), email: z.string().email().optional(), phone: z.string().max(20).optional(), channel: z.string().trim().max(60).default('API'),
+  }), req.body)
+  if (!b.text && !b.button_id) throw bad('text is required')
+  let ch = get<Channel>("SELECT * FROM channels WHERE workspace_id = ? AND type = 'api' AND name = ?", req.ws!.id, b.channel)
+  if (!ch) ch = get<Channel>('SELECT * FROM channels WHERE id = ?', insert('channels', { workspace_id: req.ws!.id, type: 'api', name: b.channel, config: {}, created_at: now() }))!
+  if (!ch.is_active) throw bad(`The "${ch.name}" channel is turned off`)
+  const r = await processChannelInbound(ch, { externalId: b.user_id, text: b.text, buttonId: b.button_id, name: b.name, email: b.email, phone: b.phone })
+  const replies = all("SELECT id, type, body, payload, sent_by, created_at FROM messages WHERE conversation_id = ? AND direction = 'out' AND id > ? ORDER BY id", r!.conversation_id, r!.message_id)
+  res.json({ ...r, replies })
+}))
+
+apiV1.get('/conversations/:id/messages', h((req, res) => {
+  const conv = get<{ id: number }>('SELECT id FROM conversations WHERE id = ? AND workspace_id = ?', id(req.params.id), req.ws!.id)
+  if (!conv) throw notFound('Conversation')
+  const after = Number(req.query.after) || 0
+  res.json(all('SELECT id, direction, type, body, payload, status, sent_by, created_at FROM messages WHERE conversation_id = ? AND id > ? ORDER BY id LIMIT 200', conv.id, after))
 }))

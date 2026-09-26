@@ -6,10 +6,11 @@ import { sendMessage, previewOf, type OutMessage, type WaNumber, WhatsAppError }
 import { addUsage, checkLimit } from './plans.ts'
 import { emitEvent } from './hooks.ts'
 import { assertCanSend } from './subscription.ts'
+import { channelFor, assertChannelCanSend, deliverOnChannel, externalIdOf, type Channel } from './channels.ts'
 
 export type Contact = {
   id: number; workspace_id: number; wa_id: string; name: string | null; email: string | null; tags: string[]
-  attributes: Record<string, unknown>; stage: string; opted_out: number; owner_id: number | null; created_at: string
+  attributes: Record<string, unknown>; stage: string; opted_out: number; owner_id: number | null; created_at: string; channel?: string
 }
 export type Conversation = {
   id: number; workspace_id: number; contact_id: number; number_id: number | null; status: string; assigned_to: number | null
@@ -78,15 +79,24 @@ export async function sendToContact(o: SendOpts) {
   const contact = get<Contact>('SELECT * FROM contacts WHERE id = ? AND workspace_id = ?', o.contactId, o.workspaceId)
   if (!contact) throw bad('Contact not found')
   if (contact.opted_out && o.marketing) throw bad('Contact has opted out of messages', 'opted_out')
-  const num = getNumber(o.workspaceId, o.numberId)
-  const conv = getOrCreateConversation(o.workspaceId, contact.id, num.id)
-  if (o.message.type !== 'template' && !windowOpen(conv) && !num.is_demo) {
-    throw new HttpError(409, 'The 24-hour customer service window is closed. Send an approved template to restart the conversation.', 'window_closed')
+  // WhatsApp goes through a connected number; website / Instagram / Messenger / API contacts through their channel.
+  let num: WaNumber | null = null
+  let ch: Channel | null = null
+  let conv: Conversation
+  if (contact.channel && contact.channel !== 'whatsapp') {
+    ({ conv, ch } = channelFor(contact))
+    assertChannelCanSend(ch, conv, o.message)
+  } else {
+    num = getNumber(o.workspaceId, o.numberId)
+    conv = getOrCreateConversation(o.workspaceId, contact.id, num.id)
+    if (o.message.type !== 'template' && !windowOpen(conv) && !num.is_demo) {
+      throw new HttpError(409, 'The 24-hour customer service window is closed. Send an approved template to restart the conversation.', 'window_closed')
+    }
   }
   checkLimit(o.workspaceId, 'messages')
   const body = previewOf(o.message)
   const msgId = insert('messages', {
-    workspace_id: o.workspaceId, conversation_id: conv.id, contact_id: contact.id, number_id: num.id, direction: 'out',
+    workspace_id: o.workspaceId, conversation_id: conv.id, contact_id: contact.id, number_id: num?.id ?? null, direction: 'out',
     type: o.message.type, body, payload: o.message, status: 'queued', sent_by: o.sentBy, user_id: o.userId ?? null,
     campaign_id: o.campaignId ?? null, created_at: now(),
   })
@@ -95,18 +105,23 @@ export async function sendToContact(o: SendOpts) {
   if (o.sentBy === 'agent' && !get('SELECT first_response_at FROM conversations WHERE id = ? AND first_response_at IS NOT NULL', conv.id)) convPatch.first_response_at = now()
   update('conversations', conv.id, convPatch)
   try {
-    const { wamid } = await sendMessage(num, contact.wa_id, o.message)
-    run("UPDATE messages SET status = 'sent', wa_message_id = ? WHERE id = ?", wamid, msgId)
+    if (num) {
+      const { wamid } = await sendMessage(num, contact.wa_id, o.message)
+      run("UPDATE messages SET status = 'sent', wa_message_id = ? WHERE id = ?", wamid, msgId)
+      if (num.is_demo) simulateDemoStatuses(wamid)
+    } else {
+      const ext = await deliverOnChannel(ch!, contact, o.message)
+      run("UPDATE messages SET status = 'sent', wa_message_id = ? WHERE id = ?", ext, msgId)
+    }
     addUsage(o.workspaceId, 'messages')
     if (o.sentBy === 'ai') addUsage(o.workspaceId, 'ai_replies')
-    if (num.is_demo) simulateDemoStatuses(wamid)
   } catch (e) {
-    const err = e instanceof WhatsAppError ? e.message : 'Failed to send message'
+    const err = e instanceof WhatsAppError || (ch && e instanceof Error) ? e.message : 'Failed to send message'
     run("UPDATE messages SET status = 'failed', error = ? WHERE id = ?", err, msgId)
   }
   const row = messageRow(msgId)
   publish(o.workspaceId, 'message', { conversation_id: conv.id, message: row })
-  emitEvent(o.workspaceId, 'message.sent', { ...row, to: contact.wa_id })
+  emitEvent(o.workspaceId, 'message.sent', ch ? { ...row, to: externalIdOf(contact), channel: ch.type, channel_id: ch.id } : { ...row, to: contact.wa_id, channel: 'whatsapp' })
   return row as Record<string, unknown> & { id: number; status: string; error: string | null }
 }
 

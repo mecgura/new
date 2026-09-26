@@ -22,6 +22,12 @@ const rzpMock = http.createServer((req, res) => {
   req.on('end', () => {
     rzpCalls.push({ path: req.url, body: (() => { try { return body ? JSON.parse(body) : null } catch { return { raw: body.length } } })() })
     res.setHeader('Content-Type', 'application/json')
+    const u = req.url ?? ''
+    if (u.includes('fields=id,name,instagram_business_account')) {
+      return res.end(JSON.stringify({ id: u.split('/')[2].split('?')[0], name: 'Test Page', instagram_business_account: { id: '17841400000000001', username: 'testshop' } }))
+    }
+    if (u.includes('fields=first_name')) return res.end(JSON.stringify({ first_name: 'Meta', last_name: 'User' }))
+    if (u.includes('/me/messages')) return res.end(JSON.stringify({ recipient_id: 'x', message_id: `m_out_${rzpCalls.length}` }))
     res.end(JSON.stringify({ id: `plink_${rzpCalls.length}`, short_url: `https://rzp.io/i/test${rzpCalls.length}`, status: 'created', h: `handle_${rzpCalls.length}` }))
   })
 })
@@ -415,4 +421,71 @@ test('booking: WhatsApp flow picks day + slot, creates appointment, ICS feed, do
   assert.equal(text.split('BEGIN:VEVENT').length - 1, 2)
   assert.equal((await call('PATCH', `/api/appointments/${appt.id}`, { status: 'cancelled' }, o)).body.status, 'cancelled')
   assert.equal((await fetch(BASE + '/cal/not-a-real-token-123456.ics')).status, 404)
+})
+
+test('omnichannel: website widget, Messenger, Instagram and custom API chats share the inbox and bots', async () => {
+  // Website chat widget
+  const web = await call('POST', '/api/channels', { type: 'web', name: 'Site chat', config: { color: '#0ea5e9', whatsapp: '919876543210' } }, owner)
+  assert.equal(web.status, 200, JSON.stringify(web.body))
+  assert.match(web.body.embed, /widget\.js" data-key="wk_/)
+  const key = web.body.public_key
+  const js = await fetch(`${BASE}/widget.js`)
+  assert.equal(js.status, 200)
+  assert.match(js.headers.get('content-type') ?? '', /javascript/)
+  const cfg = await fetch(`${BASE}/widget/${key}/config`, { headers: { Origin: 'https://client-site.example' } })
+  assert.equal(cfg.headers.get('access-control-allow-origin'), '*')
+  assert.equal((await cfg.json()).whatsapp, 'https://wa.me/919876543210')
+  const sess = await (await fetch(`${BASE}/widget/${key}/session`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json()
+  const wpost = (body: Json) => fetch(`${BASE}/widget/${key}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  assert.equal((await wpost({ vid: sess.visitor_id, token: 'forged-token-123', text: 'hi' })).status, 401)
+  const first = await (await wpost({ vid: sess.visitor_id, token: sess.token, text: 'what is the price', name: 'Web Visitor', phone: '9800011122' })).json()
+  assert.ok(first.messages.some((m: Json) => m.from === 'bot' && m.text === 'Plans start at 999'), 'bot rule answers on the website too')
+  const conv = (await call('GET', '/api/conversations?q=Web Visitor', undefined, owner)).body[0]
+  assert.equal(conv.channel, 'web')
+  const agentReply = await call('POST', `/api/conversations/${conv.id}/messages`, { type: 'text', text: 'Hello from the team' }, owner)
+  assert.equal(agentReply.body.status, 'sent', JSON.stringify(agentReply.body))
+  const polled = await (await fetch(`${BASE}/widget/${key}/messages?vid=${sess.visitor_id}&token=${sess.token}&after=0`)).json()
+  assert.ok(polled.messages.some((m: Json) => m.from === 'agent' && m.text === 'Hello from the team'))
+  const tpl = await call('POST', `/api/conversations/${conv.id}/messages`, { type: 'template', template_id: 1 }, owner)
+  assert.ok(tpl.status >= 400, 'WhatsApp templates are not sent to website visitors')
+
+  // Facebook Messenger + Instagram via the Meta webhook
+  const fb = await call('POST', '/api/channels', { type: 'messenger', page_id: '1029384756', page_token: 'EAAtestpagetoken1234567890' }, owner)
+  assert.equal(fb.status, 200, JSON.stringify(fb.body))
+  assert.equal(fb.body.external_id, '1029384756')
+  assert.equal(fb.body.access_token, undefined, 'token is never returned')
+  const ig = await call('POST', '/api/channels', { type: 'instagram', page_id: '1029384756', page_token: 'EAAtestpagetoken1234567890' }, owner)
+  assert.equal(ig.body.external_id, '17841400000000001')
+  assert.equal(ig.body.name, '@testshop')
+  const hook = async (object: string, entryId: string, psid: string, mid: string, text: string) => {
+    const payload = JSON.stringify({ object, entry: [{ id: entryId, time: Date.now(), messaging: [{ sender: { id: psid }, recipient: { id: entryId }, timestamp: Date.now(), message: { mid, text } }] }] })
+    const sig = 'sha256=' + crypto.createHmac('sha256', META_SECRET).update(payload).digest('hex')
+    return fetch(`${BASE}/webhooks/meta`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Hub-Signature-256': sig }, body: payload })
+  }
+  const before = rzpCalls.length
+  assert.equal((await hook('page', '1029384756', 'psid_111', 'm_in_1', 'price please')).status, 200)
+  const fbConv = await until(async () => (await call('GET', '/api/conversations?q=Meta User', undefined, owner)).body.find((c: Json) => c.channel === 'messenger'))
+  await until(async () => rzpCalls.slice(before).find((c) => String(c.path).includes('/me/messages') && c.body?.recipient?.id === 'psid_111'))
+  const fbSent = rzpCalls.slice(before).find((c) => String(c.path).includes('/me/messages'))!
+  assert.equal(fbSent.body.message.text, 'Plans start at 999')
+  assert.equal(fbSent.body.messaging_type, 'RESPONSE')
+  await hook('instagram', '17841400000000001', 'igsid_222', 'm_in_2', 'hello insta')
+  await until(async () => (await call('GET', '/api/conversations', undefined, owner)).body.find((c: Json) => c.channel === 'instagram'))
+  const fbMsgs = (await call('GET', `/api/conversations/${fbConv.id}/messages`, undefined, owner)).body
+  assert.ok(fbMsgs.some((m: Json) => m.direction === 'out' && m.status === 'sent'))
+
+  // Custom API channel (client's own app / website backend)
+  const su = await call('POST', '/api/auth/signup', { name: 'App Dev', email: 'appdev@test.local', password: 'password123', company: 'App Co' })
+  const dev = { token: su.body.token, ws: su.body.workspaces[0].id }
+  await call('POST', '/api/bot-rules', { name: 'Price', match_type: 'contains', keywords: ['price'], reply: { type: 'text', text: 'Plans start at 999' } }, dev)
+  const k = await call('POST', '/api/developers/keys', { name: 'site' }, dev)
+  assert.equal(k.status, 200, JSON.stringify(k.body))
+  const inbound = await call('POST', '/api/v1/inbound', { user_id: 'app-user-7', name: 'App User', text: 'price' }, { key: k.body.key })
+  assert.equal(inbound.status, 200, JSON.stringify(inbound.body))
+  assert.ok(inbound.body.replies.some((m: Json) => m.body === 'Plans start at 999'), 'bot replies come back in the API response')
+  const poll = await call('GET', `/api/v1/conversations/${inbound.body.conversation_id}/messages`, undefined, { key: k.body.key })
+  assert.ok(poll.body.length >= 2)
+  const list = await call('GET', '/api/channels', undefined, owner)
+  assert.deepEqual(list.body.channels.map((c: Json) => c.type).sort(), ['instagram', 'messenger', 'web'])
+  assert.equal((await call('GET', '/api/channels', undefined, dev)).body.channels[0].type, 'api', 'API channel is created on first inbound message')
 })

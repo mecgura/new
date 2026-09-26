@@ -26,7 +26,7 @@ export class WhatsAppError extends Error {
 // WA_GRAPH_BASE lets tests point the client at a local mock of the Graph API.
 const graph = (path: string) => `${process.env.WA_GRAPH_BASE || 'https://graph.facebook.com'}/${config.meta.graphVersion}/${path.replace(/^\//, '')}`
 
-async function call<T = Record<string, unknown>>(token: string, path: string, init: RequestInit = {}): Promise<T> {
+export async function call<T = Record<string, unknown>>(token: string, path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(graph(path), {
     ...init,
     headers: { Authorization: `Bearer ${token}`, ...(init.body && !(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}), ...init.headers },

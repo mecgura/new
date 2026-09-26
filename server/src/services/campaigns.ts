@@ -30,7 +30,7 @@ export function buildTemplateMessage(t: Tpl, vars: TemplateVars, ctx: Record<str
 }
 
 export function resolveAudience(workspaceId: number, a: Audience): number[] {
-  const base = 'SELECT id, tags, stage FROM contacts WHERE workspace_id = ? AND opted_out = 0'
+  const base = "SELECT id, tags, stage FROM contacts WHERE workspace_id = ? AND opted_out = 0 AND COALESCE(channel, 'whatsapp') = 'whatsapp'"
   if (a.type === 'contacts') {
     const ids = new Set(a.contact_ids ?? [])
     return all<{ id: number }>(base, workspaceId).filter((c) => ids.has(c.id)).map((c) => c.id)

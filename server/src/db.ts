@@ -249,10 +249,16 @@ export function migrate() {
     source TEXT DEFAULT 'manual', reminder_sent INTEGER DEFAULT 0, created_by INTEGER, created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_appt_ws_time ON appointments(workspace_id, starts_at);
+  CREATE TABLE IF NOT EXISTS channels (
+    id INTEGER PRIMARY KEY, workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, type TEXT NOT NULL, name TEXT NOT NULL,
+    external_id TEXT, public_key TEXT UNIQUE, access_token TEXT, config TEXT DEFAULT '{}', is_active INTEGER DEFAULT 1, created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_channels_ext ON channels(type, external_id);
   `)
   // Additive column migrations for existing databases.
   for (const sql of ['ALTER TABLE invoices ADD COLUMN payment_url TEXT', 'ALTER TABLE invoices ADD COLUMN description TEXT',
-    'ALTER TABLE contacts ADD COLUMN email_opted_out INTEGER DEFAULT 0']) {
+    'ALTER TABLE contacts ADD COLUMN email_opted_out INTEGER DEFAULT 0', "ALTER TABLE contacts ADD COLUMN channel TEXT DEFAULT 'whatsapp'",
+    "ALTER TABLE conversations ADD COLUMN channel TEXT DEFAULT 'whatsapp'", 'ALTER TABLE conversations ADD COLUMN channel_id INTEGER']) {
     try { db.exec(sql) } catch { /* column already exists */ }
   }
 }

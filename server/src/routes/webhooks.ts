@@ -12,12 +12,12 @@ import { mailReceipt } from '../services/platformMail.ts'
 export const webhookRoutes = Router()
 
 // Meta verification handshake.
-webhookRoutes.get('/whatsapp', (req, res) => {
+webhookRoutes.get(['/whatsapp', '/meta'], (req, res) => {
   if (req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === config.meta.verifyToken) return res.status(200).send(String(req.query['hub.challenge']))
   res.sendStatus(403)
 })
 
-webhookRoutes.post('/whatsapp', (req, res) => {
+webhookRoutes.post(['/whatsapp', '/meta'], (req, res) => {
   if (config.meta.appSecret) {
     const sig = String(req.headers['x-hub-signature-256'] || '')
     if (!req.rawBody || !safeEqual(`sha256=${hmacHex(config.meta.appSecret, req.rawBody)}`, sig)) return res.sendStatus(401)
