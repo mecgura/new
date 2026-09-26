@@ -138,7 +138,12 @@ MY_IP=$(curl -fs4 https://api.ipify.org || hostname -I | awk '{print $1}')
 DNS_IP=$(getent ahostsv4 "$DOMAIN" | awk 'NR==1{print $1}')
 if [ "$DNS_IP" = "$MY_IP" ]; then
   EMAIL=$(grep -E '^ADMIN_EMAIL=' "$APP_DIR/.env" | cut -d= -f2)
-  certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --redirect -q && echo "HTTPS enabled for $DOMAIN"
+  pkill -x certbot 2>/dev/null && sleep 2 || true   # a certbot left over from an interrupted run holds the lock
+  if certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --redirect -q; then
+    echo "HTTPS enabled for $DOMAIN"
+  else
+    warn "Certificate not issued yet. Check that ports 80/443 are open, then re-run this script."
+  fi
 else
   warn "$DOMAIN points to ${DNS_IP:-nothing}, but this server is $MY_IP."
   warn "Add DNS record:  Type A   Name api   Value $MY_IP   — wait 5 minutes, then re-run this script."
