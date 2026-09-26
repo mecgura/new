@@ -16,6 +16,7 @@ const Campaigns = lazy(() => import('./pages/app/Campaigns'))
 const CampaignDetail = lazy(() => import('./pages/app/CampaignDetail'))
 const Templates = lazy(() => import('./pages/app/Templates'))
 const Email = lazy(() => import('./pages/app/Email'))
+const Calendar = lazy(() => import('./pages/app/Calendar'))
 const Chatbot = lazy(() => import('./pages/app/Chatbot'))
 const Flows = lazy(() => import('./pages/app/Flows'))
 const FlowBuilder = lazy(() => import('./pages/app/FlowBuilder'))
@@ -64,6 +65,7 @@ export default function App() {
             <Route path="/app/campaigns/:id" element={app(<CampaignDetail />)} />
             <Route path="/app/templates" element={app(<Templates />)} />
             <Route path="/app/email" element={app(<Email />)} />
+            <Route path="/app/calendar" element={app(<Calendar />)} />
             <Route path="/app/chatbot" element={app(<Chatbot />)} />
             <Route path="/app/flows" element={app(<Flows />)} />
             <Route path="/app/flows/:id" element={app(<FlowBuilder />)} />

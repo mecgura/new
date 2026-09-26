@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, Save, MessageSquare, HelpCircle, ListChecks, GitBranch, Zap, Timer, Webhook, Sparkles, UserRound, CircleStop, Plus, Trash2, Flag, Play, History,
+  ArrowLeft, Save, MessageSquare, HelpCircle, ListChecks, GitBranch, Zap, Timer, Webhook, Sparkles, UserRound, CircleStop, CalendarCheck, Plus, Trash2, Flag, Play, History,
 } from 'lucide-react'
 import { put, post } from '../../lib/api'
 import { useApi } from '../../lib/hooks'
@@ -20,6 +20,7 @@ const TYPES: Record<string, { label: string; icon: typeof MessageSquare; color: 
   delay: { label: 'Wait', icon: Timer, color: 'text-teal-300 bg-teal-400/15', hint: 'Pause before the next step' },
   webhook: { label: 'Webhook', icon: Webhook, color: 'text-fuchsia-300 bg-fuchsia-400/15', hint: 'Send data to your CRM / Sheets / Zapier' },
   ai: { label: 'AI reply', icon: Sparkles, color: 'text-emerald-200 bg-emerald-300/15', hint: 'Let the AI assistant answer' },
+  booking: { label: 'Book appointment', icon: CalendarCheck, color: 'text-lime-300 bg-lime-400/15', hint: 'Customer picks a free day & time slot' },
   handoff: { label: 'Human handoff', icon: UserRound, color: 'text-rose-300 bg-rose-400/15', hint: 'Pause bot & assign to an agent' },
   end: { label: 'End', icon: CircleStop, color: 'text-muted bg-white/5', hint: 'Finish the flow' },
 }
@@ -37,6 +38,7 @@ function summary(n: FlowNode) {
     case 'delay': return `${d.minutes ?? 1} minutes`
     case 'webhook': return String(d.url ?? 'Set URL')
     case 'handoff': return String(d.text ?? 'Assign to team')
+    case 'booking': return `${d.service || 'Default service'} · pick day → time`
     default: return TYPES[n.type]?.hint ?? ''
   }
 }
@@ -45,6 +47,7 @@ function outs(n: FlowNode): { key: string; label: string; target: string | null 
   if (n.type === 'buttons') return [...((n.data.options as string[]) ?? []).map((o, i) => ({ key: String(i), label: o || `Option ${i + 1}`, target: n.branches?.[String(i)] })), { key: 'other', label: 'Other reply', target: n.branches?.other }]
   if (n.type === 'condition') return [{ key: 'yes', label: 'Yes', target: n.branches?.yes }, { key: 'no', label: 'No', target: n.branches?.no }]
   if (n.type === 'webhook') return [{ key: 'next', label: 'Success', target: n.next }, { key: 'error', label: 'Error', target: n.branches?.error }]
+  if (n.type === 'booking') return [{ key: 'next', label: 'Booked', target: n.next }, { key: 'none', label: 'No slots', target: n.branches?.none }]
   if (n.type === 'handoff' || n.type === 'end') return []
   return [{ key: 'next', label: 'Next', target: n.next }]
 }
@@ -84,6 +87,7 @@ function defaults(type: string): Record<string, unknown> {
     case 'delay': return { minutes: 60 }
     case 'webhook': return { url: 'https://' }
     case 'handoff': return { text: 'Connecting you to our team…' }
+    case 'booking': return { service: '', text: '' }
     default: return {}
   }
 }
@@ -146,6 +150,7 @@ function Inspector({ node, nodes, onChange, onDelete, onStart, isStart, members,
         <Field label="Save response as (optional)"><Input value={String(d.save_as ?? '')} onChange={(e) => set({ save_as: e.target.value })} /></Field>
       </>}
       {node.type === 'handoff' && <Field label="Message before handoff"><Textarea rows={3} value={String(d.text ?? '')} onChange={(e) => set({ text: e.target.value })} /></Field>}
+      {node.type === 'booking' && <BookingInspector d={d} set={set} />}
       {node.type === 'ai' && <p className="text-sm text-muted">The AI assistant replies to the customer&apos;s last message using your knowledge base (AI Assistant page). If it is not confident, the chat is handed to a human.</p>}
 
       <div className="space-y-3 border-t border-line pt-4">{outs(node).map((o) => targetSelect(o.key, o.label, o.target))}</div>
@@ -155,6 +160,21 @@ function Inspector({ node, nodes, onChange, onDelete, onStart, isStart, members,
       </div>
     </div>
   )
+}
+
+function BookingInspector({ d, set }: { d: Record<string, unknown>; set: (p: Record<string, unknown>) => void }) {
+  const { data } = useApi<{ services: { name: string; duration: number }[] }>('booking/settings')
+  return <>
+    <Field label="Service"><Select value={String(d.service ?? '')} onChange={(e) => set({ service: e.target.value })}>
+      <option value="">{data?.services[0] ? `${data.services[0].name} (default)` : 'Default service'}</option>
+      {data?.services.map((s) => <option key={s.name} value={s.name}>{s.name} · {s.duration} min</option>)}
+    </Select></Field>
+    <Field label="Day question (optional)"><Textarea rows={2} value={String(d.text ?? '')} onChange={(e) => set({ text: e.target.value })} placeholder="Which day works for you?" /></Field>
+    <Field label="Time question (optional)"><Input value={String(d.slot_text ?? '')} onChange={(e) => set({ slot_text: e.target.value })} placeholder="Pick a time" /></Field>
+    <Field label="Confirmation (optional)" hint="Variables: {{service}} {{date}} {{time}} {{calendar_link}}"><Textarea rows={3} value={String(d.confirm_text ?? '')} onChange={(e) => set({ confirm_text: e.target.value })} placeholder="Uses the confirmation from Calendar settings" /></Field>
+    <Field label="If no slots are free"><Input value={String(d.none_text ?? '')} onChange={(e) => set({ none_text: e.target.value })} placeholder="Sorry, there are no free slots right now…" /></Field>
+    <p className="text-xs text-muted">Only free slots from your <Link className="text-brand-2" to="/app/calendar">Calendar</Link> hours are offered. After booking, {'{{appointment_date}}'}, {'{{appointment_time}}'} and {'{{appointment_service}}'} can be used in later steps.</p>
+  </>
 }
 
 export default function FlowBuilder() {

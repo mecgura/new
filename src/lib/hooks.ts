@@ -37,7 +37,7 @@ function ensureSource() {
   if (!store.token || !store.ws) return
   sourceKey = key
   source = new EventSource(`${API_BASE}/api/events?token=${encodeURIComponent(store.token)}&ws=${store.ws}`)
-  for (const t of ['message', 'status', 'conversation', 'notification', 'campaign', 'contact']) {
+  for (const t of ['message', 'status', 'conversation', 'notification', 'campaign', 'contact', 'appointment']) {
     source.addEventListener(t, (e) => { const d = JSON.parse((e as MessageEvent).data); handlers.forEach((h) => h(t, d)) })
   }
 }

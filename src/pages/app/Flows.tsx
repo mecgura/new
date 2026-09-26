@@ -15,11 +15,10 @@ const TEMPLATES = [
     { id: 'n4', type: 'action', data: { action: 'add_tag', value: 'hot-lead' }, next: 'n5' },
     { id: 'n5', type: 'handoff', data: { text: 'Thank you! Our team will reply shortly.' } },
   ] },
-  { name: 'Appointment booking', description: 'Collect preferred day & time, confirm and notify team', trigger: { type: 'keyword', value: 'book,appointment', match: 'contains' }, nodes: [
-    { id: 'n1', type: 'buttons', data: { text: 'Which day works for you?', options: ['Today', 'Tomorrow', 'This weekend'], save_as: 'day' }, branches: { other: 'n2' }, next: 'n2' },
-    { id: 'n2', type: 'question', data: { text: 'What time would you prefer? (e.g. 4 pm)', save_as: 'time' }, next: 'n3' },
-    { id: 'n3', type: 'action', data: { action: 'notify', value: 'New booking: {{name}} · {{day}} {{time}}' }, next: 'n4' },
-    { id: 'n4', type: 'message', data: { reply: { type: 'text', text: '✅ Request received for {{day}} at {{time}}. We will confirm shortly!' } } },
+  { name: 'Appointment booking', description: 'Customer picks a free day & time on WhatsApp, gets a confirmation + reminder', trigger: { type: 'keyword', value: 'book,appointment', match: 'contains' }, nodes: [
+    { id: 'n1', type: 'booking', data: { service: '' }, next: 'n2', branches: { none: 'n3' } },
+    { id: 'n2', type: 'action', data: { action: 'add_tag', value: 'booked' } },
+    { id: 'n3', type: 'handoff', data: { text: 'Our team will message you with the next available time.' } },
   ] },
   { name: 'Blank flow', description: '', trigger: { type: 'keyword', value: '', match: 'exact' }, nodes: [{ id: 'n1', type: 'message', data: { reply: { type: 'text', text: 'Hello {{first_name}}!' } } }] },
 ]

@@ -36,7 +36,7 @@ automationRoutes.delete('/bot-rules/:id', P, h((req, res) => { run('DELETE FROM 
 
 // ---- Flows (visual workflow builder) ----
 const nodeSchema = z.object({
-  id: z.string().min(1).max(40), type: z.enum(['message', 'question', 'buttons', 'condition', 'action', 'delay', 'webhook', 'ai', 'handoff', 'end']),
+  id: z.string().min(1).max(40), type: z.enum(['message', 'question', 'buttons', 'condition', 'action', 'delay', 'webhook', 'ai', 'handoff', 'booking', 'end']),
   data: z.record(z.string(), z.unknown()).default({}), next: z.string().nullable().optional(), branches: z.record(z.string(), z.string().nullable()).optional(),
   x: z.number().optional(), y: z.number().optional(),
 })

@@ -369,3 +369,50 @@ test('auto-assign: new chats are routed to eligible agents, least busy first, re
   sim = await call('POST', '/api/simulate', { phone: '9811100011', text: 'again' }, o)
   assert.equal((await call('GET', `/api/conversations/${sim.body.conversation_id}`, undefined, o)).body.assigned_to, got[0])
 })
+
+test('booking: WhatsApp flow picks day + slot, creates appointment, ICS feed, double-booking blocked', async () => {
+  const su = await call('POST', '/api/auth/signup', { name: 'Clinic', email: 'clinic@test.local', password: 'password123', company: 'Clinic Co' })
+  const o = { token: su.body.token, ws: su.body.workspaces[0].id }
+  await call('POST', '/api/numbers/demo', {}, o)
+  const set = await call('PUT', '/api/booking/settings', { services: [{ name: 'Checkup', duration: 30 }], days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '23:30',
+    slot_minutes: 30, capacity: 1, days_ahead: 3, min_notice_minutes: 0 }, o)
+  assert.equal(set.status, 200, JSON.stringify(set.body))
+  assert.match(set.body.ics_url, /\/cal\/[\w-]+\.ics$/)
+  const f = await call('POST', '/api/flows', { name: 'Book', is_active: true, trigger: { type: 'keyword', value: 'book', match: 'exact' }, nodes: [
+    { id: 'b1', type: 'booking', data: { service: 'Checkup' }, next: 'm1' },
+    { id: 'm1', type: 'message', data: { reply: { type: 'text', text: 'See you {{appointment_date}} at {{appointment_time}}' } } },
+  ] }, o)
+  assert.equal(f.status, 200, JSON.stringify(f.body))
+  const lastOut = async (conv: number) => (await call('GET', `/api/conversations/${conv}/messages`, undefined, o)).body.filter((m: Json) => m.direction === 'out').pop()
+  let sim = await call('POST', '/api/simulate', { phone: '9822200001', name: 'Ravi', text: 'book' }, o)
+  const conv = sim.body.conversation_id
+  const days = await lastOut(conv)
+  assert.equal(days.type, 'list')
+  const dayRow = days.payload.sections[0].rows[1] ?? days.payload.sections[0].rows[0]
+  sim = await call('POST', '/api/simulate', { phone: '9822200001', text: dayRow.title, button_id: dayRow.id }, o)
+  const slots = await lastOut(conv)
+  assert.equal(slots.type, 'list')
+  assert.ok(slots.payload.sections[0].rows.length === 10, 'slot list is paged to 10 rows')
+  const slotRow = slots.payload.sections[0].rows[0]
+  // typed answer "1" picks the first option too
+  await call('POST', '/api/simulate', { phone: '9822200001', text: '1' }, o)
+  const msgs = (await call('GET', `/api/conversations/${conv}/messages`, undefined, o)).body.filter((m: Json) => m.direction === 'out')
+  assert.ok(msgs.some((m: Json) => /Booked!/.test(m.body) && m.body.includes('calendar.google.com')), 'confirmation with Google Calendar link')
+  assert.ok(/See you .+ at .+/.test(msgs[msgs.length - 1].body), 'flow continues with appointment variables')
+  const list = await call('GET', '/api/appointments', undefined, o)
+  assert.equal(list.body.items.length, 1)
+  const appt = list.body.items[0]
+  assert.equal(appt.starts_at, slotRow.id.split(':s:')[1])
+  assert.equal(appt.contact_name, 'Ravi')
+  // same slot cannot be booked twice (capacity 1) unless forced
+  const dup = await call('POST', '/api/appointments', { phone: '9822200002', name: 'Neha', starts_at: appt.starts_at, service: 'Checkup' }, o)
+  assert.equal(dup.status, 400)
+  assert.equal((await call('POST', '/api/appointments', { phone: '9822200002', name: 'Neha', starts_at: appt.starts_at, force: true }, o)).status, 200)
+  const ics = await fetch(set.body.ics_url.replace(/^https?:\/\/[^/]+/, BASE))
+  const text = await ics.text()
+  assert.equal(ics.status, 200)
+  assert.match(text, /BEGIN:VCALENDAR/)
+  assert.equal(text.split('BEGIN:VEVENT').length - 1, 2)
+  assert.equal((await call('PATCH', `/api/appointments/${appt.id}`, { status: 'cancelled' }, o)).body.status, 'cancelled')
+  assert.equal((await fetch(BASE + '/cal/not-a-real-token-123456.ics')).status, 404)
+})

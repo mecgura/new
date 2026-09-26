@@ -23,6 +23,7 @@ import { adminRoutes } from './routes/admin.ts'
 import { apiV1 } from './routes/api_v1.ts'
 import { webhookRoutes } from './routes/webhooks.ts'
 import { emailRoutes, emailTracking } from './routes/email.ts'
+import { bookingRoutes, calendarFeed } from './routes/booking.ts'
 import { startWorker } from './services/worker.ts'
 
 if (config.isProd && config.appSecret.startsWith('dev-only')) {
@@ -64,20 +65,21 @@ app.get('/health', (_req, res) => {
 })
 app.use('/webhooks', webhookRoutes)
 app.use('/e', emailTracking)
+app.use('/cal', calendarFeed)
 app.use('/uploads', express.static(path.join(config.dataDir, 'uploads'), { maxAge: '7d' }))
 app.use('/api/public', publicRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/admin', requireUser, adminRoutes)
 app.use('/api/v1', apiV1)
 app.use('/api', requireUser, requireWorkspace, workspaceRoutes, numberRoutes, inboxRoutes, contactRoutes, templateRoutes,
-  campaignRoutes, automationRoutes, commerceRoutes, teamRoutes, billingRoutes, analyticsRoutes, emailRoutes)
+  campaignRoutes, automationRoutes, commerceRoutes, teamRoutes, billingRoutes, analyticsRoutes, emailRoutes, bookingRoutes)
 app.use('/api', (_req, res) => { res.status(404).json({ error: 'Not found' }) })
 
 // Serve the built dashboard + landing page.
 const dist = path.resolve('dist')
 if (fs.existsSync(dist)) {
   app.use(express.static(dist, { index: false, maxAge: '1h' }))
-  app.get(/^(?!\/(api|webhooks|uploads|e)\/).*/, (_req, res) => { res.sendFile(path.join(dist, 'index.html')) })
+  app.get(/^(?!\/(api|webhooks|uploads|e|cal)\/).*/, (_req, res) => { res.sendFile(path.join(dist, 'index.html')) })
 }
 
 app.use(errorHandler)

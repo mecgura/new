@@ -242,6 +242,13 @@ export function migrate() {
   CREATE TABLE IF NOT EXISTS site_leads (
     id INTEGER PRIMARY KEY, name TEXT, email TEXT, phone TEXT, company TEXT, message TEXT, status TEXT DEFAULT 'new', created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS appointments (
+    id INTEGER PRIMARY KEY, workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL, conversation_id INTEGER, assigned_to INTEGER,
+    service TEXT NOT NULL, starts_at TEXT NOT NULL, ends_at TEXT NOT NULL, status TEXT DEFAULT 'booked', notes TEXT,
+    source TEXT DEFAULT 'manual', reminder_sent INTEGER DEFAULT 0, created_by INTEGER, created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_appt_ws_time ON appointments(workspace_id, starts_at);
   `)
   // Additive column migrations for existing databases.
   for (const sql of ['ALTER TABLE invoices ADD COLUMN payment_url TEXT', 'ALTER TABLE invoices ADD COLUMN description TEXT',

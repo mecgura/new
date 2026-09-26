@@ -6,6 +6,7 @@ import { sendToContact, contactContext, roundRobinAgent, notify, type Contact, t
 import { aiReply, type AiSettings } from './ai.ts'
 import { emitEvent } from './hooks.ts'
 import { hasFeature } from './plans.ts'
+import { bookingStep } from './booking.ts'
 
 // ---------- Shared reply format used by bot rules and flow "message" nodes ----------
 export type Reply =
@@ -33,7 +34,7 @@ export type Inbound = { text: string; buttonId?: string; type: string }
 // ---------- Flow engine ----------
 export type FlowNode = {
   id: string
-  type: 'message' | 'question' | 'buttons' | 'condition' | 'action' | 'delay' | 'webhook' | 'ai' | 'handoff' | 'end'
+  type: 'message' | 'question' | 'buttons' | 'condition' | 'action' | 'delay' | 'webhook' | 'ai' | 'handoff' | 'booking' | 'end'
   data: Record<string, unknown>
   next?: string | null
   branches?: Record<string, string | null>
@@ -88,6 +89,11 @@ async function execFlow(runId: number, input?: Inbound) {
         if (key && idx >= 0) saveField(contact, key, (node.data.options as string[])[idx], r)
         next = idx >= 0 ? (node.branches?.[String(idx)] ?? node.next) : (node.branches?.other ?? node.next)
       }
+    } else if (node.type === 'booking') {
+      const out = await bookingStep(r, node, contact, pendingInput, send)
+      pendingInput = undefined
+      if (out === 'wait') { update('flow_runs', r.id, { status: 'waiting', state: r.state, updated_at: now() }); return }
+      next = out === 'none' ? (node.branches?.none ?? null) : node.next
     } else if (node.type === 'condition') {
       next = evalCondition(node.data, contact, r.state) ? node.branches?.yes : node.branches?.no
     } else if (node.type === 'action') {

@@ -6,6 +6,7 @@ import { hasFeature } from './plans.ts'
 export const WEBHOOK_EVENTS = [
   'message.received', 'message.sent', 'message.status', 'contact.created', 'contact.updated', 'conversation.assigned',
   'conversation.resolved', 'campaign.completed', 'order.created', 'payment.paid', 'flow.completed',
+  'appointment.booked', 'appointment.cancelled',
 ] as const
 
 type Hook = { id: number; url: string; events: string[]; secret: string }

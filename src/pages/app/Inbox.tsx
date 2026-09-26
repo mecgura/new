@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import {
+  CalendarPlus,
   Search, Send, Paperclip, Sparkles, Check, CheckCheck, Clock, AlertCircle, UserPlus, CheckCircle2, RotateCcw, PauseCircle, PlayCircle,
   FileText, MessageSquarePlus, ArrowLeft, Zap, ShoppingBag, IndianRupee, StickyNote, Phone, Mail, FlaskConical, Info, X, Image as ImageIcon,
 } from 'lucide-react'
@@ -317,6 +318,7 @@ export default function Inbox() {
               {detail.bot_paused
                 ? <Button size="sm" variant="subtle" icon={<PlayCircle className="size-4" />} onClick={() => setStatus({ bot_paused: false })} title="Let bots/AI reply again"><span className="hidden lg:inline">Resume bot</span></Button>
                 : <Button size="sm" variant="subtle" icon={<PauseCircle className="size-4" />} onClick={() => setStatus({ bot_paused: true })} title="Stop bots/AI for this chat"><span className="hidden lg:inline">Pause bot</span></Button>}
+              <Link to={`/app/calendar?new=1&phone=${detail.contact.wa_id}&name=${encodeURIComponent(detail.contact.name ?? '')}`} title="Book an appointment"><Button size="sm" variant="subtle" icon={<CalendarPlus className="size-4" />}><span className="hidden lg:inline">Book</span></Button></Link>
               {!detail.assigned_to && <Button size="sm" variant="subtle" icon={<UserPlus className="size-4" />} onClick={() => setStatus({ assigned_to: user?.id })}><span className="hidden lg:inline">Assign me</span></Button>}
               {detail.status !== 'resolved'
                 ? <Button size="sm" icon={<CheckCircle2 className="size-4" />} onClick={() => setStatus({ status: 'resolved' })}><span className="hidden sm:inline">Resolve</span></Button>

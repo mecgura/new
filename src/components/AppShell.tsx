@@ -3,6 +3,7 @@ import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, MessagesSquare, Users, KanbanSquare, Megaphone, FileText, Bot, Workflow, Sparkles, Repeat, ShoppingBag,
   BarChart3, Smartphone, UserCog, Code2, CreditCard, Settings, Bell, Menu, X, LogOut, ChevronDown, ShieldCheck, LifeBuoy, Check, Mail,
+  CalendarDays,
 } from 'lucide-react'
 import Logo from './Logo'
 import { useSession } from '../lib/session'
@@ -19,6 +20,7 @@ const NAV: { group: string; items: Item[] }[] = [
     { to: '/app/inbox', label: 'Team Inbox', icon: MessagesSquare, perm: 'inbox.view' },
     { to: '/app/contacts', label: 'Contacts', icon: Users, perm: 'contacts.view' },
     { to: '/app/pipeline', label: 'Leads Pipeline', icon: KanbanSquare, perm: 'contacts.view' },
+    { to: '/app/calendar', label: 'Calendar & Bookings', icon: CalendarDays, perm: 'inbox.view' },
   ] },
   { group: 'Grow', items: [
     { to: '/app/campaigns', label: 'Campaigns', icon: Megaphone, perm: 'campaigns.manage' },
