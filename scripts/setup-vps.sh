@@ -47,12 +47,13 @@ mkdir -p "$DATA_DIR"
 
 if [ ! -f "$APP_DIR/.env" ]; then
   say "Creating .env"
-  read -rp "Admin email [hello@mecgura.com]: " ADMIN_EMAIL < /dev/tty || true
+  # ADMIN_EMAIL / ADMIN_PASSWORD can be passed as environment variables for unattended installs.
+  if [ -z "${ADMIN_EMAIL:-}" ]; then read -rp "Admin email [hello@mecgura.com]: " ADMIN_EMAIL < /dev/tty || true; fi
   ADMIN_EMAIL=${ADMIN_EMAIL:-hello@mecgura.com}
-  while true; do
+  ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+  while [ "${#ADMIN_PASSWORD}" -lt 8 ]; do
     read -rsp "Choose admin password (min 8 chars): " ADMIN_PASSWORD < /dev/tty; echo
-    [ "${#ADMIN_PASSWORD}" -ge 8 ] && break
-    echo "Too short, try again."
+    [ "${#ADMIN_PASSWORD}" -ge 8 ] || echo "Too short, try again."
   done
   # Single-quote the password so characters like $ ` " survive `source .env`.
   Q_PASS="'$(printf '%s' "$ADMIN_PASSWORD" | sed "s/'/'\\\\''/g")'"
