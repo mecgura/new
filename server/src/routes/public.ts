@@ -13,7 +13,7 @@ publicRoutes.get('/config', (_req, res) => {
   res.json({
     brand: config.brand,
     embeddedSignup: config.meta.appId && config.meta.embeddedConfigId ? { appId: config.meta.appId, configId: config.meta.embeddedConfigId, graphVersion: config.meta.graphVersion } : null,
-    webhookUrl: `${config.appUrl}/webhooks/whatsapp`,
+    webhookUrl: `${config.apiUrl}/webhooks/whatsapp`,
     razorpayKeyId: config.razorpay.keyId || null,
   })
 })

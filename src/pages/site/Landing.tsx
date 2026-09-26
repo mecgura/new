@@ -88,10 +88,18 @@ const FAQ = [
   ['Can agencies manage multiple clients?', 'Yes. Create a separate workspace for each client, each with its own numbers, team, plan and data.'],
 ]
 
+// Shown if the API is unreachable, so the public site never renders an empty pricing section.
+const FALLBACK_PLANS: Plan[] = [
+  { id: 1, code: 'starter', name: 'Starter', tagline: 'For shops & solo businesses starting on WhatsApp', price_monthly: 999, price_yearly: 9990, limits: { numbers: 1, users: 3, contacts: 2000, messages: 10000, flows: 3, ai_replies: 200 }, features: ['flows', 'sequences'] },
+  { id: 2, code: 'growth', name: 'Growth', tagline: 'For growing teams running campaigns & automation', price_monthly: 2499, price_yearly: 24990, limits: { numbers: 2, users: 10, contacts: 25000, messages: 50000, flows: 20, ai_replies: 2000 }, features: ['flows', 'sequences', 'ai', 'api', 'webhooks', 'catalog', 'payments'] },
+  { id: 3, code: 'pro', name: 'Pro', tagline: 'For high-volume brands & multi-branch businesses', price_monthly: 5999, price_yearly: 59990, limits: { numbers: 5, users: 25, contacts: 100000, messages: 250000, flows: -1, ai_replies: 10000 }, features: ['flows', 'sequences', 'ai', 'api', 'webhooks', 'catalog', 'payments', 'priority_support'] },
+  { id: 4, code: 'enterprise', name: 'Enterprise', tagline: 'Custom volumes, onboarding & SLA', price_monthly: 0, price_yearly: 0, limits: { numbers: -1, users: -1, contacts: -1, messages: -1, flows: -1, ai_replies: -1 }, features: ['flows', 'sequences', 'ai', 'api', 'webhooks', 'catalog', 'payments', 'priority_support'] },
+]
+
 function Pricing() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [yearly, setYearly] = useState(false)
-  useEffect(() => { api<Plan[]>('/api/public/plans').then(setPlans).catch(() => undefined) }, [])
+  useEffect(() => { api<Plan[]>('/api/public/plans').then((p) => setPlans(p.length ? p : FALLBACK_PLANS)).catch(() => setPlans(FALLBACK_PLANS)) }, [])
   const L = (n: number) => (n < 0 ? 'Unlimited' : n.toLocaleString('en-IN'))
   const featureLabel: Record<string, string> = { ai: 'AI assistant', api: 'REST API', webhooks: 'Webhooks', catalog: 'Catalogue & orders', payments: 'Razorpay payments', flows: 'Flow builder', sequences: 'Follow-up sequences', priority_support: 'Priority support' }
   return (
@@ -154,7 +162,7 @@ function Contact() {
         </div>
         <form className="rounded-2xl border border-line bg-card p-6 sm:p-8" onSubmit={async (e) => {
           e.preventDefault(); setBusy(true)
-          try { await api('/api/public/contact', { body: f }); setDone(true); t.ok('Thanks! We will get back to you shortly.') } catch (err) { t.err(err) } finally { setBusy(false) }
+          try { await api('/api/public/contact', { body: f }); setDone(true); t.ok('Thanks! We will get back to you shortly.') } catch (err) { t.err((err as { status?: number }).status && (err as { status: number }).status < 500 ? err : `Could not send right now. Please WhatsApp ${BRAND.phone} or email ${BRAND.email}.`) } finally { setBusy(false) }
         }}>
           {done ? <div className="grid h-full place-items-center py-16 text-center"><div><CheckCheck className="mx-auto size-10 text-brand" /><h3 className="mt-4 font-display text-xl font-semibold text-white">Message received</h3><p className="mt-2 text-sm text-muted">Our team will contact you soon. For urgent help call {BRAND.phone}.</p></div></div> : <>
             <div className="grid gap-4 sm:grid-cols-2">

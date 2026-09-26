@@ -209,6 +209,16 @@ export default function Inbox() {
   }, [activeId])
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [msgs.length, activeId])
 
+  // Fallback refresh in case the realtime stream is interrupted (e.g. behind a proxy).
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (document.hidden) return
+      void reloadList()
+      if (activeId) get<Message[]>(`conversations/${activeId}/messages`).then((m) => setThread((th) => (th.id === activeId && m.length !== th.msgs.length ? { id: activeId, msgs: m } : th))).catch(() => undefined)
+    }, 15000)
+    return () => clearInterval(t)
+  }, [activeId, reloadList])
+
   useEvents((type, d) => {
     if (type === 'message') {
       const { conversation_id, message } = d as { conversation_id: number; message: Message }

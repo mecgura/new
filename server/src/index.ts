@@ -33,7 +33,7 @@ seed()
 if (config.isProd && !config.meta.appSecret) console.warn('WARNING: META_APP_SECRET is not set — incoming WhatsApp webhooks are not signature-verified.')
 
 const app = express()
-app.set('trust proxy', 1)
+app.set('trust proxy', Number(process.env.TRUST_PROXY ?? 1))
 app.disable('x-powered-by')
 app.use((_req, res, next) => {
   res.set({ 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'X-Frame-Options': 'SAMEORIGIN' })

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build:web",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://api.mecgura.tech/api/:path*" },
+    { "source": "/webhooks/:path*", "destination": "https://api.mecgura.tech/webhooks/:path*" },
+    { "source": "/uploads/:path*", "destination": "https://api.mecgura.tech/uploads/:path*" },
+    { "source": "/health", "destination": "https://api.mecgura.tech/health" },
+    { "source": "/((?!assets/|brand/|favicon).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    { "source": "/assets/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] }
+  ]
+}

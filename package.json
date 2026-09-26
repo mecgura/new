@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "dev:all": "node scripts/dev.mjs",
-    "test": "node --import tsx --test server/test/*.test.ts"
+    "test": "node --import tsx --test server/test/*.test.ts",
+    "build:web": "tsc -b && vite build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

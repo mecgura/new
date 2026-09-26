@@ -11,7 +11,7 @@ export const workspaceRoutes = Router()
 
 workspaceRoutes.get('/workspace', h((req, res) => {
   const ws = get('SELECT id, name, slug, status, subscription_status, trial_ends_at, current_period_end, business, settings, timezone, created_at FROM workspaces WHERE id = ?', req.ws!.id)
-  res.json({ ...ws, role: req.ws!.role, ...usageSummary(req.ws!.id), webhook_url: `${config.appUrl}/webhooks/whatsapp`, verify_token: config.meta.verifyToken })
+  res.json({ ...ws, role: req.ws!.role, ...usageSummary(req.ws!.id), webhook_url: `${config.apiUrl}/webhooks/whatsapp`, verify_token: config.meta.verifyToken })
 }))
 
 workspaceRoutes.patch('/workspace', perm('settings.manage'), h((req, res) => {

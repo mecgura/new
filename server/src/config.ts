@@ -5,7 +5,9 @@ const env = process.env
 
 export const config = {
   port: Number(env.PORT || 8080),
-  appUrl: (env.APP_URL || 'https://whatsapp.mecgura.tech').replace(/\/$/, ''),
+  appUrl: (env.APP_URL || 'https://www.mecgura.tech').replace(/\/$/, ''),
+  // Public URL of this API server for Meta / Razorpay webhooks (the site proxies /api here). Defaults to APP_URL.
+  apiUrl: (env.API_URL || env.APP_URL || 'https://www.mecgura.tech').replace(/\/$/, ''),
   dataDir: path.resolve(env.DATA_DIR || './data'),
   // Used for JWT signing and encrypting stored access tokens. MUST be set in production.
   appSecret: env.APP_SECRET || 'dev-only-change-me-' + crypto.createHash('sha256').update(process.cwd()).digest('hex').slice(0, 16),

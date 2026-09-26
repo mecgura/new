@@ -114,7 +114,7 @@ const SECRET_FIELDS = ['key_secret', 'webhook_secret', 'api_key']
 commerceRoutes.get('/integrations', perm('settings.manage'), h((req, res) => {
   const rows = all<{ provider: string; config: Record<string, string>; enabled: number }>('SELECT provider, config, enabled FROM integrations WHERE workspace_id = ?', req.ws!.id)
   res.json(rows.map((r) => ({ ...r, config: Object.fromEntries(Object.entries(r.config).map(([k, v]) => [k, SECRET_FIELDS.includes(k) ? (v ? '••••••••' : '') : v])),
-    webhook_url: r.provider === 'razorpay' ? `${config.appUrl}/webhooks/razorpay/${req.ws!.id}` : undefined })))
+    webhook_url: r.provider === 'razorpay' ? `${config.apiUrl}/webhooks/razorpay/${req.ws!.id}` : undefined })))
 }))
 commerceRoutes.put('/integrations/:provider', perm('settings.manage'), h((req, res) => {
   const provider = String(req.params.provider)
