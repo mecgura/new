@@ -70,6 +70,16 @@ Add an **A record** `api` → your VPS IP (where the `mecgura.tech` DNS is manag
 
 ### 2. VPS (Ubuntu, as root)
 
+One command (installs Node 22, nginx, pm2, creates `.env` with a random `APP_SECRET`, asks for the admin
+password, starts the API, configures nginx and gets an SSL certificate once DNS points to the server):
+
+```bash
+ssh root@YOUR_VPS_IP
+curl -fsSL https://raw.githubusercontent.com/mecgura/new/claude/elegant-brown-crpgxt/scripts/setup-vps.sh | bash
+```
+
+Run the same command again to update. Manual steps, if you prefer:
+
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs nginx git
 npm i -g pm2
