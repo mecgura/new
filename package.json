@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "dev:all": "node scripts/dev.mjs",
     "test": "node --import tsx --test server/test/*.test.ts",
-    "build:web": "tsc -b && vite build"
+    "build:web": "tsc -b && vite build --mode vercel"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

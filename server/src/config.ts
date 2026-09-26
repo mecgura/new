@@ -12,6 +12,8 @@ export const config = {
   // Used for JWT signing and encrypting stored access tokens. MUST be set in production.
   appSecret: env.APP_SECRET || 'dev-only-change-me-' + crypto.createHash('sha256').update(process.cwd()).digest('hex').slice(0, 16),
   isProd: env.NODE_ENV === 'production',
+  // Browser origins allowed to call the API directly. Defaults to APP_URL plus its www/apex twin.
+  corsOrigins: (env.CORS_ORIGINS || '').split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean),
   admin: { email: env.ADMIN_EMAIL || 'hello@mecgura.com', password: env.ADMIN_PASSWORD || '' },
   seedDemo: env.SEED_DEMO === '1',
   meta: {

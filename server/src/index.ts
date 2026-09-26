@@ -39,6 +39,22 @@ app.use((_req, res, next) => {
   res.set({ 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'X-Frame-Options': 'SAMEORIGIN' })
   next()
 })
+// The dashboard on www.mecgura.tech calls this API on api.mecgura.tech directly.
+const allowedOrigins = new Set(config.corsOrigins.length ? config.corsOrigins : (() => {
+  const u = new URL(config.appUrl)
+  const twin = u.hostname.startsWith('www.') ? u.hostname.slice(4) : `www.${u.hostname}`
+  return [u.origin, `${u.protocol}//${twin}`]
+})())
+app.use(['/api', '/uploads'], (req, res, next) => {
+  const origin = req.headers.origin
+  if (origin && allowedOrigins.has(origin)) {
+    res.set({ 'Access-Control-Allow-Origin': origin, Vary: 'Origin', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Workspace-Id, X-Api-Key',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS', 'Access-Control-Max-Age': '86400', 'Access-Control-Expose-Headers': 'Content-Disposition' })
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(origin && allowedOrigins.has(origin) ? 204 : 403)
+  next()
+})
+
 // Keep the raw body for webhook signature checks (Meta, Razorpay).
 app.use(express.json({ limit: '6mb', verify: (req, _res, buf) => { (req as express.Request).rawBody = buf } }))
 

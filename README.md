@@ -110,7 +110,8 @@ Update later with `cd /opt/mecgura && git pull && npm ci && pm2 restart mecgura-
 Back up `DATA_DIR` (database + uploads); a daily copy is also kept in `DATA_DIR/backups`.
 
 ### 3. Vercel
-The Vercel project uses `vercel.json` (Vite build → `dist`, rewrites to `api.mecgura.tech`). Domains:
+The Vercel project uses `vercel.json` (`npm run build:web` → `dist`). That build reads `.env.vercel`, so the dashboard calls
+`https://api.mecgura.tech` directly (the API allows the site origins via CORS; override with `CORS_ORIGINS`). Domains:
 `www.mecgura.tech` and `mecgura.tech`.
 
 Docker alternative for the API: `docker build -t mecgura-whatsapp . && docker run -d -p 8080:8080 -v mecgura-data:/data --env-file .env mecgura-whatsapp`

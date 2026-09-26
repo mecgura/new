@@ -181,7 +181,7 @@ inboxRoutes.get('/media/:messageId', perm('inbox.view'), h(async (req, res) => {
 
 inboxRoutes.post('/uploads', perm('inbox.reply'), upload.single('file'), h((req, res) => {
   if (!req.file) throw bad('No file uploaded')
-  res.json({ url: `${config.appUrl}/uploads/${req.file.filename}`, name: req.file.originalname, mime: req.file.mimetype, size: req.file.size })
+  res.json({ url: `${config.apiUrl}/uploads/${req.file.filename}`, name: req.file.originalname, mime: req.file.mimetype, size: req.file.size })
 }))
 
 inboxRoutes.get('/quick-replies', h((req, res) => { res.json(all('SELECT * FROM quick_replies WHERE workspace_id = ? ORDER BY shortcut', req.ws!.id)) }))

@@ -218,3 +218,13 @@ test('admin: reset password, open client workspace, backup', async () => {
   assert.ok(fs.existsSync(b.body.file))
   assert.equal((await call('GET', '/api/admin/overview', undefined, owner)).status, 403, 'non-admins blocked')
 })
+
+test('CORS: website origin may call the API directly, other origins may not', async () => {
+  const pre = await fetch(`${BASE}/api/auth/login`, { method: 'OPTIONS', headers: { Origin: BASE, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' } })
+  assert.equal(pre.status, 204)
+  assert.equal(pre.headers.get('access-control-allow-origin'), BASE)
+  const evil = await fetch(`${BASE}/api/auth/login`, { method: 'OPTIONS', headers: { Origin: 'https://evil.example', 'Access-Control-Request-Method': 'POST' } })
+  assert.equal(evil.status, 403)
+  const get = await fetch(`${BASE}/api/public/plans`, { headers: { Origin: 'https://evil.example' } })
+  assert.equal(get.headers.get('access-control-allow-origin'), null)
+})

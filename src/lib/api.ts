@@ -4,6 +4,9 @@ export class ApiError extends Error {
   constructor(status: number, message: string, code?: string) { super(message); this.status = status; this.code = code }
 }
 
+// Empty = same origin (dev proxy / single-server deploy). The Vercel build sets VITE_API_URL=https://api.mecgura.tech.
+export const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
+
 const TOKEN_KEY = 'mec.token'
 const WS_KEY = 'mec.ws'
 
@@ -27,7 +30,7 @@ export async function api<T = unknown>(path: string, opts: { method?: string; bo
   let body: BodyInit | undefined
   if (opts.body instanceof FormData) body = opts.body
   else if (opts.body !== undefined) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(opts.body) }
-  const res = await fetch(path.startsWith('/') ? path : `/api/${path}`, { method: opts.method ?? (opts.body !== undefined ? 'POST' : 'GET'), headers, body })
+  const res = await fetch(API_BASE + (path.startsWith('/') ? path : `/api/${path}`), { method: opts.method ?? (opts.body !== undefined ? 'POST' : 'GET'), headers, body })
   if (opts.raw) return res as unknown as T
   const json = await res.json().catch(() => ({}))
   if (!res.ok) {

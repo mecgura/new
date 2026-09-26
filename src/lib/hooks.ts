@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, store } from './api'
+import { api, store, API_BASE } from './api'
 
 /** Fetch JSON from the API with loading/error state and a reload() helper. Refetches when `path` changes. */
 export function useApi<T>(path: string | null) {
@@ -36,7 +36,7 @@ function ensureSource() {
   source?.close()
   if (!store.token || !store.ws) return
   sourceKey = key
-  source = new EventSource(`/api/events?token=${encodeURIComponent(store.token)}&ws=${store.ws}`)
+  source = new EventSource(`${API_BASE}/api/events?token=${encodeURIComponent(store.token)}&ws=${store.ws}`)
   for (const t of ['message', 'status', 'conversation', 'notification', 'campaign', 'contact']) {
     source.addEventListener(t, (e) => { const d = JSON.parse((e as MessageEvent).data); handlers.forEach((h) => h(t, d)) })
   }
