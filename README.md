@@ -162,6 +162,24 @@ public/brand/         put the official MECGURA logo here (mecgura-logo.svg or .p
   HTML templates in **Email Marketing → Templates** and sends bulk campaigns to tagged contacts. Opens are tracked
   and an unsubscribe link is added to every email automatically.
 
+## Channels (website chat, Instagram, Messenger, custom API)
+
+All channels land in the same Team Inbox and run the same chatbot rules, flows, AI replies and auto-assign.
+
+- **Website chat** — Channels → Website chat → copy one line (`<script src="https://api.mecgura.tech/widget.js" data-key="wk_…" async></script>`)
+  into the client's site. "Open live preview" shows it on a sample page. Optional "Continue on WhatsApp" button.
+- **Instagram / Messenger** — in the same Meta app add the Messenger / Instagram products, set the webhook to
+  `https://api.mecgura.tech/webhooks/meta` with the same `WA_VERIFY_TOKEN`, subscribe `messages` + `messaging_postbacks`,
+  then paste the Page ID + Page access token in Channels. Replies are allowed within 24h of the customer's message.
+- **Custom / API** — `POST /api/v1/inbound {"user_id","text","name"}` pushes a chat from any app; bot replies come
+  back in the response and agent replies go out on the `message.sent` webhook (`channel: "api"`).
+
+## Calendar & bookings
+
+Calendar → Booking settings: services, hours, breaks, slot size, capacity and reminders. Add a **Book appointment**
+step in the Flow Builder and customers pick a free day and time on WhatsApp (or website chat). Confirmations include
+a Google Calendar link; the private ICS link syncs every booking into Google Calendar / Outlook / Apple Calendar.
+
 ## Public API
 
 See `/docs` in the app. Example:

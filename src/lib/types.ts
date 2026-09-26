@@ -9,7 +9,7 @@ export type WaNumber = { id: number; label: string; phone_number_id: string; wab
 
 export type Contact = { id: number; wa_id: string; name: string | null; email: string | null; tags: string[]; attributes: Record<string, unknown>; stage: string; deal_value: number; lead_score: number; owner_id: number | null; owner_name?: string; source: string; opted_out: number; last_seen_at: string | null; created_at: string }
 
-export type Conversation = { id: number; contact_id: number; number_id: number; status: string; assigned_to: number | null; agent_name: string | null; unread_count: number; bot_paused: number; last_message_at: string; last_inbound_at: string | null; last_preview: string | null; contact_name: string | null; wa_id: string; tags: string[]; stage: string; number_label: string | null }
+export type Conversation = { id: number; contact_id: number; number_id: number; channel?: string; status: string; assigned_to: number | null; agent_name: string | null; unread_count: number; bot_paused: number; last_message_at: string; last_inbound_at: string | null; last_preview: string | null; contact_name: string | null; wa_id: string; tags: string[]; stage: string; number_label: string | null }
 
 export type Message = { id: number; conversation_id: number; direction: 'in' | 'out'; type: string; body: string | null; payload: Record<string, unknown>; status: string; error: string | null; sent_by: string | null; agent_name: string | null; created_at: string }
 

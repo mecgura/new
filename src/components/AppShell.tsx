@@ -3,7 +3,7 @@ import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, MessagesSquare, Users, KanbanSquare, Megaphone, FileText, Bot, Workflow, Sparkles, Repeat, ShoppingBag,
   BarChart3, Smartphone, UserCog, Code2, CreditCard, Settings, Bell, Menu, X, LogOut, ChevronDown, ShieldCheck, LifeBuoy, Check, Mail,
-  CalendarDays,
+  CalendarDays, Radio,
 } from 'lucide-react'
 import Logo from './Logo'
 import { useSession } from '../lib/session'
@@ -37,6 +37,7 @@ const NAV: { group: string; items: Item[] }[] = [
   { group: 'Manage', items: [
     { to: '/app/analytics', label: 'Analytics', icon: BarChart3, perm: 'analytics.view' },
     { to: '/app/numbers', label: 'WhatsApp Numbers', icon: Smartphone, perm: 'numbers.manage' },
+    { to: '/app/channels', label: 'Channels', icon: Radio, perm: 'numbers.manage' },
     { to: '/app/team', label: 'Team & Roles', icon: UserCog },
     { to: '/app/developers', label: 'API & Webhooks', icon: Code2, perm: 'developers.manage' },
     { to: '/app/billing', label: 'Plan & Billing', icon: CreditCard, perm: 'billing.manage' },

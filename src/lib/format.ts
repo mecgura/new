@@ -15,6 +15,8 @@ export function ago(iso?: string | null) {
 export const dateTime = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '—')
 export const date = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—')
 export const time = (iso?: string | null) => (iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) : '')
-export const phone = (wa?: string | null) => (wa ? `+${wa}` : '')
+const CH_LABEL: Record<string, string> = { web: 'Website visitor', fb: 'Messenger', ig: 'Instagram', api: 'API user' }
+/** WhatsApp number as +91…, or the channel name for website / Messenger / Instagram / API contacts. */
+export const phone = (wa?: string | null) => (wa ? (wa.includes(':') ? CH_LABEL[wa.split(':')[0]] ?? 'Chat' : `+${wa}`) : '')
 export const initials = (s?: string | null) => (s || '?').split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
 export const titleCase = (s: string) => s.replace(/[_-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())

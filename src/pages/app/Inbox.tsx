@@ -13,6 +13,8 @@ import { Avatar, Badge, Button, Input, Select, Textarea, Modal, Field, useToast,
 import { TemplatePreview } from '../../components/WhatsAppPreview'
 import type { Conversation, Message, Template, Contact, Member, WaNumber } from '../../lib/types'
 import MediaUpload from '../../components/MediaUpload'
+import { ChannelBadge } from '../../components/ChannelIcon'
+import { CHANNELS } from '../../lib/channels'
 
 type ConvDetail = Conversation & { contact: Contact; notes: { id: number; body: string; user_name: string; created_at: string }[]; orders: { id: number; total: number; status: string; payment_status: string; created_at: string }[]; display_phone: string | null }
 
@@ -49,8 +51,8 @@ function Bubble({ m }: { m: Message }) {
 }
 
 function MediaImage({ m }: { m: Message }) {
-  const p = m.payload as { link?: string; media_id?: string }
-  const [src, setSrc] = useState<string | null>(p.link ?? null)
+  const p = m.payload as { link?: string; media_id?: string; media_url?: string }
+  const [src, setSrc] = useState<string | null>(p.link ?? p.media_url ?? null)
   useEffect(() => {
     if (p.link || !p.media_id) return
     let url = ''
@@ -180,9 +182,9 @@ export default function Inbox() {
   const t = useToast()
   const [params, setParams] = useSearchParams()
   const activeId = Number(params.get('c')) || null
-  const [filter, setFilter] = useState({ status: 'open', assigned: 'all', number_id: '', q: '' })
+  const [filter, setFilter] = useState({ status: 'open', assigned: 'all', number_id: '', channel: '', q: '' })
   const q = useDebounced(filter.q)
-  const qs = new URLSearchParams({ status: filter.status, assigned: filter.assigned, ...(filter.number_id ? { number_id: filter.number_id } : {}), ...(q ? { q } : {}) }).toString()
+  const qs = new URLSearchParams({ status: filter.status, assigned: filter.assigned, ...(filter.number_id ? { number_id: filter.number_id } : {}), ...(filter.channel ? { channel: filter.channel } : {}), ...(q ? { q } : {}) }).toString()
   const { data: convs, reload: reloadList, setData: setConvs } = useApi<Conversation[]>(`conversations?${qs}`)
   const { data: numbers } = useApi<WaNumber[]>('numbers')
   const { data: team } = useApi<{ members: Member[] }>('team')
@@ -241,7 +243,10 @@ export default function Inbox() {
 
   const windowOpen = detail?.last_inbound_at ? now - new Date(detail.last_inbound_at).getTime() < 86400000 : false
   const isDemo = numbers?.find((n) => n.id === detail?.number_id)?.is_demo
-  const canFreeText = windowOpen || !!isDemo
+  const chan = detail?.channel ?? 'whatsapp'
+  const isWa = chan === 'whatsapp'
+  const noWindow = chan === 'web' || chan === 'api'
+  const canFreeText = noWindow || windowOpen || !!isDemo
   const hoursLeft = detail?.last_inbound_at ? Math.max(0, 24 - (now - new Date(detail.last_inbound_at).getTime()) / 3600000) : 0
 
   const send = async (body: Record<string, unknown>) => {
@@ -275,6 +280,9 @@ export default function Inbox() {
               <option value="all">Everyone</option><option value="me">Mine</option><option value="unassigned">Unassigned</option>
               {team?.members.filter((m) => m.user_id !== user?.id).map((m) => <option key={m.user_id} value={m.user_id}>{m.name}</option>)}
             </Select>
+            <Select className="!h-8 text-xs" value={filter.channel} onChange={(e) => setFilter({ ...filter, channel: e.target.value })}>
+              <option value="">All channels</option>{Object.entries(CHANNELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </Select>
             {(numbers?.length ?? 0) > 1 && <Select className="!h-8 text-xs" value={filter.number_id} onChange={(e) => setFilter({ ...filter, number_id: e.target.value })}>
               <option value="">All numbers</option>{numbers?.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
             </Select>}
@@ -286,7 +294,7 @@ export default function Inbox() {
               action={numbers?.length ? <Button variant="subtle" size="sm" icon={<FlaskConical className="size-4" />} onClick={() => setModal('sim')}>Simulate a message</Button> : <Link to="/app/numbers"><Button size="sm">Connect number</Button></Link>} />
           ) : convs.map((c) => (
             <button key={c.id} onClick={() => setParams({ c: String(c.id) })} className={cx('flex w-full gap-3 border-b border-line/50 px-3 py-3 text-left transition', c.id === activeId ? 'bg-brand/10' : 'hover:bg-white/[.03]')}>
-              <Avatar name={c.contact_name || c.wa_id} className="size-10 text-xs" />
+              <div className="relative shrink-0"><Avatar name={c.contact_name || c.wa_id} className="size-10 text-xs" /><ChannelBadge channel={c.channel} className="absolute -bottom-0.5 -right-0.5" /></div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2"><span className="truncate text-sm font-medium text-white">{c.contact_name || phone(c.wa_id)}</span><span className={cx('shrink-0 text-[11px]', c.unread_count ? 'text-brand-2' : 'text-muted')}>{ago(c.last_message_at)}</span></div>
                 <div className="flex items-center justify-between gap-2"><span className="truncate text-xs text-muted">{c.last_preview}</span>{c.unread_count > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-ink">{c.unread_count}</span>}</div>
@@ -312,13 +320,13 @@ export default function Inbox() {
             <Avatar name={detail.contact.name || detail.contact.wa_id} />
             <div className="min-w-0 flex-1">
               <div className="truncate font-medium text-white">{detail.contact.name || phone(detail.contact.wa_id)}</div>
-              <div className="flex items-center gap-2 text-[11px] text-muted"><span>{phone(detail.contact.wa_id)}</span>{detail.number_label && <span className="hidden sm:inline">· via {detail.number_label}</span>}</div>
+              <div className="flex items-center gap-2 text-[11px] text-muted">{chan !== 'whatsapp' ? <span className="truncate">{CHANNELS[chan]?.label}</span> : <><span>{phone(detail.contact.wa_id)}</span>{detail.number_label && <span className="hidden sm:inline">· via {detail.number_label}</span>}</>}</div>
             </div>
             <div className="flex items-center gap-1.5">
               {detail.bot_paused
                 ? <Button size="sm" variant="subtle" icon={<PlayCircle className="size-4" />} onClick={() => setStatus({ bot_paused: false })} title="Let bots/AI reply again"><span className="hidden lg:inline">Resume bot</span></Button>
                 : <Button size="sm" variant="subtle" icon={<PauseCircle className="size-4" />} onClick={() => setStatus({ bot_paused: true })} title="Stop bots/AI for this chat"><span className="hidden lg:inline">Pause bot</span></Button>}
-              <Link to={`/app/calendar?new=1&phone=${detail.contact.wa_id}&name=${encodeURIComponent(detail.contact.name ?? '')}`} title="Book an appointment"><Button size="sm" variant="subtle" icon={<CalendarPlus className="size-4" />}><span className="hidden lg:inline">Book</span></Button></Link>
+              <Link to={`/app/calendar?new=1&phone=${detail.contact.wa_id}&name=${encodeURIComponent(detail.contact.name ?? '')}`} title="Book an appointment"><Button size="sm" variant="subtle" icon={<CalendarPlus className="size-4" />}><span className="hidden 2xl:inline">Book</span></Button></Link>
               {!detail.assigned_to && <Button size="sm" variant="subtle" icon={<UserPlus className="size-4" />} onClick={() => setStatus({ assigned_to: user?.id })}><span className="hidden lg:inline">Assign me</span></Button>}
               {detail.status !== 'resolved'
                 ? <Button size="sm" icon={<CheckCircle2 className="size-4" />} onClick={() => setStatus({ status: 'resolved' })}><span className="hidden sm:inline">Resolve</span></Button>
@@ -335,8 +343,8 @@ export default function Inbox() {
           <div className="shrink-0 border-t border-line bg-panel p-3">
             {!can('inbox.reply') ? <p className="py-2 text-center text-sm text-muted">You have view-only access.</p> : !canFreeText ? (
               <div className="flex flex-col items-center gap-3 py-2 text-center sm:flex-row sm:justify-between sm:text-left">
-                <p className="text-sm text-muted"><Clock className="mr-1 inline size-4 text-amber-300" />The 24-hour reply window is closed. Send an approved template to re-open the conversation.</p>
-                <Button icon={<FileText className="size-4" />} onClick={() => setModal('template')}>Send template</Button>
+                <p className="text-sm text-muted"><Clock className="mr-1 inline size-4 text-amber-300" />{isWa ? 'The 24-hour reply window is closed. Send an approved template to re-open the conversation.' : `${CHANNELS[chan]?.label} only allows replies within 24 hours of the customer's last message. It re-opens when they write again.`}</p>
+                {isWa && <Button icon={<FileText className="size-4" />} onClick={() => setModal('template')}>Send template</Button>}
               </div>
             ) : <>
               {qMatches.length > 0 && <div className="mb-2 max-h-40 overflow-y-auto rounded-xl border border-line bg-card">
@@ -345,9 +353,9 @@ export default function Inbox() {
               <div className="flex items-end gap-2">
                 <div className="flex gap-0.5 pb-1">
                   <button title="Attach file" className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-white" onClick={() => fileRef.current?.click()}><Paperclip className="size-[18px]" /></button>
-                  <button title="Template" className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-white" onClick={() => setModal('template')}><FileText className="size-[18px]" /></button>
+                  {isWa && <button title="Template" className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-white" onClick={() => setModal('template')}><FileText className="size-[18px]" /></button>}
                   <button title="Quick reply buttons" className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-white max-sm:hidden" onClick={() => setModal('buttons')}><Zap className="size-[18px]" /></button>
-                  <button title="Send product" className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-white max-sm:hidden" onClick={() => setModal('product')}><ShoppingBag className="size-[18px]" /></button>
+                  {isWa && <button title="Send product" className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-white max-sm:hidden" onClick={() => setModal('product')}><ShoppingBag className="size-[18px]" /></button>}
                   <button title="Payment link" className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-white max-sm:hidden" onClick={() => setModal('payment')}><IndianRupee className="size-[18px]" /></button>
                 </div>
                 <textarea value={text} onChange={(e) => setText(e.target.value)} rows={1} placeholder="Type a message · / for quick replies"
@@ -360,7 +368,7 @@ export default function Inbox() {
                 <Button className="h-10 w-10 !px-0" onClick={sendText} loading={sending} disabled={!text.trim()}>{!sending && <Send className="size-4" />}</Button>
               </div>
               <div className="mt-1.5 flex justify-between px-1 text-[11px] text-muted">
-                <span>{isDemo ? 'Sandbox number — messages are simulated' : `Reply window closes in ${Math.floor(hoursLeft)}h ${Math.round((hoursLeft % 1) * 60)}m`}</span>
+                <span>{chan === 'web' ? 'Website chat — the visitor sees your reply in the chat window' : chan === 'api' ? 'API chat — replies go to your system via the message.sent webhook' : isDemo ? 'Sandbox number — messages are simulated' : `Reply window closes in ${Math.floor(hoursLeft)}h ${Math.round((hoursLeft % 1) * 60)}m`}</span>
                 <span className="hidden sm:inline">Shift + Enter for new line</span>
               </div>
             </>}

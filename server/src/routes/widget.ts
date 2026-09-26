@@ -114,3 +114,19 @@ widgetRoutes.post('/widget/:key/messages', limit(30), h(async (req, res) => {
   }
   res.json({ messages: history(ch, b.vid, b.after), online: online(ch.workspace_id) })
 }))
+
+/** A sample page with the widget installed — handy to show clients before touching their website. */
+widgetRoutes.get('/widget/:key/demo', (req, res) => {
+  const key = String(req.params.key).replace(/[^\w-]/g, '')
+  const ch = get<Channel>("SELECT * FROM channels WHERE public_key = ? AND type = 'web'", key)
+  if (!ch) { res.status(404).send('Not found'); return }
+  const ws = get<{ name: string }>('SELECT name FROM workspaces WHERE id = ?', ch.workspace_id)!
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
+  res.set('Content-Type', 'text/html; charset=utf-8').send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(ws.name)} — chat preview</title><style>body{margin:0;font-family:system-ui,Arial,sans-serif;background:#f8fafc;color:#0f172a}
+header{padding:22px 6vw;background:#fff;border-bottom:1px solid #e2e8f0;font-weight:800;font-size:20px}main{padding:8vh 6vw;max-width:760px}
+h1{font-size:40px;margin:0 0 12px}p{font-size:18px;line-height:1.6;color:#475569}.tag{display:inline-block;background:#ecfdf5;color:#047857;padding:6px 12px;border-radius:999px;font-size:13px;font-weight:700}</style></head>
+<body><header>${esc(ws.name)}</header><main><span class="tag">Live chat preview</span><h1>This is how the chat looks on your website</h1>
+<p>Click the chat button in the corner and send a message. It arrives instantly in the MECGURA Team Inbox, and your chatbot, flows and agents reply here.</p></main>
+<script src="/widget.js" data-key="${key}" async></script></body></html>`)
+})

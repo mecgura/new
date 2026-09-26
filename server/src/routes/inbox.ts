@@ -43,6 +43,7 @@ inboxRoutes.get('/conversations', perm('inbox.view'), h((req, res) => {
   const q = req.query as Record<string, string>
   const where = ['c.workspace_id = ?']; const p: unknown[] = [req.ws!.id]
   if (q.status && q.status !== 'all') { where.push('c.status = ?'); p.push(q.status) }
+  if (q.channel) { where.push("COALESCE(c.channel, 'whatsapp') = ?"); p.push(q.channel) }
   if (q.number_id) { where.push('c.number_id = ?'); p.push(Number(q.number_id)) }
   if (q.assigned === 'me') { where.push('c.assigned_to = ?'); p.push(req.user!.id) }
   else if (q.assigned === 'unassigned') where.push('c.assigned_to IS NULL')
