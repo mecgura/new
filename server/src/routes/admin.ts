@@ -5,6 +5,9 @@ import { h, parse, bad, id, notFound } from '../lib/http.ts'
 import { superAdmin } from '../lib/auth.ts'
 import { hashPassword, randomToken } from '../lib/security.ts'
 import { backupDatabase } from '../services/subscription.ts'
+import { createPaymentLink } from '../services/razorpay.ts'
+import { config } from '../config.ts'
+import type { Plan } from '../services/plans.ts'
 import { activatePlan, usageSummary } from '../services/plans.ts'
 import { createWorkspace } from './auth.ts'
 
@@ -42,7 +45,9 @@ adminRoutes.get('/workspaces/:id', h((req, res) => {
   if (!w) throw notFound('Workspace')
   res.json({ ...w, ...usageSummary(id(req.params.id)),
     members: all('SELECT u.id, u.name, u.email, m.role, u.last_login_at FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ?', id(req.params.id)),
-    invoices: all('SELECT * FROM invoices WHERE workspace_id = ? ORDER BY id DESC', id(req.params.id)) })
+    owner_phone: get<{ phone: string | null }>("SELECT u.phone FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? AND m.role = 'owner' LIMIT 1", id(req.params.id))?.phone ?? null,
+    razorpay_configured: !!(config.razorpay.keyId && config.razorpay.keySecret),
+    invoices: all('SELECT i.*, p.name AS plan_name FROM invoices i LEFT JOIN plans p ON p.id = i.plan_id WHERE i.workspace_id = ? ORDER BY i.id DESC', id(req.params.id)) })
 }))
 
 // Create a client workspace on behalf of a customer (agency onboarding).
@@ -111,3 +116,30 @@ adminRoutes.post('/users/:id/reset-password', h((req, res) => {
 }))
 
 adminRoutes.post('/backup', h((_req, res) => { res.json({ file: backupDatabase(true) }) }))
+
+// Bill a client online: MECGURA's Razorpay payment link; the plan activates automatically when it is paid.
+adminRoutes.post('/workspaces/:id/payment-link', h(async (req, res) => {
+  const wid = id(req.params.id)
+  if (!config.razorpay.keyId || !config.razorpay.keySecret) throw bad('Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to the server .env first')
+  const b = parse(z.object({ plan_id: z.number(), cycle: z.enum(['monthly', 'yearly']), amount: z.number().int().positive().optional(), note: z.string().max(200).optional() }), req.body)
+  const plan = get<Plan>('SELECT * FROM plans WHERE id = ?', b.plan_id)
+  if (!plan) throw bad('Plan not found')
+  const amount = b.amount ?? (b.cycle === 'yearly' ? plan.price_yearly : plan.price_monthly)
+  if (!amount) throw bad('Enter the amount for this plan')
+  const ws = get<{ name: string }>('SELECT name FROM workspaces WHERE id = ?', wid)
+  if (!ws) throw notFound('Workspace')
+  const ownerRow = get<{ name: string; email: string; phone: string | null }>(
+    "SELECT u.name, u.email, u.phone FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? AND m.role = 'owner' ORDER BY m.id LIMIT 1", wid)
+  const description = b.note || `${config.brand.product} — ${plan.name} plan (${b.cycle}) for ${ws.name}`
+  const inv = insert('invoices', { workspace_id: wid, plan_id: plan.id, amount, cycle: b.cycle, status: 'created', description, created_at: now() })
+  try {
+    const link = await createPaymentLink({ keyId: config.razorpay.keyId, keySecret: config.razorpay.keySecret }, {
+      amount, description, name: ownerRow?.name, email: ownerRow?.email, phone: ownerRow?.phone?.replace(/\D/g, '') || undefined,
+      reference: `mecinv_${inv}`, callbackUrl: `${config.appUrl}/app?paid=1` })
+    run('UPDATE invoices SET provider_order_id = ?, payment_url = ? WHERE id = ?', link.id, link.short_url, inv)
+  } catch (e) {
+    run('DELETE FROM invoices WHERE id = ?', inv)
+    throw bad(`Razorpay: ${(e as Error).message}`)
+  }
+  res.json(get('SELECT * FROM invoices WHERE id = ?', inv))
+}))

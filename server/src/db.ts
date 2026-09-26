@@ -222,4 +222,8 @@ export function migrate() {
     id INTEGER PRIMARY KEY, name TEXT, email TEXT, phone TEXT, company TEXT, message TEXT, status TEXT DEFAULT 'new', created_at TEXT NOT NULL
   );
   `)
+  // Additive column migrations for existing databases.
+  for (const sql of ['ALTER TABLE invoices ADD COLUMN payment_url TEXT', 'ALTER TABLE invoices ADD COLUMN description TEXT']) {
+    try { db.exec(sql) } catch { /* column already exists */ }
+  }
 }

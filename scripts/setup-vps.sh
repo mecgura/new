@@ -83,6 +83,8 @@ AI_MODEL=claude-opus-5
 # ---- Subscription billing (MECGURA Razorpay) ----
 RAZORPAY_KEY_ID=
 RAZORPAY_KEY_SECRET=
+# Razorpay → Webhooks: URL https://api.mecgura.tech/webhooks/razorpay-billing, event payment_link.paid
+RAZORPAY_WEBHOOK_SECRET=
 EOF
   chmod 600 "$APP_DIR/.env"
 else

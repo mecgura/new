@@ -2,6 +2,7 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn, type ChildProcess } from 'node:child_process'
+import http from 'node:http'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -12,6 +13,18 @@ const BASE = `http://127.0.0.1:${PORT}`
 const META_SECRET = 'test-meta-secret'
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mecgura-test-'))
 let server: ChildProcess
+const RZP_WEBHOOK_SECRET = 'rzp-webhook-secret'
+// Stand-in for the Razorpay API so payment-link flows can be tested offline.
+const rzpCalls: Json[] = []
+const rzpMock = http.createServer((req, res) => {
+  let body = ''
+  req.on('data', (c) => { body += c })
+  req.on('end', () => {
+    rzpCalls.push({ path: req.url, body: body ? JSON.parse(body) : null })
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ id: `plink_${rzpCalls.length}`, short_url: `https://rzp.io/i/test${rzpCalls.length}`, status: 'created' }))
+  })
+})
 
 type Json = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -36,9 +49,11 @@ async function until<T>(fn: () => Promise<T | undefined | false>, ms = 8000): Pr
 let owner: { token: string; ws: number }
 
 before(async () => {
+  await new Promise<void>((r) => rzpMock.listen(0, '127.0.0.1', () => r()))
+  const rzpBase = `http://127.0.0.1:${(rzpMock.address() as { port: number }).port}`
   server = spawn(process.execPath, ['--import', 'tsx', 'server/src/index.ts'], {
     env: { ...process.env, PORT: String(PORT), DATA_DIR: dataDir, ADMIN_EMAIL: 'admin@test.local', ADMIN_PASSWORD: 'adminpass123',
-      APP_URL: BASE, META_APP_SECRET: META_SECRET, WORKER_INTERVAL_MS: '250', NODE_ENV: 'test', ANTHROPIC_API_KEY: '', RAZORPAY_KEY_ID: '' },
+      APP_URL: BASE, META_APP_SECRET: META_SECRET, WORKER_INTERVAL_MS: '250', NODE_ENV: 'test', ANTHROPIC_API_KEY: '', RAZORPAY_KEY_ID: 'rzp_test_key', RAZORPAY_KEY_SECRET: 'rzp_test_secret', RAZORPAY_WEBHOOK_SECRET: RZP_WEBHOOK_SECRET, RAZORPAY_API_BASE: rzpBase },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   server.stderr?.on('data', (d) => { const s = String(d); if (!s.includes('ExperimentalWarning') && !s.includes('--trace-warnings')) process.stderr.write(s) })
@@ -48,7 +63,7 @@ before(async () => {
   owner = { token: r.body.token, ws: r.body.workspaces[0].id }
 })
 
-after(() => { server?.kill(); fs.rmSync(dataDir, { recursive: true, force: true }) })
+after(() => { server?.kill(); rzpMock.close(); fs.rmSync(dataDir, { recursive: true, force: true }) })
 
 test('health and public endpoints', async () => {
   assert.equal((await call('GET', '/health')).body.ok, true)
@@ -239,4 +254,29 @@ test('billing is managed by MECGURA: clients cannot see plans or billing', async
   assert.equal(team.body.permissions['billing.manage'], undefined)
   const admin = await call('POST', '/api/auth/login', { email: 'admin@test.local', password: 'adminpass123' })
   assert.equal((await call('GET', '/api/admin/plans', undefined, { token: admin.body.token })).status, 200, 'admin still manages plans')
+})
+
+test('admin bills a client with a Razorpay link; paying it activates the plan once', async () => {
+  const admin = await call('POST', '/api/auth/login', { email: 'admin@test.local', password: 'adminpass123' })
+  const A = { token: admin.body.token }
+  const plans = (await call('GET', '/api/admin/plans', undefined, A)).body
+  const growth = plans.find((p: Json) => p.code === 'growth')
+  const c = await call('POST', '/api/admin/workspaces', { company: 'Pay Client', name: 'Payer', email: 'payer@test.local', password: 'password123' }, A)
+  const inv = await call('POST', `/api/admin/workspaces/${c.body.id}/payment-link`, { plan_id: growth.id, cycle: 'monthly' }, A)
+  assert.equal(inv.status, 200, JSON.stringify(inv.body))
+  assert.match(inv.body.payment_url, /^https:\/\/rzp\.io\//)
+  assert.equal(rzpCalls.at(-1)!.body.amount, growth.price_monthly * 100, 'amount sent to Razorpay in paise')
+  assert.equal((await call('POST', `/api/admin/workspaces/${c.body.id}/payment-link`, { plan_id: growth.id, cycle: 'monthly' }, owner)).status, 403)
+
+  const payload = JSON.stringify({ event: 'payment_link.paid', payload: { payment_link: { entity: { id: inv.body.provider_order_id } }, payment: { entity: { id: 'pay_123' } } } })
+  const post = (sig: string) => fetch(`${BASE}/webhooks/razorpay-billing`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Razorpay-Signature': sig }, body: payload })
+  assert.equal((await post('bad')).status, 400)
+  const sig = crypto.createHmac('sha256', RZP_WEBHOOK_SECRET).update(payload).digest('hex')
+  assert.equal((await post(sig)).status, 200)
+  const ws1 = (await call('GET', `/api/admin/workspaces/${c.body.id}`, undefined, A)).body
+  assert.equal(ws1.subscription_status, 'active')
+  assert.equal(ws1.invoices[0].status, 'paid')
+  assert.equal((await post(sig)).status, 200) // Razorpay retries: must not extend twice
+  const ws2 = (await call('GET', `/api/admin/workspaces/${c.body.id}`, undefined, A)).body
+  assert.equal(ws2.current_period_end, ws1.current_period_end)
 })

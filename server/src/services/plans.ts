@@ -89,7 +89,9 @@ export function usageSummary(workspaceId: number) {
 }
 
 export function activatePlan(workspaceId: number, planId: number, cycle: 'monthly' | 'yearly') {
-  const end = new Date()
+  const cur = get<{ subscription_status: string; current_period_end: string | null }>('SELECT subscription_status, current_period_end FROM workspaces WHERE id = ?', workspaceId)
+  const stillRunning = cur?.subscription_status === 'active' && cur.current_period_end && new Date(cur.current_period_end) > new Date()
+  const end = stillRunning ? new Date(cur!.current_period_end!) : new Date()
   if (cycle === 'yearly') end.setFullYear(end.getFullYear() + 1); else end.setMonth(end.getMonth() + 1)
   run("UPDATE workspaces SET plan_id = ?, subscription_status = 'active', current_period_end = ?, status = 'active' WHERE id = ?",
     planId, end.toISOString(), workspaceId)

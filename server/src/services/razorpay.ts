@@ -3,7 +3,7 @@ import { hmacHex, safeEqual } from '../lib/security.ts'
 export type RzpKeys = { keyId: string; keySecret: string }
 
 async function rzp<T>(keys: RzpKeys, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`https://api.razorpay.com/v1/${path}`, {
+  const res = await fetch(`${process.env.RAZORPAY_API_BASE || 'https://api.razorpay.com/v1'}/${path}`, {
     method: body ? 'POST' : 'GET',
     headers: { Authorization: `Basic ${Buffer.from(`${keys.keyId}:${keys.keySecret}`).toString('base64')}`, 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,

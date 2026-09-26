@@ -126,7 +126,12 @@ Docker alternative for the API: `docker build -t mecgura-whatsapp . && docker ru
 3. Embedded Signup: create a Facebook Login for Business configuration → put its ID in `META_EMBEDDED_CONFIG_ID`.
    Clients then click **Connect number** and finish onboarding in the Meta popup.
    Without it, clients can connect manually with Phone number ID + WABA ID + a permanent System User token.
-4. Razorpay: set `RAZORPAY_KEY_*` to sell plans online; otherwise record UPI/bank payments in **Admin → Clients**.
+4. Razorpay (clients paying MECGURA): Razorpay Dashboard → Account & Settings → API Keys → put `RAZORPAY_KEY_ID` and
+   `RAZORPAY_KEY_SECRET` in the server `.env`. Then Razorpay → Webhooks → add
+   `https://api.mecgura.tech/webhooks/razorpay-billing`, event **payment_link.paid**, with a secret you choose →
+   put it in `RAZORPAY_WEBHOOK_SECRET`, and `pm2 restart mecgura-api --update-env`.
+   In **Admin → Clients → (client) → Send payment link** pick the plan, send the link on WhatsApp; the plan activates
+   automatically when paid (early renewals extend the current period). UPI/bank transfers can still be recorded manually.
    Each client connects their own Razorpay in **Settings → Integrations** to collect payments from customers.
 
 ## Project layout

@@ -10,13 +10,16 @@ import { Badge, Button, Card, Drawer, Field, Input, Loading, Modal, Select, Stat
 import type { Plan, Usage } from '../../lib/types'
 
 type WsRow = { id: number; name: string; status: string; subscription_status: string; plan: string; plan_id: number; owner_email: string; contacts: number; numbers: number; messages_month: number; current_period_end: string | null; created_at: string }
-type WsDetail = WsRow & { usage: Usage; members: { id: number; name: string; email: string; role: string; last_login_at: string | null }[]; invoices: { id: number; amount: number; cycle: string; status: string; created_at: string }[] }
+type WsDetail = WsRow & { usage: Usage; members: { id: number; name: string; email: string; role: string; last_login_at: string | null }[]; invoices: { id: number; amount: number; cycle: string; status: string; created_at: string; plan_name: string | null; payment_url: string | null; period_end: string | null }[]; owner_phone: string | null; razorpay_configured: boolean }
 
 function Client({ id, plans, onClose, onChanged }: { id: number; plans: Plan[]; onClose: () => void; onChanged: () => void }) {
   const t = useToast()
   const { data, reload } = useApi<WsDetail>(`/api/admin/workspaces/${id}`)
   const [pay, setPay] = useState({ plan_id: 0, cycle: 'monthly', amount: 0, reference: '' })
   const [reset, setReset] = useState<{ email: string; password: string } | null>(null)
+  const [link, setLink] = useState({ plan_id: 0, cycle: 'monthly', amount: 0 })
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [newLink, setNewLink] = useState<string | null>(null)
   const act = async (body: Record<string, unknown>) => { try { await patch(`/api/admin/workspaces/${id}`, body); t.ok('Updated'); void reload(); onChanged() } catch (e) { t.err(e) } }
   return (
     <Drawer open onClose={onClose} title={data?.name ?? 'Client'}>
@@ -31,6 +34,25 @@ function Client({ id, plans, onClose, onChanged }: { id: number; plans: Plan[]; 
           <Button size="sm" variant="subtle" onClick={() => act({ trial_days: 14 })}>Extend trial 14 days</Button>
           <Button size="sm" variant="outline" onClick={() => { store.ws = id; window.location.assign('/app') }}>Open workspace</Button>
         </div>
+        <Card title="Send payment link (Razorpay)">
+          {!data.razorpay_configured ? <p className="text-sm text-amber-200">Add your Razorpay keys on the server to bill clients online (see README → Razorpay).</p> : <>
+            <p className="mb-3 text-xs text-muted">Client pays with UPI / card / netbanking. The plan activates automatically once paid.</p>
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Plan"><Select value={link.plan_id} onChange={(e) => { const p = plans.find((x) => x.id === Number(e.target.value)); setLink({ ...link, plan_id: Number(e.target.value), amount: p ? (link.cycle === 'yearly' ? p.price_yearly : p.price_monthly) : 0 }) }}><option value={0}>Select…</option>{plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
+              <Field label="Cycle"><Select value={link.cycle} onChange={(e) => { const p = plans.find((x) => x.id === link.plan_id); setLink({ ...link, cycle: e.target.value, amount: p ? (e.target.value === 'yearly' ? p.price_yearly : p.price_monthly) : link.amount }) }}><option value="monthly">Monthly</option><option value="yearly">Yearly</option></Select></Field>
+              <Field label="Amount (₹)"><Input type="number" value={link.amount} onChange={(e) => setLink({ ...link, amount: Number(e.target.value) })} /></Field>
+            </div>
+            <Button className="mt-3" size="sm" loading={linkBusy} disabled={!link.plan_id || !link.amount} onClick={async () => {
+              setLinkBusy(true)
+              try { const inv = await post<{ payment_url: string }>(`/api/admin/workspaces/${id}/payment-link`, link); setNewLink(inv.payment_url); void reload() } catch (e) { t.err(e) } finally { setLinkBusy(false) }
+            }}>Create payment link</Button>
+            {newLink && <div className="mt-3 rounded-xl border border-brand/30 bg-brand/10 p-3 text-sm">
+              <div className="flex gap-2"><Input readOnly value={newLink} /><Button variant="subtle" onClick={() => { void navigator.clipboard.writeText(newLink); t.ok('Link copied') }}>Copy</Button></div>
+              <a className="mt-2 inline-block text-brand-2" target="_blank" rel="noreferrer"
+                href={`https://wa.me/${(data.owner_phone || '').replace(/\D/g, '').replace(/^(\d{10})$/, '91$1')}?text=${encodeURIComponent(`Hi! Here is your MECGURA WhatsApp payment link: ${newLink}\nYour plan activates automatically once the payment is done. Thank you!`)}`}>Send on WhatsApp →</a>
+            </div>}
+          </>}
+        </Card>
         <Card title="Record offline payment (UPI / bank)">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Plan"><Select value={pay.plan_id} onChange={(e) => { const p = plans.find((x) => x.id === Number(e.target.value)); setPay({ ...pay, plan_id: Number(e.target.value), amount: p ? (pay.cycle === 'yearly' ? p.price_yearly : p.price_monthly) : 0 }) }}><option value={0}>Select…</option>{plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
@@ -45,7 +67,8 @@ function Client({ id, plans, onClose, onChanged }: { id: number; plans: Plan[]; 
           <Td className="text-right"><Button size="sm" variant="ghost" onClick={async () => { try { const r = await post<{ email: string; password: string }>(`/api/admin/users/${m.id}/reset-password`); setReset(r) } catch (e) { t.err(e) } }}>Reset password</Button></Td></tr>)}</Table></Card>
         {reset && <div className="rounded-xl border border-brand/30 bg-brand/10 p-4 text-sm"><div className="text-soft">New password for <b className="text-white">{reset.email}</b> (shown once — share it securely):</div>
           <div className="mt-2 flex gap-2"><Input readOnly value={reset.password} className="font-mono" /><Button variant="subtle" onClick={() => { void navigator.clipboard.writeText(reset.password); t.ok('Copied') }}>Copy</Button></div></div>}
-        <Card title="Invoices" pad={false}><Table head={['Date', 'Amount', 'Cycle', 'Status']}>{data.invoices.map((i) => <tr key={i.id}><Td>{date(i.created_at)}</Td><Td>{inr(i.amount)}</Td><Td>{i.cycle}</Td><Td><Badge tone={statusTone(i.status)}>{i.status}</Badge></Td></tr>)}</Table></Card>
+        <Card title="Invoices" pad={false}><Table head={['Date', 'Plan', 'Amount', 'Status', 'Valid until', '']}>{data.invoices.map((i) => <tr key={i.id}><Td>{date(i.created_at)}</Td><Td>{i.plan_name} · {i.cycle}</Td><Td>{inr(i.amount)}</Td><Td><Badge tone={statusTone(i.status)}>{i.status === 'created' ? 'awaiting payment' : i.status}</Badge></Td><Td className="text-xs">{date(i.period_end)}</Td>
+          <Td className="text-right">{i.payment_url && i.status !== 'paid' && <button className="text-xs text-brand-2" onClick={() => { void navigator.clipboard.writeText(i.payment_url!); t.ok('Link copied') }}>Copy link</button>}</Td></tr>)}</Table></Card>
       </div>}
     </Drawer>
   )
