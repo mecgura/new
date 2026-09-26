@@ -1,6 +1,9 @@
 import { all, get, insert, run, now } from '../db.ts'
 import { HttpError } from '../lib/http.ts'
 import { period } from '../lib/util.ts'
+import { config } from '../config.ts'
+
+const upgradeHint = () => (config.clientBilling ? 'Upgrade your plan to continue.' : `Contact MECGURA (${config.brand.phone}) to upgrade your plan.`)
 
 export type Limits = {
   numbers: number; users: number; contacts: number; messages: number; flows: number; ai_replies: number; campaigns: number
@@ -66,7 +69,7 @@ export function checkLimit(workspaceId: number, limit: keyof Limits, adding = 1)
   const max = plan.limits[limit]
   if (max === undefined || max < 0) return
   if (currentCount(workspaceId, limit) + adding > max) {
-    throw new HttpError(402, `Your ${plan.name} plan allows ${max.toLocaleString('en-IN')} ${limit.replace('_', ' ')}. Upgrade your plan to continue.`, 'limit_reached')
+    throw new HttpError(402, `Your ${plan.name} plan allows ${max.toLocaleString('en-IN')} ${limit.replace('_', ' ')}. ${upgradeHint()}`, 'limit_reached')
   }
 }
 
@@ -75,7 +78,7 @@ export function hasFeature(workspaceId: number, f: Feature) {
 }
 export function requireFeature(workspaceId: number, f: Feature) {
   if (!hasFeature(workspaceId, f)) {
-    throw new HttpError(402, `This feature is not included in your ${workspacePlan(workspaceId).name} plan. Upgrade to unlock it.`, 'feature_locked')
+    throw new HttpError(402, `This feature is not included in your ${workspacePlan(workspaceId).name} plan. ${upgradeHint()}`, 'feature_locked')
   }
 }
 

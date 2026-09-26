@@ -31,7 +31,9 @@ daily database backup to `DATA_DIR/backups` (last 7 kept; admins can also trigge
 - When a trial ends the workspace becomes `expired`; paid plans go `past_due` at period end and `expired` after a
   3-day grace period. Expired workspaces keep **receiving** messages but cannot **send** (inbox, bots, campaigns,
   API) until renewed. Running campaigns pause and resume from where they stopped.
-- Renew online (Razorpay) from Plan & Billing, or record a UPI/bank payment in **Admin → Clients**.
+- By default clients never see plans or billing: MECGURA sets each client's plan and records UPI/bank payments in
+  **Admin → Clients**, and clients are told to contact MECGURA to renew or upgrade. Set `CLIENT_BILLING=visible`
+  to show clients the Plan & Billing page and let them pay online (Razorpay).
 
 ## Security
 

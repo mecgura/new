@@ -17,7 +17,8 @@ teamRoutes.get('/team', h((req, res) => {
     FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? ORDER BY m.id`, req.ws!.id)
   const invites = all("SELECT id, email, role, token, expires_at, created_at FROM invites WHERE workspace_id = ? AND accepted_at IS NULL ORDER BY id DESC", req.ws!.id)
     .map((i) => ({ ...i, link: `${config.appUrl}/invite/${(i as { token: string }).token}` }))
-  res.json({ members, invites, roles: ROLES, permissions: PERMISSIONS, role_permissions: ROLE_PERMISSIONS })
+  const permissions = Object.fromEntries(Object.entries(PERMISSIONS).filter(([k]) => k !== 'billing.manage' || config.clientBilling))
+  res.json({ members, invites, roles: ROLES, permissions, role_permissions: ROLE_PERMISSIONS })
 }))
 
 teamRoutes.post('/team/invites', perm('team.manage'), h((req, res) => {

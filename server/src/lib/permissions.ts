@@ -1,3 +1,5 @@
+import { config } from '../config.ts'
+
 export const ROLES = ['owner', 'admin', 'manager', 'agent', 'viewer'] as const
 export type Role = (typeof ROLES)[number]
 
@@ -21,7 +23,7 @@ export const PERMISSIONS = {
 } as const
 export type Permission = keyof typeof PERMISSIONS
 
-const all = Object.keys(PERMISSIONS) as Permission[]
+const all = (Object.keys(PERMISSIONS) as Permission[]).filter((p) => p !== 'billing.manage' || config.clientBilling)
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   owner: all,
   admin: all.filter((p) => p !== 'billing.manage'),

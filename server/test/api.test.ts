@@ -228,3 +228,15 @@ test('CORS: website origin may call the API directly, other origins may not', as
   const get = await fetch(`${BASE}/api/public/plans`, { headers: { Origin: 'https://evil.example' } })
   assert.equal(get.headers.get('access-control-allow-origin'), null)
 })
+
+test('billing is managed by MECGURA: clients cannot see plans or billing', async () => {
+  const me = await call('GET', '/api/auth/me', undefined, owner)
+  const ws = me.body.workspaces.find((w: Json) => w.id === owner.ws)
+  assert.equal(ws.role, 'owner')
+  assert.ok(!ws.permissions.includes('billing.manage'))
+  assert.equal((await call('GET', '/api/billing', undefined, owner)).status, 403)
+  const team = await call('GET', '/api/team', undefined, owner)
+  assert.equal(team.body.permissions['billing.manage'], undefined)
+  const admin = await call('POST', '/api/auth/login', { email: 'admin@test.local', password: 'adminpass123' })
+  assert.equal((await call('GET', '/api/admin/plans', undefined, { token: admin.body.token })).status, 200, 'admin still manages plans')
+})

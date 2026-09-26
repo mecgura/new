@@ -8,6 +8,9 @@ import { notify } from './messaging.ts'
 // Paid plans keep working for a few days after the period ends so a late renewal does not cut customers off.
 export const GRACE_DAYS = 3
 
+const billingLink = () => (config.clientBilling ? '/app/billing' : '')
+const renewHint = (text: string) => (config.clientBilling ? text : `${text} Contact MECGURA at ${config.brand.phone} to renew.`)
+
 type Sub = { subscription_status: string; current_period_end: string | null; trial_ends_at: string | null; status: string }
 
 export function subscriptionState(workspaceId: number) {
@@ -15,7 +18,7 @@ export function subscriptionState(workspaceId: number) {
   if (!w) return { canSend: false, reason: 'Workspace not found' }
   if (w.status === 'suspended') return { canSend: false, reason: `This workspace is suspended. Contact MECGURA at ${config.brand.email}.` }
   if (['expired', 'cancelled'].includes(w.subscription_status)) {
-    return { canSend: false, reason: `Your ${w.subscription_status === 'expired' ? 'free trial or plan has expired' : 'plan was cancelled'}. Renew in Plan & Billing or contact ${config.brand.phone}.` }
+    return { canSend: false, reason: `Your ${w.subscription_status === 'expired' ? 'free trial or plan has expired' : 'plan was cancelled'}. ${config.clientBilling ? 'Renew in Plan & Billing or contact' : 'Contact MECGURA at'} ${config.brand.phone} to renew.` }
   }
   return { canSend: true, reason: '' }
 }
@@ -36,15 +39,15 @@ export function enforceSubscriptions() {
 
   for (const w of expiredTrials) {
     run("UPDATE workspaces SET subscription_status = 'expired' WHERE id = ?", w.id)
-    notify(w.id, { title: 'Your free trial has ended', body: 'Choose a plan to keep sending WhatsApp messages.', link: '/app/billing', type: 'billing' })
+    notify(w.id, { title: 'Your free trial has ended', body: renewHint('Choose a plan to keep sending WhatsApp messages.'), link: billingLink(), type: 'billing' })
   }
   for (const w of pastDue) {
     run("UPDATE workspaces SET subscription_status = 'past_due' WHERE id = ?", w.id)
-    notify(w.id, { title: 'Payment due', body: `Your plan period has ended. Renew within ${GRACE_DAYS} days to avoid interruption.`, link: '/app/billing', type: 'billing' })
+    notify(w.id, { title: 'Payment due', body: `Your plan period has ended. Renew within ${GRACE_DAYS} days to avoid interruption.`, link: billingLink(), type: 'billing' })
   }
   for (const w of expiredPaid) {
     run("UPDATE workspaces SET subscription_status = 'expired' WHERE id = ?", w.id)
-    notify(w.id, { title: 'Plan expired', body: 'Outgoing messages are paused until you renew.', link: '/app/billing', type: 'billing' })
+    notify(w.id, { title: 'Plan expired', body: renewHint('Outgoing messages are paused until you renew.'), link: billingLink(), type: 'billing' })
   }
 
   // One reminder 3 days before a trial or period ends.
@@ -53,7 +56,7 @@ export function enforceSubscriptions() {
     FROM workspaces WHERE subscription_status IN ('trialing','active') AND COALESCE(CASE WHEN subscription_status = 'trialing' THEN trial_ends_at END, current_period_end) BETWEEN ? AND ?`, t, soon)
   for (const w of ending) {
     if (get("SELECT id FROM notifications WHERE workspace_id = ? AND type = 'billing_reminder' AND created_at > ?", w.id, new Date(Date.now() - 4 * 86400000).toISOString())) continue
-    notify(w.id, { title: 'Your plan ends in 3 days', body: `Renew before ${new Date(w.end).toLocaleDateString('en-IN')} to avoid interruption.`, link: '/app/billing', type: 'billing_reminder' })
+    notify(w.id, { title: 'Your plan ends in 3 days', body: `Renew before ${new Date(w.end).toLocaleDateString('en-IN')} to avoid interruption.`, link: billingLink(), type: 'billing_reminder' })
   }
 }
 

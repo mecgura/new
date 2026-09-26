@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Sparkles, BookOpen, ShieldAlert, Wand2 } from 'lucide-react'
 import { patch, post } from '../../lib/api'
 import { useApi } from '../../lib/hooks'
+import { useSession } from '../../lib/session'
+import { BRAND } from '../../lib/brand'
 import { Button, Card, Field, Input, Loading, PageHeader, Select, Textarea, Toggle, TagInput, useToast, cx } from '../../components/ui'
 
 type Ai = { enabled?: boolean; mode?: 'off' | 'suggest' | 'auto'; persona?: string; knowledge?: string; handoff_keywords?: string[]; language?: string; max_replies_per_chat?: number }
@@ -15,6 +17,7 @@ export default function AIAssistant() {
 
 function AIForm({ data }: { data: WsData }) {
   const t = useToast()
+  const { can } = useSession()
   const [ai, setAi] = useState<Ai>(data.settings.ai ?? {})
   const [busy, setBusy] = useState(false)
   const [brief, setBrief] = useState(''); const [out, setOut] = useState(''); const [wBusy, setWBusy] = useState(false)
@@ -24,7 +27,7 @@ function AIForm({ data }: { data: WsData }) {
     <>
       <PageHeader title="AI assistant" subtitle="Answers customer questions 24/7 using your business knowledge — and hands over to your team when it is unsure."
         actions={<Button loading={busy} disabled={locked} onClick={async () => { setBusy(true); try { await patch('workspace', { settings: { ai } }); t.ok('AI settings saved') } catch (e) { t.err(e) } finally { setBusy(false) } }}>Save</Button>} />
-      {locked && <div className="mb-5 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">AI assistant is available on Growth and higher plans. <a href="/app/billing" className="underline">Upgrade</a></div>}
+      {locked && <div className="mb-5 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">AI assistant is available on Growth and higher plans. {can('billing.manage') ? <a href="/app/billing" className="underline">Upgrade</a> : <a href={BRAND.whatsappHref} target="_blank" rel="noreferrer" className="underline">Contact MECGURA to upgrade ({BRAND.phone})</a>}</div>}
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-5">
           <Card title="Mode" action={<Toggle checked={!!ai.enabled} onChange={(v) => setAi({ ...ai, enabled: v })} label={ai.enabled ? 'On' : 'Off'} />}>

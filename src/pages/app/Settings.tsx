@@ -124,7 +124,7 @@ function Workspaces() {
     <Card title="Your workspaces">
       <p className="mb-4 text-sm text-muted">Each workspace has its own WhatsApp numbers, team, contacts and plan — ideal for multiple brands or agency clients.</p>
       <div className="divide-y divide-line rounded-xl border border-line">
-        {workspaces.map((w) => <div key={w.id} className="flex items-center justify-between px-4 py-3"><div><div className="text-white">{w.name}</div><div className="text-xs capitalize text-muted">{w.role} · {w.plan}</div></div><Button size="sm" variant="subtle" onClick={() => switchWorkspace(w.id)}>Open</Button></div>)}
+        {workspaces.map((w) => <div key={w.id} className="flex items-center justify-between px-4 py-3"><div><div className="text-white">{w.name}</div><div className="text-xs capitalize text-muted">{w.role}{w.permissions.includes('billing.manage') ? ` · ${w.plan}` : ''}</div></div><Button size="sm" variant="subtle" onClick={() => switchWorkspace(w.id)}>Open</Button></div>)}
       </div>
       <form className="mt-4 flex gap-2" onSubmit={async (e) => { e.preventDefault(); try { const r = await post<Parameters<typeof setSession>[0] & { id: number }>('/api/auth/workspaces', { name }); setSession(r); switchWorkspace(r.id) } catch (er) { t.err(er) } }}>
         <Input placeholder="New workspace name" value={name} onChange={(e) => setName(e.target.value)} /><Button disabled={name.length < 2}>Create</Button>

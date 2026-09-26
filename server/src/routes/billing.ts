@@ -10,7 +10,7 @@ import { createOrder, verifyPaymentSignature } from '../services/razorpay.ts'
 export const billingRoutes = Router()
 const B = perm('billing.manage')
 
-billingRoutes.get('/billing', h((req, res) => {
+billingRoutes.get('/billing', B, h((req, res) => {
   const ws = get('SELECT subscription_status, trial_ends_at, current_period_end, status FROM workspaces WHERE id = ?', req.ws!.id)
   res.json({ ...ws, ...usageSummary(req.ws!.id), plans: listPlans(true), invoices: all('SELECT i.*, p.name AS plan_name FROM invoices i LEFT JOIN plans p ON p.id = i.plan_id WHERE i.workspace_id = ? ORDER BY i.id DESC', req.ws!.id),
     online_payments: !!(config.razorpay.keyId && config.razorpay.keySecret), razorpay_key_id: config.razorpay.keyId || null })

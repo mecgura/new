@@ -82,7 +82,7 @@ function WorkspaceMenu() {
     <div className="relative">
       <button onClick={() => setOpen(!open)} className="flex items-center gap-2 rounded-xl py-1 pl-1 pr-2 hover:bg-white/5">
         <Avatar name={user?.name} className="size-8 text-[11px]" />
-        <span className="hidden text-left sm:block"><span className="block max-w-40 truncate text-sm font-medium text-white">{ws?.name}</span><span className="block text-[11px] capitalize text-muted">{ws?.role} · {ws?.plan}</span></span>
+        <span className="hidden text-left sm:block"><span className="block max-w-40 truncate text-sm font-medium text-white">{ws?.name}</span><span className="block text-[11px] capitalize text-muted">{ws?.role}{ws?.permissions.includes('billing.manage') ? ` · ${ws.plan}` : ''}</span></span>
         <ChevronDown className="size-4 text-muted" />
       </button>
       {open && <>
@@ -123,7 +123,8 @@ function PlanBanner() {
   return (
     <div className={cx('flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-2 text-center text-sm', tone === 'red' ? 'bg-red-500/15 text-red-100' : 'bg-amber-400/15 text-amber-100')}>
       <span>{text}</span>
-      {can('billing.manage') ? <Link to="/app/billing" className="font-semibold underline">Choose a plan</Link> : <span className="opacity-80">Ask your workspace owner to renew.</span>}
+      {can('billing.manage') ? <Link to="/app/billing" className="font-semibold underline">Choose a plan</Link>
+        : <a href={BRAND.whatsappHref} target="_blank" rel="noreferrer" className="font-semibold underline">Contact MECGURA to renew ({BRAND.phone})</a>}
     </div>
   )
 }
