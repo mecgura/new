@@ -6,6 +6,7 @@ import { date } from '../../lib/format'
 import { Badge, Button, Card, Empty, Field, Input, Loading, Modal, PageHeader, Select, Textarea, useToast, statusTone, Confirm } from '../../components/ui'
 import { TemplatePreview, type TplComponent } from '../../components/WhatsAppPreview'
 import type { Template } from '../../lib/types'
+import MediaUpload, { type Uploaded } from '../../components/MediaUpload'
 
 type Btn = { type: 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER'; text: string; url?: string; phone_number?: string }
 
@@ -13,21 +14,22 @@ function Builder({ open, onClose, onSaved }: { open: boolean; onClose: () => voi
   const t = useToast()
   const [f, setF] = useState({ name: '', language: 'en', category: 'MARKETING', headerType: 'NONE', headerText: '', body: '', footer: '', examples: [] as string[], headerExample: '' })
   const [buttons, setButtons] = useState<Btn[]>([])
+  const [sample, setSample] = useState<Uploaded | null>(null)
   const [busy, setBusy] = useState(false)
   const [ai, setAi] = useState('')
   const [aiBusy, setAiBusy] = useState(false)
   const vars = [...new Set(f.body.match(/\{\{\d+\}\}/g) ?? [])]
   const components: TplComponent[] & Record<string, unknown>[] = []
   if (f.headerType === 'TEXT' && f.headerText) components.push({ type: 'HEADER', format: 'TEXT', text: f.headerText })
-  else if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(f.headerType)) components.push({ type: 'HEADER', format: f.headerType, ...(f.headerExample ? { example: { header_handle: [f.headerExample] } } : {}) } as TplComponent)
+  else if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(f.headerType)) components.push({ type: 'HEADER', format: f.headerType } as TplComponent)
   components.push({ type: 'BODY', text: f.body, ...(vars.length ? { example: { body_text: [vars.map((_, i) => f.examples[i] || `sample${i + 1}`)] } } : {}) } as TplComponent)
   if (f.footer) components.push({ type: 'FOOTER', text: f.footer })
   if (buttons.length) components.push({ type: 'BUTTONS', buttons: buttons.map((b) => b.type === 'URL' ? { ...b, ...(b.url?.includes('{{1}}') ? { example: [b.url.replace('{{1}}', 'demo')] } : {}) } : b) } as TplComponent)
 
   return (
-    <Modal open={open} onClose={onClose} title="Create message template" wide="xl" footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button loading={busy} disabled={!f.name || !f.body} onClick={async () => {
+    <Modal open={open} onClose={onClose} title="Create message template" wide="xl" footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button loading={busy} disabled={!f.name || !f.body || (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(f.headerType) && !sample)} onClick={async () => {
       setBusy(true)
-      try { await post('templates', { name: f.name, language: f.language, category: f.category, components }); t.ok('Template submitted to Meta for approval'); onSaved(); onClose() } catch (e) { t.err(e) } finally { setBusy(false) }
+      try { await post('templates', { name: f.name, language: f.language, category: f.category, components, header_media_url: sample?.url }); t.ok('Template submitted to Meta for approval'); onSaved(); onClose() } catch (e) { t.err(e) } finally { setBusy(false) }
     }}>Submit for approval</Button></>}>
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-4">
@@ -39,7 +41,8 @@ function Builder({ open, onClose, onSaved }: { open: boolean; onClose: () => voi
           <div className="grid gap-4 sm:grid-cols-[160px_1fr]">
             <Field label="Header"><Select value={f.headerType} onChange={(e) => setF({ ...f, headerType: e.target.value })}><option value="NONE">None</option><option value="TEXT">Text</option><option value="IMAGE">Image</option><option value="VIDEO">Video</option><option value="DOCUMENT">Document</option></Select></Field>
             {f.headerType === 'TEXT' && <Field label="Header text"><Input maxLength={60} value={f.headerText} onChange={(e) => setF({ ...f, headerText: e.target.value })} /></Field>}
-            {['IMAGE', 'VIDEO', 'DOCUMENT'].includes(f.headerType) && <Field label="Sample media handle (optional)" hint="Media is attached per campaign"><Input value={f.headerExample} onChange={(e) => setF({ ...f, headerExample: e.target.value })} /></Field>}
+            {['IMAGE', 'VIDEO', 'DOCUMENT'].includes(f.headerType) && <Field label={`Sample ${f.headerType.toLowerCase()} for Meta review`} hint="You can use a different file each time you send the template">
+              <MediaUpload kind={f.headerType as 'IMAGE'} value={sample} onChange={setSample} label={`Upload ${f.headerType === 'DOCUMENT' ? 'PDF' : f.headerType === 'VIDEO' ? 'MP4 video' : 'JPG / PNG'}`} /></Field>}
           </div>
           <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
             <div className="flex gap-2"><Input value={ai} onChange={(e) => setAi(e.target.value)} placeholder="✨ Describe the message, e.g. Diwali 20% off on salon services, book via WhatsApp" />
@@ -65,7 +68,7 @@ function Builder({ open, onClose, onSaved }: { open: boolean; onClose: () => voi
             ))}</div>
           </div>
         </div>
-        <div><TemplatePreview components={components} vars={f.examples} /><p className="mt-3 text-xs text-muted">Meta usually reviews templates within minutes to 24 hours. Avoid misleading claims and all-caps text to improve approval chances.</p></div>
+        <div><TemplatePreview components={components} vars={f.examples} headerUrl={sample?.url} /><p className="mt-3 text-xs text-muted">Meta usually reviews templates within minutes to 24 hours. Avoid misleading claims and all-caps text to improve approval chances.</p></div>
       </div>
     </Modal>
   )

@@ -5,6 +5,22 @@ import { h, parse, bad, id, notFound } from '../lib/http.ts'
 import { perm } from '../lib/auth.ts'
 import { getNumber } from '../services/messaging.ts'
 import * as wa from '../services/whatsapp.ts'
+import fs from 'node:fs'
+import path from 'node:path'
+import { config } from '../config.ts'
+
+const MIME: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.mp4': 'video/mp4', '.3gp': 'video/3gpp', '.pdf': 'application/pdf' }
+
+/** Reads a file previously uploaded through /api/uploads, from its public URL. */
+function localUpload(url: string) {
+  const name = url.split('/uploads/')[1]
+  if (!name || !/^[a-f0-9]{24}\.[a-z0-9]{1,6}$/.test(name)) throw bad('Upload the header media file again')
+  const file = path.join(config.dataDir, 'uploads', name)
+  if (!fs.existsSync(file)) throw bad('Header media file not found — upload it again')
+  const mime = MIME[path.extname(name)]
+  if (!mime) throw bad('Header media must be JPG, PNG, MP4 or PDF')
+  return { buffer: fs.readFileSync(file), mime }
+}
 
 export const templateRoutes = Router()
 
@@ -24,11 +40,24 @@ templateRoutes.post('/templates', perm('templates.manage'), h(async (req, res) =
   const b = parse(z.object({
     name: z.string().trim().toLowerCase().regex(/^[a-z0-9_]{1,512}$/, 'Name may only contain lowercase letters, numbers and underscores'),
     language: z.string().min(2).max(10), category: z.enum(['MARKETING', 'UTILITY', 'AUTHENTICATION']), components: z.array(component).min(1), number_id: z.number().optional(),
+    header_media_url: z.string().url().optional(),
   }), req.body)
   const body = b.components.find((c) => c.type === 'BODY')
   if (!body?.text) throw bad('Template body text is required')
   if (get('SELECT id FROM templates WHERE workspace_id = ? AND name = ? AND language = ?', req.ws!.id, b.name, b.language)) throw bad('A template with this name and language already exists')
   const num = getNumber(req.ws!.id, b.number_id)
+  const header = b.components.find((c) => c.type === 'HEADER')
+  if (header && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(header.format ?? '')) {
+    if (b.header_media_url) {
+      const { buffer, mime } = localUpload(b.header_media_url)
+      if (header.format === 'IMAGE' && !mime.startsWith('image/')) throw bad('Header is IMAGE — upload a JPG or PNG')
+      if (header.format === 'VIDEO' && !mime.startsWith('video/')) throw bad('Header is VIDEO — upload an MP4')
+      if (header.format === 'DOCUMENT' && mime !== 'application/pdf') throw bad('Header is DOCUMENT — upload a PDF')
+      try { header.example = { header_handle: [await wa.uploadTemplateSample(num, buffer, mime)] } } catch (e) { throw bad(`Media upload to Meta failed: ${(e as Error).message}`) }
+    } else if (!(header.example as { header_handle?: unknown[] } | undefined)?.header_handle?.length) {
+      throw bad(`Upload a sample ${header.format!.toLowerCase()} for the header — Meta needs it to review the template`)
+    }
+  }
   let result: { id: string; status: string }
   try { result = await wa.createTemplate(num, { name: b.name, language: b.language, category: b.category, components: b.components }) }
   catch (e) { throw bad(`Meta rejected the template: ${(e as Error).message}`) }

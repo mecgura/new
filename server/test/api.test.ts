@@ -20,9 +20,9 @@ const rzpMock = http.createServer((req, res) => {
   let body = ''
   req.on('data', (c) => { body += c })
   req.on('end', () => {
-    rzpCalls.push({ path: req.url, body: body ? JSON.parse(body) : null })
+    rzpCalls.push({ path: req.url, body: (() => { try { return body ? JSON.parse(body) : null } catch { return { raw: body.length } } })() })
     res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify({ id: `plink_${rzpCalls.length}`, short_url: `https://rzp.io/i/test${rzpCalls.length}`, status: 'created' }))
+    res.end(JSON.stringify({ id: `plink_${rzpCalls.length}`, short_url: `https://rzp.io/i/test${rzpCalls.length}`, status: 'created', h: `handle_${rzpCalls.length}` }))
   })
 })
 
@@ -53,7 +53,7 @@ before(async () => {
   const rzpBase = `http://127.0.0.1:${(rzpMock.address() as { port: number }).port}`
   server = spawn(process.execPath, ['--import', 'tsx', 'server/src/index.ts'], {
     env: { ...process.env, PORT: String(PORT), DATA_DIR: dataDir, ADMIN_EMAIL: 'admin@test.local', ADMIN_PASSWORD: 'adminpass123',
-      APP_URL: BASE, META_APP_SECRET: META_SECRET, WORKER_INTERVAL_MS: '250', NODE_ENV: 'test', ANTHROPIC_API_KEY: '', RAZORPAY_KEY_ID: 'rzp_test_key', RAZORPAY_KEY_SECRET: 'rzp_test_secret', RAZORPAY_WEBHOOK_SECRET: RZP_WEBHOOK_SECRET, RAZORPAY_API_BASE: rzpBase, SMTP_HOST: 'json', SMTP_FROM: 'MECGURA <hello@mecgura.com>' },
+      APP_URL: BASE, META_APP_SECRET: META_SECRET, WORKER_INTERVAL_MS: '250', NODE_ENV: 'test', ANTHROPIC_API_KEY: '', RAZORPAY_KEY_ID: 'rzp_test_key', RAZORPAY_KEY_SECRET: 'rzp_test_secret', RAZORPAY_WEBHOOK_SECRET: RZP_WEBHOOK_SECRET, RAZORPAY_API_BASE: rzpBase, SMTP_HOST: 'json', SMTP_FROM: 'MECGURA <hello@mecgura.com>', WA_GRAPH_BASE: rzpBase, META_APP_ID: 'test-app' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   server.stderr?.on('data', (d) => { const s = String(d); if (!s.includes('ExperimentalWarning') && !s.includes('--trace-warnings')) process.stderr.write(s) })
@@ -316,4 +316,25 @@ test('email: forgot password, admin welcome + bill emails, workspace bulk email 
   assert.equal(done.failed, 0)
   const wlog = (await call('GET', '/api/email/log', undefined, O)).body
   assert.ok(wlog.some((e: Json) => e.kind === 'campaign' && e.subject === 'Hi Asha, 20% off'))
+})
+
+test('templates: image header sample is uploaded to Meta and attached as header_handle', async () => {
+  const su = await call('POST', '/api/auth/signup', { name: 'Media Owner', email: 'media@test.local', password: 'password123', company: 'Media Shop' })
+  const M = { token: su.body.token, ws: su.body.workspaces[0].id }
+  const n = await call('POST', '/api/numbers', { label: 'Main', phone_number_id: '1112223334', waba_id: '5556667778', access_token: 'EAAG' + 'x'.repeat(40) }, M)
+  assert.equal(n.status, 200, JSON.stringify(n.body))
+  const fd = new FormData()
+  fd.append('file', new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64')], { type: 'image/png' }), 'banner.png')
+  const up = await fetch(`${BASE}/api/uploads`, { method: 'POST', headers: { Authorization: `Bearer ${M.token}`, 'X-Workspace-Id': String(M.ws) }, body: fd }).then((r) => r.json())
+  assert.match(up.url, /\/uploads\/[a-f0-9]{24}\.png$/)
+  const comps = [{ type: 'HEADER', format: 'IMAGE' }, { type: 'BODY', text: 'New collection is here!' }]
+  const missing = await call('POST', '/api/templates', { name: 'new_arrivals', language: 'en', category: 'MARKETING', components: comps }, M)
+  assert.equal(missing.status, 400)
+  const before = rzpCalls.length
+  const tpl = await call('POST', '/api/templates', { name: 'new_arrivals', language: 'en', category: 'MARKETING', components: comps, header_media_url: up.url }, M)
+  assert.equal(tpl.status, 200, JSON.stringify(tpl.body))
+  const uploadCall = rzpCalls.slice(before).find((c) => String(c.path).includes('/test-app/uploads?file_length='))
+  assert.ok(uploadCall, 'resumable upload session opened on the Meta app')
+  const header = tpl.body.components.find((c: Json) => c.type === 'HEADER')
+  assert.match(header.example.header_handle[0], /^handle_/)
 })

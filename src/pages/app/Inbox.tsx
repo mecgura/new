@@ -11,6 +11,7 @@ import { ago, time, phone, dateTime, inr, titleCase } from '../../lib/format'
 import { Avatar, Badge, Button, Input, Select, Textarea, Modal, Field, useToast, cx, statusTone, Spinner, Empty, TagInput } from '../../components/ui'
 import { TemplatePreview } from '../../components/WhatsAppPreview'
 import type { Conversation, Message, Template, Contact, Member, WaNumber } from '../../lib/types'
+import MediaUpload from '../../components/MediaUpload'
 
 type ConvDetail = Conversation & { contact: Contact; notes: { id: number; body: string; user_name: string; created_at: string }[]; orders: { id: number; total: number; status: string; payment_status: string; created_at: string }[]; display_phone: string | null }
 
@@ -75,11 +76,12 @@ function TemplateModal({ open, onClose, onSend, title = 'Send template' }: { ope
             <Field label="Template"><Select value={tid ?? ''} onChange={(e) => { setTid(Number(e.target.value)); setVars([]) }}>
               <option value="">Select an approved template…</option>{templates?.map((x) => <option key={x.id} value={x.id}>{x.name} ({x.language}) · {x.category.toLowerCase()}</option>)}
             </Select></Field>
-            {header && header.format && header.format !== 'TEXT' && <Field label={`Header ${header.format.toLowerCase()} URL`}><Input value={media} onChange={(e) => setMedia(e.target.value)} placeholder="https://…" /></Field>}
+            {header && header.format && header.format !== 'TEXT' && <Field label={`Header ${header.format.toLowerCase()}`}>
+              <MediaUpload kind={header.format as 'IMAGE'} value={media ? { url: media, name: media.split('/').pop() ?? 'file', mime: header.format === 'IMAGE' ? 'image/jpeg' : 'application/octet-stream', size: 0 } : null} onChange={(u) => setMedia(u?.url ?? '')} /></Field>}
             {[...Array(count)].map((_, i) => <Field key={i} label={`Variable {{${i + 1}}}`} hint={i === 0 ? 'Use {{name}} or {{first_name}} to personalise' : undefined}>
               <Input value={vars[i] ?? ''} onChange={(e) => { const v = [...vars]; v[i] = e.target.value; setVars(v) }} /></Field>)}
           </div>
-          {t && <TemplatePreview components={t.components} vars={vars} />}
+          {t && <TemplatePreview components={t.components} vars={vars} headerUrl={media || undefined} />}
         </div>
       )}
     </Modal>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Megaphone, Users, Tag, KanbanSquare, ListChecks, CalendarClock, Send, Save } from 'lucide-react'
+import { Plus, Megaphone, Users, Tag, KanbanSquare, ListChecks, CalendarClock, Send, Save, FileSpreadsheet } from 'lucide-react'
+import MediaUpload from '../../components/MediaUpload'
 import { post } from '../../lib/api'
 import { useApi } from '../../lib/hooks'
 import { num, pct, dateTime, titleCase } from '../../lib/format'
@@ -14,7 +15,7 @@ function NewCampaign({ open, onClose, preset }: { open: boolean; onClose: () => 
   const { data: templates } = useApi<Template[]>(open ? 'templates?status=APPROVED' : null)
   const { data: numbers } = useApi<WaNumber[]>(open ? 'numbers' : null)
   const { data: tags } = useApi<{ tag: string; c: number }[]>(open ? 'contacts/tags' : null)
-  const [f, setF] = useState({ name: '', template_id: 0, number_id: 0, vars: [] as string[], header_media: '', buttonVal: '', aud: (preset?.length ? 'contacts' : 'tags') as 'all' | 'tags' | 'stage' | 'contacts', tags: [] as string[], match: 'any', stage: 'new', when: 'now' as 'now' | 'schedule' | 'draft', at: '' })
+  const [f, setF] = useState({ name: '', template_id: 0, number_id: 0, vars: [] as string[], header_media: '', buttonVal: '', aud: (preset?.length ? 'contacts' : 'tags') as 'all' | 'tags' | 'stage' | 'contacts' | 'upload', tags: [] as string[], match: 'any', stage: 'new', when: 'now' as 'now' | 'schedule' | 'draft', at: '' })
   const [count, setCount] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const tpl = templates?.find((x) => x.id === f.template_id)
@@ -22,14 +23,16 @@ function NewCampaign({ open, onClose, preset }: { open: boolean; onClose: () => 
   const varCount = new Set(body.match(/\{\{\d+\}\}/g) ?? []).size
   const header = tpl?.components.find((c) => c.type === 'HEADER')
   const urlBtnIdx = tpl?.components.find((c) => c.type === 'BUTTONS')?.buttons?.findIndex((b) => b.type === 'URL' && b.url?.includes('{{1}}')) ?? -1
-  const audience = { type: f.aud, tags: f.tags, match: f.match, stage: f.stage, contact_ids: preset }
+  const [list, setList] = useState<{ tag: string; created: number; updated: number; invalid: number; file: string } | null>(null)
+  const [listBusy, setListBusy] = useState(false)
+  const audience = f.aud === 'upload' ? { type: 'tags', tags: list ? [list.tag] : ['__none__'], match: 'any' } : { type: f.aud, tags: f.tags, match: f.match, stage: f.stage, contact_ids: preset }
 
   useEffect(() => {
     if (!open) return
     const h = setTimeout(() => post<{ count: number }>('campaigns/audience-preview', audience).then((r) => setCount(r.count)).catch(() => setCount(null)), 250)
     return () => clearTimeout(h)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, f.aud, f.tags.join(), f.match, f.stage])
+  }, [open, f.aud, f.tags.join(), f.match, f.stage, list?.tag])
 
   const submit = async () => {
     setBusy(true)
@@ -44,7 +47,7 @@ function NewCampaign({ open, onClose, preset }: { open: boolean; onClose: () => 
     } catch (e) { t.err(e) } finally { setBusy(false) }
   }
 
-  const audOpts: [string, string, typeof Users][] = [['all', 'All contacts', Users], ['tags', 'By tags', Tag], ['stage', 'By lead stage', KanbanSquare], ...(preset?.length ? [['contacts', `Selected (${preset.length})`, ListChecks] as [string, string, typeof Users]] : [])]
+  const audOpts: [string, string, typeof Users][] = [['all', 'All contacts', Users], ['tags', 'By tags', Tag], ['stage', 'By lead stage', KanbanSquare], ['upload', 'Upload list (CSV)', FileSpreadsheet], ...(preset?.length ? [['contacts', `Selected (${preset.length})`, ListChecks] as [string, string, typeof Users]] : [])]
   return (
     <Modal open={open} onClose={onClose} title="New broadcast campaign" wide="xl" footer={<>
       <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -64,7 +67,10 @@ function NewCampaign({ open, onClose, preset }: { open: boolean; onClose: () => 
               <div className="rounded-xl border border-line bg-panel p-4">
                 <div className="mb-3 text-xs font-medium text-soft">Personalisation — use {'{{name}}'}, {'{{first_name}}'} or any contact field like {'{{city}}'}</div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {header?.format && header.format !== 'TEXT' && <Field label={`Header ${header.format.toLowerCase()} URL`} className="sm:col-span-2"><Input value={f.header_media} onChange={(e) => setF({ ...f, header_media: e.target.value })} placeholder="https://…" /></Field>}
+                  {header?.format && header.format !== 'TEXT' && <Field label={`Header ${header.format.toLowerCase()}`} className="sm:col-span-2" hint="Upload a file or paste a public link">
+                    <div className="flex flex-wrap items-center gap-2"><MediaUpload kind={header.format as 'IMAGE'} value={f.header_media ? { url: f.header_media, name: f.header_media.split('/').pop() ?? 'file', mime: header.format === 'IMAGE' ? 'image/jpeg' : 'application/octet-stream', size: 0 } : null}
+                      onChange={(u) => setF({ ...f, header_media: u?.url ?? '' })} label="Upload" />
+                      {!f.header_media && <Input className="flex-1" value={f.header_media} onChange={(e) => setF({ ...f, header_media: e.target.value })} placeholder="or paste https://…" />}</div></Field>}
                   {[...Array(varCount)].map((_, i) => <Field key={i} label={`{{${i + 1}}}`}><Input value={f.vars[i] ?? ''} placeholder={i === 0 ? '{{first_name}}' : ''} onChange={(e) => { const v = [...f.vars]; v[i] = e.target.value; setF({ ...f, vars: v }) }} /></Field>)}
                   {urlBtnIdx >= 0 && <Field label="Button URL suffix"><Input value={f.buttonVal} onChange={(e) => setF({ ...f, buttonVal: e.target.value })} /></Field>}
                 </div>
@@ -79,6 +85,18 @@ function NewCampaign({ open, onClose, preset }: { open: boolean; onClose: () => 
                   </button>
                 ))}
               </div>
+              {f.aud === 'upload' && <div className="mt-3 rounded-xl border border-line bg-panel p-3 text-sm">
+                <p className="mb-2 text-xs text-muted">CSV with a <b className="text-soft">phone</b> column (optional: name, email, any custom field like city). Contacts are saved to your CRM with a list tag, then this campaign targets that list.</p>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-line-strong px-3 py-2 text-soft hover:border-brand/50"><FileSpreadsheet className="size-4 text-brand" />{listBusy ? 'Importing…' : list ? 'Replace file' : 'Choose CSV file'}
+                  <input type="file" accept=".csv,text/csv" hidden onChange={async (e) => {
+                    const file = e.target.files?.[0]; e.target.value = ''
+                    if (!file) return
+                    const tag = `list-${file.name.replace(/\.csv$/i, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24)}-${new Date().toISOString().slice(5, 10)}`
+                    setListBusy(true)
+                    try { const r = await post<{ created: number; updated: number; invalid: number }>('contacts/import', { csv: await file.text(), tags: [tag] }); setList({ ...r, tag, file: file.name }) } catch (er) { t.err(er) } finally { setListBusy(false) }
+                  }} /></label>
+                {list && <p className="mt-2 text-xs text-soft">✅ {list.file}: {list.created} new, {list.updated} existing{list.invalid ? `, ${list.invalid} invalid skipped` : ''} · saved with tag <b className="text-brand-2">{list.tag}</b></p>}
+              </div>}
               {f.aud === 'tags' && <div className="mt-3 flex gap-2"><div className="flex-1"><TagInput value={f.tags} onChange={(v) => setF({ ...f, tags: v })} suggestions={tags?.map((x) => x.tag)} placeholder="Type tags…" /></div>
                 <Select className="w-36" value={f.match} onChange={(e) => setF({ ...f, match: e.target.value })}><option value="any">Any tag</option><option value="all">All tags</option></Select></div>}
               {f.aud === 'stage' && <Select className="mt-3" value={f.stage} onChange={(e) => setF({ ...f, stage: e.target.value })}>{['new', 'contacted', 'qualified', 'proposal', 'won', 'lost'].map((s) => <option key={s} value={s}>{titleCase(s)}</option>)}</Select>}
@@ -92,7 +110,7 @@ function NewCampaign({ open, onClose, preset }: { open: boolean; onClose: () => 
               </div>
             </div>
           </div>
-          <div>{tpl ? <TemplatePreview components={tpl.components} vars={f.vars.map((v) => v.replace('{{first_name}}', 'Aman').replace('{{name}}', 'Aman Sharma'))} /> : <div className="wa-bg grid h-64 place-items-center rounded-xl text-sm text-muted">Template preview</div>}
+          <div>{tpl ? <TemplatePreview headerUrl={f.header_media || undefined} components={tpl.components} vars={f.vars.map((v) => v.replace('{{first_name}}', 'Aman').replace('{{name}}', 'Aman Sharma'))} /> : <div className="wa-bg grid h-64 place-items-center rounded-xl text-sm text-muted">Template preview</div>}
             <p className="mt-3 text-xs text-muted">Meta charges per delivered marketing message. Sending to people who did not opt in can lower your number’s quality rating.</p></div>
         </div>
       )}

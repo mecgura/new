@@ -23,7 +23,8 @@ export class WhatsAppError extends Error {
   constructor(message: string, code?: number) { super(message); this.code = code }
 }
 
-const graph = (path: string) => `https://graph.facebook.com/${config.meta.graphVersion}/${path.replace(/^\//, '')}`
+// WA_GRAPH_BASE lets tests point the client at a local mock of the Graph API.
+const graph = (path: string) => `${process.env.WA_GRAPH_BASE || 'https://graph.facebook.com'}/${config.meta.graphVersion}/${path.replace(/^\//, '')}`
 
 async function call<T = Record<string, unknown>>(token: string, path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(graph(path), {
@@ -149,4 +150,16 @@ export async function updateBusinessProfile(num: WaNumber, data: Record<string, 
   await call(decrypt(num.access_token), `${num.phone_number_id}/whatsapp_business_profile`, {
     method: 'POST', body: JSON.stringify({ messaging_product: 'whatsapp', ...data }),
   })
+}
+
+/** Meta Resumable Upload: returns a file handle used as the sample media for IMAGE/VIDEO/DOCUMENT template headers. */
+export async function uploadTemplateSample(num: WaNumber, file: Buffer, mime: string): Promise<string> {
+  if (num.is_demo) return `demo_handle_${Date.now()}`
+  if (!config.meta.appId) throw new WhatsAppError('Set META_APP_ID on the server to upload template media')
+  const token = decrypt(num.access_token)
+  const session = await call<{ id: string }>(token, `${config.meta.appId}/uploads?file_length=${file.length}&file_type=${encodeURIComponent(mime)}`, { method: 'POST' })
+  const res = await fetch(graph(session.id), { method: 'POST', headers: { Authorization: `OAuth ${token}`, file_offset: '0' }, body: new Uint8Array(file) })
+  const json = (await res.json().catch(() => ({}))) as { h?: string; error?: { message?: string } }
+  if (!res.ok || !json.h) throw new WhatsAppError(json.error?.message || 'Meta did not accept the media file')
+  return json.h
 }
