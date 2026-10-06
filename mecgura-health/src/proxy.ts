@@ -3,7 +3,7 @@ import { getToken } from "next-auth/jwt";
 import { buildCsp } from "@/lib/security/csp";
 
 // Paths reachable without a session.
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/invite"];
 
 /**
  * Runs before every page request (API routes and static assets are excluded in `config`).

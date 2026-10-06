@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
+import { Alert } from "@/components/ui";
 import { Logo } from "@/components/brand/logo";
 import { getContext } from "@/lib/auth/context";
 import { safeRedirectPath } from "@/lib/auth/redirect";
@@ -9,8 +10,8 @@ import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = { title: "Sign in" };
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string }> }) {
-  const [{ callbackUrl }, ctx, tenant] = await Promise.all([searchParams, getContext(), resolvePublicTenant()]);
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string; reason?: string }> }) {
+  const [{ callbackUrl, reason }, ctx, tenant] = await Promise.all([searchParams, getContext(), resolvePublicTenant()]);
   const dest = safeRedirectPath(callbackUrl);
   if (ctx) redirect(dest);
 
@@ -35,6 +36,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <Logo name={tenant?.name ?? "MECGURA"} sub={tenant ? null : "HEALTH"} logoUrl={tenant?.logoUrl} className="mb-8 lg:hidden" />
           <h1 className="type-page-title">Welcome back</h1>
           <p className="type-secondary mb-6 mt-1">Sign in to your account</p>
+          {reason === "tenant_unavailable" && <Alert tone="warning" className="mb-4" title="Clinic workspace unavailable">This clinic&apos;s workspace is currently suspended or inactive. Contact your MECGURA administrator.</Alert>}
+          {reason === "user_unavailable" && <Alert tone="warning" className="mb-4" title="Account unavailable">Your account is not active. Contact your clinic admin.</Alert>}
           <LoginForm callbackUrl={dest} />
           {tenant?.isDemo && <p className="type-caption mt-6 rounded-lg bg-warning-soft px-3 py-2 !text-warning">Demo workspace — sample data only.</p>}
         </div>

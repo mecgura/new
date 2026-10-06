@@ -20,30 +20,49 @@ datasource db {
 
 /// A clinic / doctor practice. Root of all tenant data.
 model Tenant {
-  id            String    @id @default(cuid())
-  name          String
-  slug          String    @unique
-  /// Custom domain, e.g. "drsharma.com" (lowercase, no scheme)
-  customDomain  String?   @unique
+  id                     String    @id @default(cuid())
+  name                   String
+  legalName              String?
+  slug                   String    @unique
+  /// INDIVIDUAL_DOCTOR | SINGLE_SPECIALIST | MULTI_DOCTOR | SPECIALIST_CLINIC | DIAGNOSTIC | OTHER
+  clinicType             String    @default("MULTI_DOCTOR")
+  /// Custom domain, e.g. "drsharma.com" (lowercase, no scheme). Only RESOLVES once verified.
+  customDomain           String?   @unique
+  /// Set manually by a Super Admin after DNS/SSL are confirmed. Null = not verified, not resolved.
+  customDomainVerifiedAt DateTime?
   /// Subdomain label under TENANT_ROOT_DOMAIN
-  subdomain     String?   @unique
-  contactEmail  String?
-  contactPhone  String?
-  address       String?
-  /// ACTIVE | SUSPENDED | ARCHIVED
-  status        String    @default("ACTIVE")
+  subdomain              String?   @unique
+  contactEmail           String?
+  contactPhone           String?
+  alternatePhone         String?
+  address                String?
+  city                   String?
+  state                  String?
+  country                String    @default("India")
+  pincode                String?
+  timezone               String    @default("Asia/Kolkata")
+  /// Public website switch (the website itself is Phase 2)
+  websiteEnabled         Boolean   @default(false)
+  /// ACTIVE | TRIAL | SUSPENDED | INACTIVE
+  status                 String    @default("TRIAL")
   /// true => seeded demo workspace; never holds real patient data
-  isDemo        Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
+  isDemo                 Boolean   @default(false)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  deletedAt              DateTime?
 
-  branding      TenantBranding?
-  subscription  Subscription?
-  users         User[]
-  auditLogs     AuditLog[]
+  branding         TenantBranding?
+  subscription     Subscription?
+  users            User[]
+  auditLogs        AuditLog[]
+  assets           TenantAsset[]
+  invitations      Invitation[]
+  doctorProfiles   DoctorProfile[]
+  staffProfiles    StaffProfile[]
+  permissionGrants UserPermissionGrant[]
 
   @@index([status])
+  @@index([clinicType])
 }
 
 /// White-label theme for one tenant (1:1). Null colour => product default.
@@ -53,9 +72,9 @@ model TenantBranding {
   tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   logoUrl        String?
   faviconUrl     String?
-  primaryColor   String?  // #RRGGBB
-  secondaryColor String?  // #RRGGBB
-  accentColor    String?  // #RRGGBB
+  primaryColor   String? // #RRGGBB
+  secondaryColor String? // #RRGGBB
+  accentColor    String? // #RRGGBB
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -134,9 +153,11 @@ model User {
   role             Role      @relation(fields: [roleId], references: [id])
   email            String    @unique
   name             String
-  phone            String?
-  passwordHash     String
-  /// ACTIVE | INVITED | DISABLED
+  phone            String?   @unique
+  avatarUrl        String?
+  /// Null until an invited user sets their password
+  passwordHash     String?
+  /// ACTIVE | INVITED | SUSPENDED | DISABLED
   status           String    @default("ACTIVE")
   lastLoginAt      DateTime?
   failedLoginCount Int       @default(0)
@@ -146,8 +167,13 @@ model User {
   deletedAt        DateTime?
 
   auditLogs        AuditLog[]
+  doctorProfile    DoctorProfile?
+  staffProfile     StaffProfile?
+  invitations      Invitation[]
+  permissionGrants UserPermissionGrant[]
 
   @@index([tenantId, status])
+  @@index([tenantId, roleId])
   @@index([roleId])
 }
 
@@ -173,4 +199,91 @@ model AuditLog {
   @@index([tenantId, action, createdAt])
   @@index([actorId, createdAt])
   @@index([entityType, entityId])
+}
+
+/// Doctor profile (1:1 with a DOCTOR user). Services, availability, public page etc. come later.
+model DoctorProfile {
+  id                 String   @id @default(cuid())
+  tenantId           String
+  tenant             Tenant   @relation(fields: [tenantId], references: [id])
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  qualification      String?
+  specialization     String?
+  registrationNumber String?
+  experienceYears    Int?
+  /// MALE | FEMALE | OTHER | UNDISCLOSED
+  gender             String?
+  bio                String?
+  /// Whole rupees; fee rules/billing are a later phase
+  consultationFee    Int?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+/// Staff profile (1:1 with any non-doctor staff user).
+model StaffProfile {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeRef String?
+  designation String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+/// Extra permission granted to ONE user on top of the role defaults (only grantable permissions).
+model UserPermissionGrant {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, permission])
+  @@index([tenantId])
+}
+
+/// Invitation to set a password. Only the SHA-256 of the token is stored.
+model Invitation {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId, userId])
+}
+
+/// Uploaded image bytes (logo, favicon, avatars). Phase 1 stores them in the database — validated
+/// by magic bytes and size — until object storage is configured. LOGO/FAVICON are public.
+model TenantAsset {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// LOGO | FAVICON | AVATAR
+  kind      String
+  /// userId for AVATAR, empty string otherwise
+  ownerId   String   @default("")
+  mimeType  String
+  size      Int
+  data      Bytes
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, kind, ownerId])
 }

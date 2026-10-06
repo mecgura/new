@@ -20,14 +20,14 @@ export default async function SettingsPage() {
   return (
     <div className="grid gap-section lg:grid-cols-2">
       <Card>
-        <CardHeader title="Your profile" description="Editing profiles and password change arrive in a later phase." />
+        <CardHeader title="Your profile" description="Password change and profile self-service arrive in a later phase." />
         <CardBody>
           <div className="mb-2 flex items-center gap-3"><Avatar name={ctx.user.name} size="lg" /><div><p className="type-card-title">{ctx.user.name}</p><Badge tone="primary">{ROLE_LABELS[ctx.user.role]}</Badge></div></div>
           <dl className="divide-y divide-line"><Row label="Email" value={ctx.user.email} /></dl>
         </CardBody>
       </Card>
       <Card>
-        <CardHeader title="Clinic workspace" description="Read-only. Workspace management is part of a later phase." />
+        <CardHeader title="Clinic workspace" description="Read-only summary. Edit it under the Clinic profile tab." />
         <CardBody>
           {t ? (
             <dl className="divide-y divide-line">

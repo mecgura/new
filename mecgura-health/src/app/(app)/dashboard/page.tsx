@@ -1,47 +1,76 @@
 import type { Metadata } from "next";
-import { Building2, Layers, ShieldCheck, UserRound } from "lucide-react";
-import { Card, CardBody, CardHeader, EmptyState } from "@/components/ui";
-import { MODULE_STATUS } from "@/config/modules";
-import { requirePagePermission } from "@/lib/auth/context";
+import Link from "next/link";
+import { Building2, Layers, MailPlus, ShieldCheck, Stethoscope, UserRound, UsersRound } from "lucide-react";
+import { SetupChecklist } from "@/components/clinic/setup-checklist";
+import { TenantStatusBadge, clinicTypeLabel } from "@/components/domain/badges";
+import { Alert, ButtonLink, Card, CardBody, CardHeader } from "@/components/ui";
+import { requirePagePermission, type TenantRequestContext } from "@/lib/auth/context";
 import { ROLE_LABELS } from "@/lib/permissions";
+import { clinicOverview } from "@/lib/services/overview";
+import { platformStats } from "@/lib/services/clinics";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
+function Stat({ icon: Icon, label, value }: { icon: typeof UserRound; label: string; value: React.ReactNode }) {
+  return (
+    <Card className="flex items-center gap-3 p-card">
+      <span aria-hidden className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><Icon className="size-5" /></span>
+      <div className="min-w-0"><p className="type-caption">{label}</p><p className="type-card-title truncate">{value}</p></div>
+    </Card>
+  );
+}
+
 export default async function DashboardPage() {
   const ctx = await requirePagePermission("dashboard.view");
-  const builtModules = ctx.enabledModules.filter((m) => MODULE_STATUS[m] === "available").length;
   const firstName = ctx.user.name.split(" ")[0];
 
-  // Only REAL facts about this account/workspace — clinic metrics arrive with their modules.
-  const facts = [
-    { icon: UserRound, label: "Signed in as", value: ROLE_LABELS[ctx.user.role] },
-    { icon: Building2, label: "Workspace", value: ctx.tenant?.name ?? "Platform (no clinic)" },
-    { icon: Layers, label: "Plan", value: ctx.tenant?.planName ?? "—" },
-    { icon: ShieldCheck, label: "Modules live", value: String(builtModules) },
-  ];
+  // Super Admin outside any clinic: platform overview.
+  if (!ctx.tenant) {
+    const s = await platformStats(ctx);
+    return (
+      <div className="space-y-section">
+        <div><h1 className="type-page-title">Welcome, {firstName}</h1><p className="type-secondary mt-1">MECGURA HEALTH platform overview.</p></div>
+        <section aria-label="Platform summary" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 md:gap-4">
+          <Stat icon={Building2} label="Clinics" value={s.totalClinics} />
+          <Stat icon={ShieldCheck} label="Active" value={s.counts.ACTIVE ?? 0} />
+          <Stat icon={Layers} label="Trial" value={s.counts.TRIAL ?? 0} />
+          <Stat icon={UsersRound} label="Clinic users" value={s.users} />
+        </section>
+        {(s.counts.SUSPENDED ?? 0) + (s.counts.INACTIVE ?? 0) > 0 && <Alert tone="warning" title="Clinics with restricted access">{s.counts.SUSPENDED ?? 0} suspended, {s.counts.INACTIVE ?? 0} inactive.</Alert>}
+        <Card><CardHeader title="Clinics" description="Create and manage clinics." action={<ButtonLink href="/platform/clinics">Open clinics</ButtonLink>} /></Card>
+      </div>
+    );
+  }
 
+  const tctx = { ...ctx, tenant: ctx.tenant, tenantId: ctx.tenant.id } as TenantRequestContext;
+  const o = await clinicOverview(tctx);
+  const t = ctx.tenant;
   return (
     <div className="space-y-section">
       <div>
         <h1 className="type-page-title">Welcome, {firstName}</h1>
-        <p className="type-secondary mt-1">Foundation release — your workspace is set up and secured. Clinic modules arrive in the next phases.</p>
+        <p className="type-secondary mt-1">{t.name} · {clinicTypeLabel(t.clinicType)}</p>
       </div>
 
-      <section aria-label="Workspace summary" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 md:gap-4">
-        {facts.map(({ icon: Icon, label, value }) => (
-          <Card key={label} className="flex items-center gap-3 p-card">
-            <span aria-hidden className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><Icon className="size-5" /></span>
-            <div className="min-w-0"><p className="type-caption">{label}</p><p className="type-card-title truncate">{value}</p></div>
-          </Card>
-        ))}
+      <section aria-label="Clinic overview" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 md:gap-4">
+        <Stat icon={Stethoscope} label="Doctors" value={o.doctors} />
+        <Stat icon={UsersRound} label="Staff" value={o.staff} />
+        <Stat icon={MailPlus} label="Pending invitations" value={o.invited} />
+        <Stat icon={UserRound} label="You" value={ROLE_LABELS[ctx.user.role]} />
       </section>
 
-      <Card>
-        <CardHeader title="Clinic activity" description="Live OPD, appointments and patient activity will appear here." />
-        <CardBody>
-          <EmptyState title="No clinic activity yet" description="These modules aren't part of the foundation release. Nothing is shown here rather than placeholder numbers." />
-        </CardBody>
-      </Card>
+      <div className="grid gap-section lg:grid-cols-3">
+        <div className="lg:col-span-2"><SetupChecklist items={o.checklist} later={o.later} /></div>
+        <Card>
+          <CardHeader title="Plan & status" />
+          <CardBody className="space-y-3">
+            <div className="flex items-center justify-between gap-2"><span className="type-secondary">Clinic status</span><TenantStatusBadge status={t.status} /></div>
+            <div className="flex items-center justify-between gap-2"><span className="type-secondary">Plan</span><span className="type-label">{t.planName ?? "—"}</span></div>
+            <p className="type-caption">Subscription, billing and trial limits arrive in a later phase.</p>
+            {ctx.permissions.has("users.view") && <Link href="/team" className="type-label">Manage team →</Link>}
+          </CardBody>
+        </Card>
+      </div>
     </div>
   );
 }

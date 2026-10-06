@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, CalendarCheck, ClipboardList, FileText, Globe, HeartPulse, LayoutDashboard, MessageSquare, Pill, Receipt, Repeat, Settings, Stethoscope, TestTube2, Users, type LucideIcon } from "lucide-react";
+import { Building, UsersRound, BarChart3, Boxes, CalendarCheck, ClipboardList, FileText, Globe, HeartPulse, LayoutDashboard, MessageSquare, Pill, Receipt, Repeat, Settings, Stethoscope, TestTube2, Users, type LucideIcon } from "lucide-react";
 import type { NavIcon } from "@/config/navigation";
 
 export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
@@ -18,4 +18,6 @@ export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   analytics: BarChart3,
   website: Globe,
   settings: Settings,
+  clinics: Building,
+  team: UsersRound,
 };

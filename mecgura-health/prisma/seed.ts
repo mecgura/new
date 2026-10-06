@@ -36,38 +36,55 @@ async function main() {
     await db.rolePermission.createMany({ data: ROLE_PERMISSIONS[key].map((p) => ({ roleId: role.id, permissionId: perms.get(p)! })) });
   }
 
+  // Remove permissions that left the catalogue (renamed in Phase 1)
+  await db.permission.deleteMany({ where: { key: { notIn: Object.keys(PERMISSIONS) } } });
+
   // Plans
   const demoPlan = await db.plan.upsert({ where: { key: "demo-all-modules" }, update: { modules: JSON.stringify(MODULE_KEYS) }, create: { key: "demo-all-modules", name: "Demo (all modules)", modules: JSON.stringify(MODULE_KEYS) } });
-  await db.plan.upsert({ where: { key: "foundation" }, update: {}, create: { key: "foundation", name: "Foundation", modules: JSON.stringify(["dashboard", "settings"]) } });
-
-  // DEMO tenant
-  const tenant = await db.tenant.upsert({
-    where: { slug: "demo-clinic" },
-    update: {},
-    create: { name: "Demo Clinic", slug: "demo-clinic", subdomain: "demo", isDemo: true, contactEmail: "contact@demo.mecgura.test", contactPhone: null, address: null },
-  });
-  await db.tenantBranding.upsert({ where: { tenantId: tenant.id }, update: {}, create: { tenantId: tenant.id } });
-  await db.subscription.upsert({ where: { tenantId: tenant.id }, update: { planId: demoPlan.id }, create: { tenantId: tenant.id, planId: demoPlan.id, status: "TRIAL" } });
+  await db.plan.upsert({ where: { key: "foundation" }, update: {}, create: { key: "foundation", name: "Foundation", modules: JSON.stringify(["dashboard", "settings", "team"]) } });
 
   const generated = !process.env.SEED_DEMO_PASSWORD;
   const password = process.env.SEED_DEMO_PASSWORD || `Demo-${randomBytes(6).toString("hex")}1`;
   const passwordHash = await bcrypt.hash(password, 12);
-  const users = [
-    { email: "admin@demo.mecgura.test", name: "Demo Clinic Admin", role: "CLINIC_ADMIN", tenantId: tenant.id },
-    { email: "doctor@demo.mecgura.test", name: "Demo Doctor", role: "DOCTOR", tenantId: tenant.id },
-    { email: "reception@demo.mecgura.test", name: "Demo Receptionist", role: "RECEPTIONIST", tenantId: tenant.id },
-    { email: "platform@demo.mecgura.test", name: "Demo Platform Admin", role: "SUPER_ADMIN", tenantId: null },
+  const all: { email: string; role: string; clinic: string }[] = [];
+
+  // Two independent DEMO clinics (so cross-tenant isolation can be tried by hand)
+  const clinics = [
+    { slug: "demo-clinic", name: "Demo Clinic", sub: "demo", mail: "demo", primary: undefined as string | undefined, secondary: undefined as string | undefined, accent: undefined as string | undefined },
+    { slug: "demo-clinic-b", name: "Demo Clinic B", sub: "demo-b", mail: "demob", primary: "#5b21b6", secondary: "#1d4ed8", accent: "#0f766e" },
   ];
-  for (const u of users) {
-    await db.user.upsert({
-      where: { email: u.email },
-      update: { passwordHash, status: "ACTIVE", failedLoginCount: 0, lockedUntil: null, deletedAt: null },
-      create: { email: u.email, name: u.name, passwordHash, tenantId: u.tenantId, roleId: roleIds.get(u.role)! },
+  for (const c of clinics) {
+    const tenant = await db.tenant.upsert({
+      where: { slug: c.slug }, update: {},
+      create: { name: c.name, slug: c.slug, subdomain: c.sub, isDemo: true, status: "ACTIVE", clinicType: "MULTI_DOCTOR", contactEmail: `contact@${c.mail}.mecgura.test` },
     });
+    await db.tenantBranding.upsert({ where: { tenantId: tenant.id }, update: {}, create: { tenantId: tenant.id, primaryColor: c.primary, secondaryColor: c.secondary, accentColor: c.accent } });
+    await db.subscription.upsert({ where: { tenantId: tenant.id }, update: { planId: demoPlan.id }, create: { tenantId: tenant.id, planId: demoPlan.id, status: "ACTIVE" } });
+    const users = [
+      { email: `admin@${c.mail}.mecgura.test`, name: `${c.name} Admin`, role: "CLINIC_ADMIN" },
+      { email: `doctor@${c.mail}.mecgura.test`, name: `${c.name} Doctor`, role: "DOCTOR" },
+      { email: `reception@${c.mail}.mecgura.test`, name: `${c.name} Receptionist`, role: "RECEPTIONIST" },
+    ];
+    for (const u of users) {
+      const user = await db.user.upsert({
+        where: { email: u.email },
+        update: { passwordHash, status: "ACTIVE", failedLoginCount: 0, lockedUntil: null, deletedAt: null },
+        create: { email: u.email, name: u.name, passwordHash, tenantId: tenant.id, roleId: roleIds.get(u.role)! },
+      });
+      if (u.role === "DOCTOR") await db.doctorProfile.upsert({ where: { userId: user.id }, update: {}, create: { tenantId: tenant.id, userId: user.id, specialization: "General practice (demo)" } });
+      else await db.staffProfile.upsert({ where: { userId: user.id }, update: {}, create: { tenantId: tenant.id, userId: user.id } });
+      all.push({ email: u.email, role: u.role, clinic: c.name });
+    }
   }
+  await db.user.upsert({
+    where: { email: "platform@demo.mecgura.test" },
+    update: { passwordHash, status: "ACTIVE", failedLoginCount: 0, lockedUntil: null, deletedAt: null },
+    create: { email: "platform@demo.mecgura.test", name: "Demo Platform Admin", passwordHash, tenantId: null, roleId: roleIds.get("SUPER_ADMIN")! },
+  });
+  all.push({ email: "platform@demo.mecgura.test", role: "SUPER_ADMIN", clinic: "(platform)" });
 
   console.log("Seeded DEMO data. Demo users (all share one password):");
-  users.forEach((u) => console.log(`  ${u.email}  [${u.role}]`));
+  all.forEach((u) => console.log(`  ${u.email}  [${u.role}] ${u.clinic}`));
   if (generated) console.log(`Generated demo password (shown once): ${password}`);
 }
 

@@ -8,7 +8,7 @@ export async function apiFetch<T>(input: string, init?: RequestInit): Promise<Ap
   try {
     const res = await fetch(input, {
       ...init,
-      headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+      headers: { ...(init?.body instanceof FormData ? {} : { "content-type": "application/json" }), ...(init?.headers ?? {}) },
     });
     const body = (await res.json().catch(() => null)) as ApiResult<T> | null;
     if (body && typeof body === "object" && "ok" in body) return body;

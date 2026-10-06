@@ -1,6 +1,6 @@
 "use client";
 import { useActionState } from "react";
-import { Alert, Button, EmailInput, Field, PasswordInput } from "@/components/ui";
+import { Alert, Button, Field, PasswordInput, TextInput } from "@/components/ui";
 import { loginAction, type LoginState } from "@/app/actions/auth";
 
 export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
@@ -9,8 +9,8 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
     <form action={action} className="flex flex-col gap-form" noValidate>
       <input type="hidden" name="callbackUrl" value={callbackUrl} />
       {state && !state.fieldErrors && <Alert tone="danger">{state.message}</Alert>}
-      <Field label="Email" required error={state?.fieldErrors?.email}>
-        <EmailInput name="email" />
+      <Field label="Email or phone" required error={state?.fieldErrors?.identifier}>
+        <TextInput name="identifier" autoComplete="username" autoCapitalize="none" spellCheck={false} />
       </Field>
       <Field label="Password" required error={state?.fieldErrors?.password}>
         <PasswordInput name="password" autoComplete="current-password" />

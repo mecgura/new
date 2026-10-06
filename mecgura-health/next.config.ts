@@ -17,6 +17,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  // Dev only: lets the e2e suite open clinic subdomains such as demo-b.mecgura.test against `next dev`.
+  allowedDevOrigins: ["*.mecgura.test"],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { email, isoDate, numeric, password, phone } from "./fields";
-import { loginSchema } from "./schemas";
+import { loginSchema, normalizeIdentifier } from "./schemas";
+import { brandingSchema, clinicCreateSchema, domainSchema, userCreateSchema } from "./clinic";
 import { parseOrThrow } from "./index";
 import { AppError } from "@/lib/errors";
 
@@ -30,14 +31,43 @@ describe("validation", () => {
   });
   it("parseOrThrow raises a VALIDATION_ERROR with per-field messages", () => {
     try {
-      parseOrThrow(loginSchema, { email: "bad", password: "" });
+      parseOrThrow(loginSchema, { identifier: "bad", password: "" });
       expect.unreachable();
     } catch (e) {
       expect(e).toBeInstanceOf(AppError);
       const err = e as AppError;
       expect(err.code).toBe("VALIDATION_ERROR");
-      expect(err.fieldErrors?.email).toBe("Enter a valid email address.");
+      expect(err.fieldErrors?.identifier).toBe("Enter a valid email address or 10-digit mobile number.");
       expect(err.fieldErrors?.password).toBe("Password is required.");
     }
+  });
+  it("login identifier accepts email or phone", () => {
+    expect(normalizeIdentifier(" Doc@Clinic.com ")).toEqual({ kind: "email", value: "doc@clinic.com" });
+    expect(normalizeIdentifier("98765 43210")).toEqual({ kind: "phone", value: "+919876543210" });
+    expect(normalizeIdentifier("12345")).toBeNull();
+  });
+  it("branding rejects colours that are unreadable with white text", () => {
+    const r = brandingSchema.safeParse({ primaryColor: "#ffff00", secondaryColor: "#0e7c86", accentColor: "#12a06a" });
+    expect(r.success).toBe(false);
+    expect(brandingSchema.safeParse({ primaryColor: "#14529e", secondaryColor: "#0e7c86", accentColor: "#12a06a" }).success).toBe(true);
+    expect(brandingSchema.safeParse({ primaryColor: "red", secondaryColor: "#0e7c86", accentColor: "#12a06a" }).success).toBe(false);
+  });
+  it("domain validation blocks schemes, paths and reserved labels", () => {
+    expect(domainSchema.safeParse({ customDomain: "https://x.com" }).success).toBe(false);
+    expect(domainSchema.safeParse({ customDomain: "drsharma.com" }).success).toBe(true);
+    expect(domainSchema.safeParse({ subdomain: "admin" }).success).toBe(false);
+    expect(domainSchema.safeParse({ subdomain: "dr-sharma" }).success).toBe(true);
+  });
+  it("clinic creation requires admin/doctor role and valid slug", () => {
+    const base = { profile: { name: "A Clinic", clinicType: "MULTI_DOCTOR", timezone: "Asia/Kolkata", country: "India" }, slug: "a-clinic", branding: { primaryColor: "#14529e", secondaryColor: "#0e7c86", accentColor: "#12a06a" }, admin: { name: "Dr A", email: "a@a.test", role: "DOCTOR" } };
+    expect(clinicCreateSchema.safeParse(base).success).toBe(true);
+    expect(clinicCreateSchema.safeParse({ ...base, admin: { ...base.admin, role: "SUPER_ADMIN" } }).success).toBe(false);
+    expect(clinicCreateSchema.safeParse({ ...base, slug: "Bad Slug" }).success).toBe(false);
+  });
+  it("users can't be created as SUPER_ADMIN or PATIENT from a clinic", () => {
+    const u = { name: "N", email: "n@n.test" };
+    expect(userCreateSchema.safeParse({ ...u, role: "NURSE" }).success).toBe(true);
+    expect(userCreateSchema.safeParse({ ...u, role: "SUPER_ADMIN" }).success).toBe(false);
+    expect(userCreateSchema.safeParse({ ...u, role: "PATIENT" }).success).toBe(false);
   });
 });

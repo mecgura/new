@@ -13,7 +13,7 @@ import { UserMenu } from "./user-menu";
 
 export interface ShellProps {
   nav: NavItemView[];
-  user: { name: string; email: string; roleLabel: string };
+  user: { name: string; email: string; roleLabel: string; avatarUrl?: string | null };
   workspace: { name: string; isDemo: boolean; logoUrl: string | null } | null;
   children: React.ReactNode;
 }
@@ -55,7 +55,7 @@ export function AppShell({ nav, user, workspace, children }: ShellProps) {
       {/* Sidebar (md and up) */}
       <aside className={cn("fixed inset-y-0 left-0 z-30 hidden flex-col bg-sidebar transition-[width] duration-200 md:flex", collapsed ? "w-sidebar-collapsed" : "w-sidebar")}>
         <div className={cn("flex h-header shrink-0 items-center border-b border-white/10", collapsed ? "justify-center" : "px-5")}>
-          <Logo inverted iconOnly={collapsed} />
+          <Logo inverted iconOnly={collapsed} name={workspace?.name ?? "MECGURA"} sub={workspace ? "MECGURA HEALTH" : "HEALTH"} logoUrl={workspace?.logoUrl} />
         </div>
         <NavList items={nav} collapsed={collapsed} />
         <div className="border-t border-white/10 p-3">

@@ -20,9 +20,9 @@ type Options = { permission?: Permission; auth?: boolean; tenant?: boolean };
  */
 export function apiRoute<C extends RequestContext | TenantRequestContext | null = RequestContext>(
   options: Options,
-  handler: (args: { req: Request; ctx: C }) => Promise<unknown>,
+  handler: (args: { req: Request; ctx: C; params: Record<string, string> }) => Promise<unknown>,
 ) {
-  return async (req: Request): Promise<Response> => {
+  return async (req: Request, routeCtx?: { params?: Promise<Record<string, string>> }): Promise<Response> => {
     const requestId = randomUUID();
     try {
       if (!SAFE_METHODS.has(req.method) && !isSameOrigin(req) && getEnv().isProd) {
@@ -32,7 +32,7 @@ export function apiRoute<C extends RequestContext | TenantRequestContext | null 
       if (options.auth !== false) {
         ctx = options.tenant ? await requireTenantApiContext(options.permission) : await requireApiContext(options.permission);
       }
-      const data = await handler({ req, ctx: ctx as C });
+      const data = await handler({ req, ctx: ctx as C, params: (await routeCtx?.params) ?? {} });
       const body: ApiResult<unknown> = { ok: true, data };
       return NextResponse.json(body, { headers: { "Cache-Control": "no-store", "X-Request-Id": requestId } });
     } catch (err) {
@@ -44,4 +44,15 @@ export function apiRoute<C extends RequestContext | TenantRequestContext | null 
       });
     }
   };
+}
+
+/** Reads a JSON request body (max 64 KB). Bad/oversized bodies become a VALIDATION_ERROR, not a crash. */
+export async function readJson(req: Request): Promise<unknown> {
+  const text = await req.text();
+  if (text.length > 64 * 1024) throw new AppError("VALIDATION_ERROR", { message: "Request is too large." });
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    throw new AppError("VALIDATION_ERROR", { message: "Request body must be valid JSON." });
+  }
 }

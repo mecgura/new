@@ -8,7 +8,7 @@ import { ERROR_CODES, zodFieldErrors, type ApiFailure } from "@/lib/errors";
 import { rateLimit } from "@/lib/security/rate-limit";
 import { getRequestMeta } from "@/lib/security/request";
 import { formDataToObject } from "@/lib/validation";
-import { loginSchema } from "@/lib/validation/schemas";
+import { loginSchema, normalizeIdentifier } from "@/lib/validation/schemas";
 
 export type LoginState = Pick<ApiFailure["error"], "message" | "fieldErrors"> | null;
 
@@ -21,13 +21,13 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   const { ip } = await getRequestMeta();
   const [byIp, byAcct] = await Promise.all([
     rateLimit(`login:ip:${ip ?? "unknown"}`, { limit: 20, windowMs: 15 * 60_000 }),
-    rateLimit(`login:acct:${parsed.data.email}`, { limit: 8, windowMs: 15 * 60_000 }),
+    rateLimit(`login:acct:${normalizeIdentifier(parsed.data.identifier)!.value}`, { limit: 8, windowMs: 15 * 60_000 }),
   ]);
   if (!byIp.allowed || !byAcct.allowed) return { message: ERROR_CODES.RATE_LIMITED.message };
 
   try {
     await signIn("credentials", {
-      email: parsed.data.email,
+      identifier: parsed.data.identifier,
       password: parsed.data.password,
       redirectTo: safeRedirectPath(raw.callbackUrl),
     });

@@ -21,7 +21,7 @@ const sizes: Record<ButtonSize, string> = {
 
 export function buttonClass(variant: ButtonVariant = "primary", size: ButtonSize = "md", extra?: string) {
   return cn(
-    "type-button inline-flex items-center justify-center gap-2 rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50",
+    "type-button inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50",
     variants[variant],
     sizes[size],
     extra,

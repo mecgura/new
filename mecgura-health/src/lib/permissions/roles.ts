@@ -1,61 +1,62 @@
-import { ALL_PERMISSIONS, type Permission, type RoleKey } from "./constants";
+import { ALL_PERMISSIONS, GRANTABLE_PERMISSIONS, type Permission, type RoleKey } from "./constants";
 
-const view = (...r: string[]) => r.map((x) => `${x}.view`) as Permission[];
+const P = (...p: Permission[]) => p;
 
 const CLINIC_ADMIN: Permission[] = ALL_PERMISSIONS.filter((p) => p !== "platform.manage");
 
 /**
- * Default role -> permission grants. Seeded into the Role/Permission tables; request-time
- * checks use this map (the role key is re-validated from the database on every request).
- * When tenant-defined custom roles arrive, `permissionsForRole` is the single place that
- * switches to database-driven grants.
+ * Default role -> permission grants (least privilege). Seeded into the Role/Permission tables;
+ * request-time checks use this map plus any per-user grants (see `effectivePermissions`).
  */
 export const ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
   SUPER_ADMIN: ALL_PERMISSIONS,
   CLINIC_ADMIN,
-  DOCTOR: [
-    "dashboard.view",
-    ...view("patients", "opd", "appointments", "consultations", "prescription", "tests", "reports", "documents", "followups", "tasks"),
-    "patients.create", "patients.edit", "opd.manage", "appointments.create", "appointments.edit",
-    "consultations.create", "consultations.edit", "prescription.create", "prescription.edit",
-    "tests.order", "reports.review", "followups.manage", "tasks.manage", "settings.view",
-  ],
-  RECEPTIONIST: [
-    "dashboard.view",
-    ...view("patients", "opd", "appointments", "billing", "followups", "communications"),
-    "patients.create", "patients.edit", "opd.manage", "appointments.create", "appointments.edit",
-    "billing.create", "followups.manage", "settings.view",
-  ],
-  COMPOUNDER: [
-    "dashboard.view",
-    ...view("patients", "opd", "prescription", "tasks", "inventory"),
-    "tasks.manage", "settings.view",
-  ],
-  NURSE: [
-    "dashboard.view",
-    ...view("patients", "opd", "consultations", "prescription", "tests", "reports", "tasks"),
-    "tasks.manage", "reports.upload", "settings.view",
-  ],
-  LAB_STAFF: [
-    "dashboard.view",
-    ...view("patients", "tests", "reports", "tasks"),
-    "reports.upload", "tasks.manage", "settings.view",
-  ],
-  ACCOUNTANT: [
-    "dashboard.view",
-    ...view("billing", "analytics", "patients"),
-    "billing.create", "billing.edit", "settings.view",
-  ],
-  STAFF: ["dashboard.view", ...view("patients", "appointments", "tasks"), "settings.view"],
+  DOCTOR: P(
+    "dashboard.view", "clinic.view", "settings.view",
+    "patients.view", "patients.create", "patients.edit", "opd.view", "opd.manage",
+    "appointments.view", "appointments.create", "appointments.edit",
+    "consultation.view", "consultation.create", "consultation.edit",
+    "prescription.view", "prescription.create", "prescription.edit",
+    "tests.view", "tests.order", "reports.view", "reports.review", "documents.view",
+    "followups.view", "followups.manage", "tasks.view", "tasks.manage",
+  ),
+  RECEPTIONIST: P(
+    "dashboard.view", "clinic.view", "settings.view",
+    "patients.view", "patients.create", "patients.edit", "opd.view", "opd.manage",
+    "appointments.view", "appointments.create", "appointments.edit",
+    "billing.view", "billing.create", "followups.view", "followups.manage", "communications.view",
+  ),
+  COMPOUNDER: P(
+    "dashboard.view", "clinic.view", "settings.view",
+    "patients.view", "opd.view", "opd.manage", "prescription.view", "tests.view", "tasks.view", "tasks.manage", "inventory.view",
+  ),
+  NURSE: P(
+    "dashboard.view", "clinic.view", "settings.view",
+    "patients.view", "opd.view", "consultation.view", "prescription.view", "tests.view", "reports.view", "reports.upload", "tasks.view", "tasks.manage",
+  ),
+  LAB_STAFF: P("dashboard.view", "clinic.view", "settings.view", "patients.view", "tests.view", "reports.view", "reports.upload", "tasks.view", "tasks.manage"),
+  ACCOUNTANT: P("dashboard.view", "clinic.view", "settings.view", "billing.view", "billing.create", "billing.edit", "analytics.view"),
+  // STAFF holds only the basics; anything more must be granted explicitly per user.
+  STAFF: P("dashboard.view", "clinic.view", "settings.view"),
   // Patients use the (later) patient portal, never the staff app.
   PATIENT: [],
 };
 
+/** Role defaults ∪ explicit per-user grants (grants outside the grantable set are ignored). */
+export function effectivePermissions(role: RoleKey, grants: readonly string[] = []): ReadonlySet<Permission> {
+  const set = new Set<Permission>(ROLE_PERMISSIONS[role] ?? []);
+  for (const g of grants) if ((GRANTABLE_PERMISSIONS as readonly string[]).includes(g)) set.add(g as Permission);
+  return set;
+}
+
 export function permissionsForRole(role: RoleKey): ReadonlySet<Permission> {
-  return new Set(ROLE_PERMISSIONS[role] ?? []);
+  return effectivePermissions(role);
 }
 
 /** Roles allowed to sign in to the staff application. */
 export const STAFF_APP_ROLES: readonly RoleKey[] = [
   "SUPER_ADMIN", "CLINIC_ADMIN", "DOCTOR", "RECEPTIONIST", "COMPOUNDER", "NURSE", "LAB_STAFF", "ACCOUNTANT", "STAFF",
 ];
+
+/** Roles a tenant (clinic) can create. SUPER_ADMIN and PATIENT are never created from clinic screens. */
+export const TENANT_ASSIGNABLE_ROLES: readonly RoleKey[] = STAFF_APP_ROLES.filter((r) => r !== "SUPER_ADMIN");

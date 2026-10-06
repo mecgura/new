@@ -1,4 +1,4 @@
-# MECGURA HEALTH — Phase 0 foundation
+# MECGURA HEALTH — Phase 0 foundation + Phase 1 (multi-tenant clinics)
 
 White-label doctor & clinic operating system. **Phase 0 only**: design system, app shell, auth, multi-tenant
 and role foundations, security, audit, error handling. No clinic modules (patients, OPD, appointments,
@@ -57,3 +57,39 @@ Checks: `npm run lint && npm run typecheck && npm test && npm run build`.
 - No password reset / user management UI yet (users are created by seed). No tenant admin UI.
 - Roles are system roles driven by `ROLE_PERMISSIONS`; DB tables `Role/Permission` are seeded for future custom roles.
 - Notifications, global search, integrations are labelled placeholders.
+
+
+---
+## Phase 1 — multi-tenant clinics, white-label, team & RBAC
+
+**What exists:** Super Admin clinic management (`/platform/clinics`: list/filter, create wizard, details, edit, status
+changes, domain settings, "enter workspace" with a *Viewing as Super Admin* banner), clinic workspace (dashboard with real
+counts + setup checklist, `/team` user management, `/settings/clinic`, `/settings/branding` with logo/favicon upload,
+live preview and contrast checks), invitations (`/invite/[token]`), login by email **or phone**, per-clinic status
+enforcement (ACTIVE/TRIAL work; SUSPENDED/INACTIVE are blocked on the very next request), doctor/staff profiles,
+per-user extra permissions (never admin/platform powers), audit events for all of the above.
+
+**How isolation works (never trust the client):** the clinic is always derived from the session
+(`getContext()` re-reads user + clinic from the DB each request). There is no `tenantId` in any clinic API.
+Clinic data is read/written only via `tenantDb(ctx)`; foreign ids behave as 404. A Super Admin can act inside a clinic
+only through a signed, user-bound cookie set by `POST /api/platform/workspace` (audited). Tests: `npm test`
+(`tenancy.integration.test.ts`, `isolation.integration.test.ts`) and the live HTTP suite `e2e/phase1-security.mjs`.
+
+**Invitations:** no email provider is wired, so *nothing is emailed*. The admin sees a one-time link (only its SHA-256 is
+stored; 7-day expiry; single use) and must share it themselves.
+
+**Logos/avatars** are validated by magic bytes (PNG/JPG/WebP, no SVG) and stored in the `TenantAsset` table until object
+storage is configured (`/api/assets/:id`; logo/favicon public, avatars same-clinic only).
+
+### Domains (application side only)
+* `<label>.TENANT_ROOT_DOMAIN` → tenant with that `subdomain`. Needs: wildcard DNS (`*.root → host`), wildcard SSL, and the
+  host forwarding the original `Host` header. Locally: set `TENANT_ROOT_DOMAIN=mecgura.test` and map hosts to 127.0.0.1.
+* Custom domain (`drsharma.com`) is stored on the tenant and only resolves **after a Super Admin marks it verified**
+  (they confirm DNS CNAME/A record + SSL certificate outside the app). Production needs: DNS pointing to the host,
+  per-domain SSL (e.g. Vercel/Caddy managed certs), and optionally automated ownership verification (TXT record) — not built.
+* On a clinic's host, only that clinic's users (and Super Admin) can sign in.
+
+### Migrations
+SQLite (dev): `prisma/migrations/`. PostgreSQL: `prisma/migrations-postgres/` (generated with `prisma migrate diff`; **not yet
+executed against a real PostgreSQL server** — run `PRISMA_SCHEMA=prisma/schema.postgres.prisma npx prisma migrate deploy`
+on staging first).

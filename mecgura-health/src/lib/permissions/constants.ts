@@ -33,6 +33,10 @@ export const ROLE_LABELS: Record<RoleKey, string> = {
 export const PERMISSIONS = {
   "dashboard.view": { module: "dashboard", description: "View the dashboard" },
 
+  "clinic.view": { module: "clinic", description: "View clinic profile and branding" },
+  "clinic.edit": { module: "clinic", description: "Edit clinic profile" },
+  "clinic.settings": { module: "clinic", description: "Change clinic branding and settings" },
+
   "patients.view": { module: "patients", description: "View patients" },
   "patients.create": { module: "patients", description: "Register patients" },
   "patients.edit": { module: "patients", description: "Edit patients" },
@@ -44,9 +48,9 @@ export const PERMISSIONS = {
   "appointments.create": { module: "appointments", description: "Book appointments" },
   "appointments.edit": { module: "appointments", description: "Reschedule or cancel appointments" },
 
-  "consultations.view": { module: "consultations", description: "View consultations" },
-  "consultations.create": { module: "consultations", description: "Record consultations" },
-  "consultations.edit": { module: "consultations", description: "Edit consultations" },
+  "consultation.view": { module: "consultations", description: "View consultations" },
+  "consultation.create": { module: "consultations", description: "Record consultations" },
+  "consultation.edit": { module: "consultations", description: "Edit consultations" },
 
   "prescription.view": { module: "prescriptions", description: "View prescriptions" },
   "prescription.create": { module: "prescriptions", description: "Write prescriptions" },
@@ -78,12 +82,15 @@ export const PERMISSIONS = {
   "communications.send": { module: "communications", description: "Send messages" },
 
   "analytics.view": { module: "analytics", description: "View analytics" },
-  "website.manage": { module: "website", description: "Manage the clinic website" },
+  "website.view": { module: "website", description: "View the clinic website settings" },
+  "website.edit": { module: "website", description: "Edit the clinic website" },
 
   "settings.view": { module: "settings", description: "View settings" },
   "settings.edit": { module: "settings", description: "Change settings" },
-  "users.view": { module: "settings", description: "View staff accounts" },
-  "users.manage": { module: "settings", description: "Manage staff accounts" },
+  "users.view": { module: "team", description: "View staff accounts" },
+  "users.create": { module: "team", description: "Add or invite staff accounts" },
+  "users.edit": { module: "team", description: "Edit staff accounts and roles" },
+  "users.disable": { module: "team", description: "Suspend, disable or re-activate staff accounts" },
   "audit.view": { module: "settings", description: "View the audit log" },
 
   "platform.manage": { module: "platform", description: "Manage tenants and plans (platform only)" },
@@ -91,3 +98,12 @@ export const PERMISSIONS = {
 
 export type Permission = keyof typeof PERMISSIONS;
 export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
+
+/**
+ * Permissions that can NEVER be handed to an individual user as an extra grant — they come only from
+ * the role (admin/platform powers). Everything else may be granted to e.g. a STAFF member.
+ */
+export const NON_GRANTABLE_PERMISSIONS: readonly Permission[] = [
+  "platform.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view",
+];
+export const GRANTABLE_PERMISSIONS = ALL_PERMISSIONS.filter((p) => !NON_GRANTABLE_PERMISSIONS.includes(p));

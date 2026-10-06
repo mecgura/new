@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 
 const TABS = [
   { href: "/settings", label: "Profile & workspace" },
+  { href: "/settings/clinic", label: "Clinic profile" },
   { href: "/settings/branding", label: "Theme & branding" },
   { href: "/settings/integrations", label: "Integrations" },
 ];

@@ -39,10 +39,10 @@ export function FileUpload({ label, accept, maxSizeMB = 10, multiple, onFilesCha
 
   return (
     <div className="flex flex-col gap-2">
-      <label htmlFor={id} className={cn("flex min-h-28 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-line-strong bg-surface-muted/50 p-4 text-center hover:border-primary focus-within:border-primary")}>
+      <label htmlFor={id} className={cn("flex min-h-28 min-w-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-line-strong bg-surface-muted/50 p-4 text-center hover:border-primary focus-within:border-primary")}>
         <UploadCloud aria-hidden className="size-6 text-muted" />
         <span className="type-label">{label}</span>
-        <span className="type-caption">{hint ?? `Up to ${maxSizeMB} MB${accept ? ` · ${accept}` : ""}`}</span>
+        <span className="type-caption max-w-full break-words">{hint ?? `Up to ${maxSizeMB} MB`}</span>
         <input ref={inputRef} id={id} type="file" className="sr-only" accept={accept} multiple={multiple} onChange={(e) => add(e.target.files)} aria-describedby={error ? `${id}-e` : undefined} />
       </label>
       {error && <p id={`${id}-e`} role="alert" className="type-caption !text-danger">{error}</p>}

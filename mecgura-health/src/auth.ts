@@ -4,7 +4,10 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
-import { loginSchema } from "@/lib/validation/schemas";
+import { headers } from "next/headers";
+import { TENANT_ACCESS_STATUSES } from "@/lib/domain/constants";
+import { findTenantByHost } from "@/lib/tenant/resolve-core";
+import { loginSchema, normalizeIdentifier } from "@/lib/validation/schemas";
 import { STAFF_APP_ROLES, type RoleKey } from "@/lib/permissions";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 
@@ -25,27 +28,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: { signIn: "/login", error: "/login" },
   providers: [
     Credentials({
-      credentials: { email: {}, password: {} },
+      credentials: { identifier: {}, password: {} },
       async authorize(credentials) {
         const parsed = loginSchema.safeParse(credentials);
         if (!parsed.success) return null;
-        const { email, password } = parsed.data;
+        const id = normalizeIdentifier(parsed.data.identifier)!;
+        const { password } = parsed.data;
 
         const user = await db.user.findFirst({
-          where: { email, deletedAt: null },
+          where: { ...(id.kind === "email" ? { email: id.value } : { phone: id.value }), deletedAt: null },
           include: { role: { select: { key: true } }, tenant: { select: { id: true, status: true, deletedAt: true } } },
         });
 
-        const hash = user?.passwordHash ?? DUMMY_HASH;
-        const passwordOk = await bcrypt.compare(password, hash);
+        const passwordOk = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
         const now = new Date();
         const locked = !!user?.lockedUntil && user.lockedUntil > now;
-        const tenantOk = !user?.tenantId || (user.tenant?.status === "ACTIVE" && !user.tenant.deletedAt);
-        const roleOk = !!user && (STAFF_APP_ROLES as readonly string[]).includes(user.role.key);
-        const allowed = !!user && passwordOk && !locked && tenantOk && roleOk && user.status === "ACTIVE";
+        const roleKey = user?.role.key;
+        const roleOk = !!user && (STAFF_APP_ROLES as readonly string[]).includes(roleKey!);
+        // Tenant users must belong to an ACTIVE/TRIAL clinic; only SUPER_ADMIN may have no clinic.
+        const tenantOk = roleKey === "SUPER_ADMIN" ? !user?.tenantId : !!user?.tenant && !user.tenant.deletedAt && TENANT_ACCESS_STATUSES.includes(user.tenant.status);
+        // On a clinic's own domain/subdomain only that clinic's users (or Super Admin) may sign in. Read from the
+        // request's Host header here — not from client-supplied form fields — so it can't be bypassed.
+        const h = await headers();
+        const hostTenant = await findTenantByHost(h.get("x-forwarded-host") ?? h.get("host"));
+        const hostOk = !hostTenant || roleKey === "SUPER_ADMIN" || user?.tenantId === hostTenant.id;
+        const allowed = !!user && !!user.passwordHash && passwordOk && !locked && tenantOk && roleOk && hostOk && user.status === "ACTIVE";
 
         if (!allowed) {
-          if (user && !passwordOk && !locked) {
+          if (user && user.passwordHash && !passwordOk && !locked) {
             const failures = user.failedLoginCount + 1;
             await db.user.update({
               where: { id: user.id },
@@ -55,8 +65,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               },
             });
           }
-          await recordAudit({ action: AUDIT_ACTIONS.LOGIN_FAILED, tenantId: user?.tenantId ?? null, actorId: user?.id, metadata: { reason: !user ? "unknown_account" : locked ? "locked" : !passwordOk ? "bad_password" : "not_allowed" } });
-          logger.warn("login rejected", { userKnown: !!user });
+          const reason = !user ? "unknown_account" : locked ? "locked" : !passwordOk || !user.passwordHash ? "bad_password" : user.status !== "ACTIVE" ? `status_${user.status.toLowerCase()}` : !tenantOk ? "tenant_unavailable" : !hostOk ? "wrong_clinic_host" : "not_allowed";
+          await recordAudit({ action: AUDIT_ACTIONS.LOGIN_FAILED, tenantId: user?.tenantId ?? null, actorId: user?.id, metadata: { reason } });
+          logger.warn("login rejected", { userKnown: !!user, reason });
           return null;
         }
 
