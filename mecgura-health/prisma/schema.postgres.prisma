@@ -1,0 +1,177 @@
+// GENERATED from prisma/schema.prisma by scripts/sync-pg-schema.mjs — do not edit.
+// MECGURA HEALTH — database schema (Phase 0 foundation).
+//
+// Conventions (every future model MUST follow them):
+//  * String cuid ids; strings instead of Prisma enums so SQLite (dev) and
+//    PostgreSQL (prod) share one schema. Allowed values live in src/lib/*/constants.
+//  * Every business record carries `tenantId` + an index starting with tenantId.
+//    Register the model in src/lib/tenant/scoped-models.ts so server-side
+//    tenant isolation is applied automatically.
+//  * createdAt / updatedAt on everything; `deletedAt` for records that must be
+//    recoverable (soft delete). AuditLog is append-only and never soft-deleted.
+//  * PostgreSQL schema is GENERATED from this file: `npm run db:sync-schema`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// A clinic / doctor practice. Root of all tenant data.
+model Tenant {
+  id            String    @id @default(cuid())
+  name          String
+  slug          String    @unique
+  /// Custom domain, e.g. "drsharma.com" (lowercase, no scheme)
+  customDomain  String?   @unique
+  /// Subdomain label under TENANT_ROOT_DOMAIN
+  subdomain     String?   @unique
+  contactEmail  String?
+  contactPhone  String?
+  address       String?
+  /// ACTIVE | SUSPENDED | ARCHIVED
+  status        String    @default("ACTIVE")
+  /// true => seeded demo workspace; never holds real patient data
+  isDemo        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  branding      TenantBranding?
+  subscription  Subscription?
+  users         User[]
+  auditLogs     AuditLog[]
+
+  @@index([status])
+}
+
+/// White-label theme for one tenant (1:1). Null colour => product default.
+model TenantBranding {
+  id             String   @id @default(cuid())
+  tenantId       String   @unique
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  logoUrl        String?
+  faviconUrl     String?
+  primaryColor   String?  // #RRGGBB
+  secondaryColor String?  // #RRGGBB
+  accentColor    String?  // #RRGGBB
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+/// Commercial plan. `modules` is a JSON array of module keys (src/config/modules.ts).
+model Plan {
+  id            String         @id @default(cuid())
+  key           String         @unique
+  name          String
+  modules       String         @default("[]")
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  subscriptions Subscription[]
+}
+
+/// Which plan a tenant is on. One current subscription per tenant (Phase 0).
+model Subscription {
+  id        String    @id @default(cuid())
+  tenantId  String    @unique
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  planId    String
+  plan      Plan      @relation(fields: [planId], references: [id])
+  /// TRIAL | ACTIVE | PAST_DUE | CANCELLED
+  status    String    @default("TRIAL")
+  startsAt  DateTime  @default(now())
+  endsAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([planId])
+}
+
+/// Role definition. tenantId = null => system role (SUPER_ADMIN, DOCTOR, ...).
+/// Tenant-defined custom roles arrive later; Phase 0 only has system roles.
+model Role {
+  id          String           @id @default(cuid())
+  tenantId    String?
+  key         String
+  name        String
+  isSystem    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       User[]
+  permissions RolePermission[]
+
+  @@unique([tenantId, key])
+  @@index([key])
+}
+
+/// Permission catalogue, e.g. "patients.view". Source of truth: src/lib/permissions.
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  module      String
+  description String?
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+/// Staff/platform account. tenantId = null only for SUPER_ADMIN.
+model User {
+  id               String    @id @default(cuid())
+  tenantId         String?
+  tenant           Tenant?   @relation(fields: [tenantId], references: [id])
+  roleId           String
+  role             Role      @relation(fields: [roleId], references: [id])
+  email            String    @unique
+  name             String
+  phone            String?
+  passwordHash     String
+  /// ACTIVE | INVITED | DISABLED
+  status           String    @default("ACTIVE")
+  lastLoginAt      DateTime?
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  auditLogs        AuditLog[]
+
+  @@index([tenantId, status])
+  @@index([roleId])
+}
+
+/// Append-only audit trail. NEVER store medical content or secrets in `metadata`
+/// — only identifiers and non-sensitive context (see src/lib/audit).
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String?
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id])
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  /// e.g. "patient.viewed" — see AUDIT_ACTIONS
+  action     String
+  entityType String?
+  entityId   String?
+  /// JSON string, redacted + size-capped
+  metadata   String?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, action, createdAt])
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+}
