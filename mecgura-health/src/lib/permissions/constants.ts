@@ -98,7 +98,11 @@ export const PERMISSIONS = {
   "inventory.edit": { module: "inventory", description: "Edit inventory" },
 
   "followups.view": { module: "followups", description: "View follow-ups" },
-  "followups.manage": { module: "followups", description: "Manage follow-ups" },
+  "followups.manage": { module: "followups", description: "Reassign, reschedule, complete and cancel follow-ups" },
+  "followups.create": { module: "followups", description: "Create follow-ups" },
+  "followups.contact": { module: "followups", description: "Log patient contact on follow-ups" },
+  "followups.configure": { module: "followups", description: "Configure follow-up rules and outcomes" },
+  "recalls.manage": { module: "followups", description: "Create and manage patient recalls" },
 
   "communications.view": { module: "communications", description: "View communications" },
   "communications.send": { module: "communications", description: "Send messages" },
@@ -131,6 +135,6 @@ export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
  * the role (admin/platform powers). Everything else may be granted to e.g. a STAFF member.
  */
 export const NON_GRANTABLE_PERMISSIONS: readonly Permission[] = [
-  "platform.manage", "website.publish", "schedule.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view", "patients.archive", "patients.export", "consultation.finalize", "prescription.finalize", "lab.configure",
+  "platform.manage", "website.publish", "schedule.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view", "patients.archive", "patients.export", "consultation.finalize", "prescription.finalize", "lab.configure", "followups.configure",
 ];
 export const GRANTABLE_PERMISSIONS = ALL_PERMISSIONS.filter((p) => !NON_GRANTABLE_PERMISSIONS.includes(p));

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { CheckCircle2, Download } from "lucide-react";
 import { Alert, Button, Card, CardBody, Field, StatusBadge, Textarea, useToast } from "@/components/ui";
 import { apiFetch } from "@/lib/api/client";
+import { NewFollowUpModal } from "@/components/followups/new-followup-modal";
 import { LabPrintButton } from "./lab-print-button";
 import { fmt, REPORT_STATUS_LABEL } from "./lab-ui";
 
@@ -16,6 +17,7 @@ export function ReportActions({ reportId, orderId, version, latestVersion, versi
   const router = useRouter();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [fuOpen, setFuOpen] = useState(false);
   async function send(s: "ACKNOWLEDGED" | "REVIEWED") {
     setBusy(s);
     const r = await apiFetch(`/api/lab/reports/${reportId}/review`, { method: "POST", body: JSON.stringify({ status: s, note: note || undefined }) });
@@ -30,6 +32,7 @@ export function ReportActions({ reportId, orderId, version, latestVersion, versi
         <div className="flex flex-wrap gap-2">
           <LabPrintButton auditUrl={`/api/lab/reports/${reportId}/print`} body={{ version }} />
           <a href={`/api/lab/reports/${reportId}/document?version=${version}`} className="type-button inline-flex min-h-control items-center gap-2 rounded-md border border-line-strong px-4 !text-ink no-underline hover:bg-surface-muted"><Download aria-hidden className="size-4" />Download</a>
+          {canReview && <Button variant="outline" onClick={() => setFuOpen(true)}>Create follow-up</Button>}
           <Link href={`/lab/orders/${orderId}`} className="type-button inline-flex min-h-control items-center rounded-md border border-line-strong px-4 !text-ink no-underline hover:bg-surface-muted">Open order</Link>
         </div>
       </div>
@@ -45,6 +48,7 @@ export function ReportActions({ reportId, orderId, version, latestVersion, versi
           <div className="flex flex-wrap gap-2">{!review && <Button variant="outline" loading={busy === "ACKNOWLEDGED"} onClick={() => send("ACKNOWLEDGED")}>Acknowledge</Button>}<Button loading={busy === "REVIEWED"} onClick={() => send("REVIEWED")}>Mark as reviewed</Button></div>
         </CardBody></Card>
       )}
+      {canReview && <NewFollowUpModal open={fuOpen} onClose={() => setFuOpen(false)} canClinical context={{ labReportId: reportId }} defaultType="REPORT_REVIEW" defaultTitle="Review the lab report" types={["REPORT_REVIEW", "MEDICATION_REVIEW", "INVESTIGATION_PENDING", "OTHER"]} onCreated={() => router.refresh()} />}
     </div>
   );
 }

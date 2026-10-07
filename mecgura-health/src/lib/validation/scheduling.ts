@@ -51,7 +51,7 @@ export const staffAppointmentSchema = z.object({
   doctorUserId: z.string().min(1, "Choose a doctor."), startsAt: instant,
   type: z.enum(APPOINTMENT_TYPES).default("OPD"), source: z.enum(APPOINTMENT_SOURCES).default("RECEPTION"),
   serviceId: text("Service", 40), reason: text("Reason", 300), notes: text("Notes", 500),
-  patient: patientRefSchema.optional(),
+  patient: patientRefSchema.optional(), followUpId: z.string().trim().max(60).optional().or(z.literal("").transform(() => undefined)),
   ...Object.fromEntries(Object.entries(contact).map(([k, v]) => [k, (v as z.ZodType).optional()])) as { contactName: z.ZodOptional<z.ZodString>; contactPhone: z.ZodOptional<z.ZodType<string>> },
 }).superRefine((v, ctx) => { if (!v.patient && !v.contactName) ctx.addIssue({ code: "custom", path: ["patient"], message: "Choose or register the patient." }); });
 export type StaffAppointmentInput = z.infer<typeof staffAppointmentSchema>;

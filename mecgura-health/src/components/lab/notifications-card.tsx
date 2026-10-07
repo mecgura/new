@@ -7,7 +7,8 @@ import { apiFetch } from "@/lib/api/client";
 import type { NotificationView } from "@/lib/services/lab-results";
 import { fmt } from "./lab-ui";
 
-const href = (n: NotificationView) => (n.entityType === "lab_report" ? `/lab/reports/${n.entityId}` : n.entityType === "investigation_order" ? `/lab/orders/${n.entityId}` : null);
+const href = (n: NotificationView) => n.entityType === "lab_report" ? `/lab/reports/${n.entityId}` : n.entityType === "investigation_order" ? `/lab/orders/${n.entityId}`
+  : n.type === "FOLLOW_UP_DUE" ? "/followups?tab=today" : n.type === "FOLLOW_UP_OVERDUE" ? "/followups?tab=overdue" : n.type === "RECALL_DUE" ? "/followups?tab=recalls" : n.type === "REPORT_REVIEW" ? "/lab?tab=reports" : null;
 
 /** In-app notifications only (no SMS, WhatsApp or email). Text never contains result values. */
 export function NotificationsCard() {

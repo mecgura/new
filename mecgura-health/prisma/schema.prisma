@@ -539,6 +539,8 @@ model Patient {
   consents                 PatientConsent[]
   consultations            Consultation[]
   investigationOrders      InvestigationOrder[]
+  followUps                FollowUp[]
+  recalls                  Recall[]
 
   @@unique([tenantId, code])
   @@index([tenantId, phone])
@@ -1406,4 +1408,150 @@ model Notification {
   createdAt  DateTime  @default(now())
 
   @@index([tenantId, userId, readAt, createdAt])
+}
+
+/// Clinic follow-up CRM (Phase 7). A follow-up is an operational task about a patient; it never contains medical decisions.
+model FollowUp {
+  id                   String            @id @default(cuid())
+  tenantId             String
+  /// FU-2026-000001
+  followUpNumber       String
+  patientId            String
+  patient              Patient           @relation(fields: [patientId], references: [id])
+  doctorUserId         String?
+  consultationId       String?
+  prescriptionId       String?
+  investigationOrderId String?
+  labReportId          String?
+  doctorOrderId        String?
+  recallId             String?
+  /// the appointment that was missed/cancelled (source) and the follow-up visit that was booked from this follow-up
+  sourceAppointmentId  String?
+  appointmentId        String?
+  /// CONSULTATION_FOLLOW_UP | REPORT_REVIEW | MEDICATION_REVIEW | PROCEDURE_FOLLOW_UP | MISSED_APPOINTMENT | NO_SHOW | ROUTINE_RECALL | MANUAL_FOLLOW_UP | DOCUMENT_PENDING | INVESTIGATION_PENDING | OTHER
+  type                 String
+  title                String
+  /// operational description, safe for reception
+  description          String?
+  /// clinical note from the doctor; only shown to users with clinical access
+  doctorNotes          String?
+  /// internal staff notes
+  notes                String?
+  /// YYYY-MM-DD in the clinic's time zone
+  dueDate              String
+  preferredDate        String?
+  /// LOW | NORMAL | HIGH | URGENT — always chosen by a person
+  priority             String            @default("NORMAL")
+  /// PENDING | DUE | IN_PROGRESS | CONTACTED | APPOINTMENT_BOOKED | COMPLETED | PATIENT_DECLINED | NO_RESPONSE | RESCHEDULED | CANCELLED | EXPIRED
+  status               String            @default("PENDING")
+  assignedToId         String?
+  assignedById         String?
+  assignedAt           DateTime?
+  /// CONSULTATION | PRESCRIPTION | REPORT | DOCTOR_ORDER | MANUAL | RECALL | NO_SHOW | CANCELLATION
+  source               String            @default("MANUAL")
+  /// prevents the same trigger creating two follow-ups (e.g. "noshow:<appointmentId>")
+  dedupeKey            String?
+  rescheduleCount      Int               @default(0)
+  outcome              String?
+  outcomeNotes         String?
+  completedAt          DateTime?
+  completedById        String?
+  cancelledAt          DateTime?
+  cancelledById        String?
+  cancelReason         String?
+  createdById          String
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  contacts             FollowUpContact[]
+  events               FollowUpEvent[]
+
+  @@unique([tenantId, followUpNumber])
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, status, dueDate])
+  @@index([tenantId, assignedToId, status])
+  @@index([tenantId, doctorUserId, status])
+  @@index([tenantId, patientId])
+  @@index([tenantId, appointmentId])
+}
+
+model FollowUpContact {
+  id             String   @id @default(cuid())
+  tenantId       String
+  followUpId     String
+  followUp       FollowUp @relation(fields: [followUpId], references: [id], onDelete: Cascade)
+  patientId      String
+  contactedById  String
+  /// PHONE | IN_PERSON | WHATSAPP | SMS | EMAIL | OTHER  — always a MANUAL log; nothing is sent by the system
+  method         String
+  /// CONTACTED | NO_RESPONSE | CALL_BACK_REQUESTED | APPOINTMENT_BOOKED | PATIENT_DECLINED | WRONG_NUMBER | MESSAGE_SENT | OTHER (or a clinic-defined outcome)
+  outcome        String
+  notes          String?
+  contactedAt    DateTime @default(now())
+  nextAction     String?
+  nextActionDate String?
+
+  @@index([tenantId, followUpId, contactedAt])
+}
+
+/// Append-only history: created, assigned, started, rescheduled (with from/to), appointment booked, completed, cancelled, ...
+model FollowUpEvent {
+  id         String   @id @default(cuid())
+  tenantId   String
+  followUpId String
+  followUp   FollowUp @relation(fields: [followUpId], references: [id], onDelete: Cascade)
+  patientId  String
+  /// CREATED | EDITED | ASSIGNED | STARTED | CONTACTED | RESCHEDULED | APPOINTMENT_BOOKED | APPOINTMENT_RELEASED | COMPLETED | CANCELLED | REOPENED
+  type       String
+  userId     String?
+  fromValue  String?
+  toValue    String?
+  note       String?
+  at         DateTime @default(now())
+
+  @@index([tenantId, followUpId, at])
+  @@index([tenantId, patientId, at])
+}
+
+/// A planned future reminder (annual check-up, routine review ...). Recurrence is explicit and bounded.
+model Recall {
+  id             String   @id @default(cuid())
+  tenantId       String
+  patientId      String
+  patient        Patient  @relation(fields: [patientId], references: [id])
+  doctorUserId   String?
+  type           String   @default("ROUTINE_RECALL")
+  title          String
+  /// YYYY-MM-DD
+  dueDate        String
+  /// ONE_TIME | MONTHLY | QUARTERLY | HALF_YEARLY | YEARLY | CUSTOM
+  frequency      String   @default("ONE_TIME")
+  customMonths   Int?
+  /// how many times it may repeat in total (1 for one-time)
+  maxOccurrences Int      @default(1)
+  occurrence     Int      @default(1)
+  /// ACTIVE | FOLLOW_UP_CREATED | COMPLETED | CANCELLED
+  status         String   @default("ACTIVE")
+  notes          String?
+  followUpId     String?
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([tenantId, status, dueDate])
+  @@index([tenantId, patientId])
+}
+
+/// Per-clinic follow-up rules. Nothing automatic happens unless it is switched on here (or chosen by the doctor).
+model FollowUpSettings {
+  id                    String   @id @default(cuid())
+  tenantId              String   @unique
+  createOnNoShow        Boolean  @default(true)
+  createOnCancellation  Boolean  @default(false)
+  recallCreatesFollowUp Boolean  @default(false)
+  completeWhenVisitDone Boolean  @default(false)
+  /// clinic-defined extra outcome codes (JSON string arrays)
+  contactOutcomes       String?
+  completionOutcomes    String?
+  updatedById           String?
+  updatedAt             DateTime @updatedAt
 }

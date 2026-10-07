@@ -1,3 +1,4 @@
+import { assertLinkable, linkAppointment, onAppointmentClosed } from "./followups";
 import "server-only";
 import { db } from "@/lib/db";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
@@ -78,6 +79,7 @@ export async function createStaffAppointment(ctx: TenantRequestContext, raw: unk
   await checkService(ctx, input.serviceId);
   const { slotMinutes } = await assertSlotAvailable(ctx.tenantId, input.doctorUserId, input.startsAt, "staff");
   const patient = input.patient ? await resolvePatientRef(ctx, input.patient) : null;
+  if (input.followUpId) await assertLinkable(ctx, input.followUpId, patient?.id ?? null); // booking from a follow-up uses THIS engine; the link is checked first
   const a = await insertAppointment(tenantDb(ctx), {
     tenantId: ctx.tenantId, doctorUserId: input.doctorUserId, startsAt: input.startsAt, endsAt: new Date(input.startsAt.getTime() + slotMinutes * 60000),
     type: input.type, source: input.source, status: "CONFIRMED", confirmedAt: new Date(), serviceId: input.serviceId ?? null, reason: input.reason ?? null, notes: input.notes ?? null,
@@ -85,6 +87,7 @@ export async function createStaffAppointment(ctx: TenantRequestContext, raw: unk
   });
   await recordAudit({ action: AUDIT_ACTIONS.APPOINTMENT_CREATED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "appointment", entityId: a.id, metadata: { publicId: a.publicId, type: a.type, source: a.source, doctorUserId: a.doctorUserId, startsAt: a.startsAt.toISOString() } });
   await emitAppointmentEvent("appointment.created", ctx.tenantId, a.id);
+  if (input.followUpId) await linkAppointment(ctx, input.followUpId, { id: a.id, startsAt: a.startsAt });
   return { id: a.id, publicId: a.publicId };
 }
 
@@ -116,6 +119,7 @@ export async function appointmentAction(ctx: TenantRequestContext, id: string, r
         if (a.opdVisit && ["WAITING", "ON_HOLD", "SKIPPED"].includes(a.opdVisit.status)) await tx.opdVisit.updateMany({ where: { id: a.opdVisit.id, status: a.opdVisit.status }, data: { status: "CANCELLED" } });
       });
       await audit(AUDIT_ACTIONS.APPOINTMENT_CANCELLED, { from: status, reasonKind: input.reasonKind });
+      await onAppointmentClosed(ctx, a, "CANCELLED");
       await emitAppointmentEvent("appointment.cancelled", ctx.tenantId, id);
       return { status: "CANCELLED" };
     }
@@ -146,6 +150,7 @@ export async function appointmentAction(ctx: TenantRequestContext, id: string, r
       if (!ctx.permissions.has("appointments.edit")) throw new AppError("FORBIDDEN");
       await setAppointmentStatus(tdb, ctx.tenantId, id, status, "NO_SHOW", { noShowAt: new Date(), noShowById: ctx.user.id, noShowReason: input.reason ?? null });
       await audit(AUDIT_ACTIONS.APPOINTMENT_NO_SHOW, { from: status });
+      await onAppointmentClosed(ctx, a, "NO_SHOW");
       return { status: "NO_SHOW" };
     }
     case "update": {

@@ -7,12 +7,13 @@ import { apiFetch } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import { ContextSidebar } from "./context-sidebar";
 import { PrescriptionBuilder } from "./prescription-builder";
+import { FollowUpsSection } from "./followups-section";
 import { InvestigationsSection } from "./investigations-section";
 import { AdviceSection, AssessmentSection, NotesSection, OrdersSection, VitalsSection } from "./sections";
 import { toForm, toPatch, type CView, type Form, type Staff } from "./types";
 
 type Save = "saved" | "saving" | "dirty" | "error" | "conflict";
-const TABS = [["vitals", "Vitals"], ["notes", "Complaint & history"], ["assessment", "Assessment & diagnosis"], ["prescription", "Prescription"], ["advice", "Advice & follow-up"], ["orders", "Doctor orders"], ["investigations", "Investigations"]] as const;
+const TABS = [["vitals", "Vitals"], ["notes", "Complaint & history"], ["assessment", "Assessment & diagnosis"], ["prescription", "Prescription"], ["advice", "Advice & follow-up"], ["orders", "Doctor orders"], ["investigations", "Investigations"], ["followups", "Follow-ups"]] as const;
 type Tab = (typeof TABS)[number][0];
 const STATUS_TONE: Record<string, "info" | "warning" | "success" | "neutral" | "danger"> = { DRAFT: "neutral", IN_PROGRESS: "info", READY_FOR_REVIEW: "warning", FINALIZED: "success", CANCELLED: "danger" };
 const STATUS_LABEL: Record<string, string> = { DRAFT: "Draft", IN_PROGRESS: "In progress", READY_FOR_REVIEW: "Ready for review", FINALIZED: "Finalized", CANCELLED: "Cancelled" };
@@ -144,6 +145,7 @@ export function ConsultationWorkspace({ initial, staff, canViewPatient }: { init
             {tab === "advice" && <AdviceSection form={form} set={set} ro={ro} />}
             {tab === "orders" && <OrdersSection c={c} staff={staff} reload={reload} />}
             {tab === "investigations" && <InvestigationsSection c={c} reload={reload} />}
+            {tab === "followups" && <FollowUpsSection c={c} />}
           </div>
         </div>
         <ContextSidebar c={c} />

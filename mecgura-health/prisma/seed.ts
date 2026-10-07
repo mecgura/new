@@ -86,6 +86,9 @@ async function seedScheduling(tenantId: string, key: "A" | "B") {
   await db.blockedTime.deleteMany({ where: { tenantId } });
   await db.availabilityWindow.deleteMany({ where: { tenantId } });
   await db.tenantCounter.deleteMany({ where: { tenantId } });
+  await db.followUp.deleteMany({ where: { tenantId } }); // cascades contacts + events
+  await db.recall.deleteMany({ where: { tenantId } });
+  await db.followUpSettings.deleteMany({ where: { tenantId } });
   await db.patient.deleteMany({ where: { tenantId } });
   await db.familyGroup.deleteMany({ where: { tenantId } });
 

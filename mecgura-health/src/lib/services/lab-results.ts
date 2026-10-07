@@ -9,6 +9,7 @@ import { tenantDb } from "@/lib/tenant/db";
 import { parseOrThrow } from "@/lib/validation";
 import { labActionSchema, resultEntriesSchema, reviewSchema } from "@/lib/validation/lab";
 import { ageLabel, nextCounter, tenantTimezone, type Client } from "./clinic-shared";
+import { syncReminders } from "./followup-reminders";
 import { labGuard } from "./lab-master";
 import { isLabStaffView, moveDoctorOrder, notify, refreshOrderStatus } from "./lab-orders";
 
@@ -284,6 +285,7 @@ export async function patientLabReports(ctx: TenantRequestContext, patientId: st
 /* ------------------------------------------------ notifications ------------------------------------------------ */
 export interface NotificationView { id: string; type: string; title: string; body: string | null; entityType: string | null; entityId: string | null; read: boolean; createdAt: string | null }
 export async function listNotifications(ctx: TenantRequestContext): Promise<{ unread: number; items: NotificationView[] }> {
+  await syncReminders(ctx).catch(() => undefined); // in-app reminders, created lazily
   const rows = await db(ctx).notification.findMany({ where: { userId: ctx.user.id }, orderBy: { createdAt: "desc" }, take: 20 });
   const unread = await db(ctx).notification.count({ where: { userId: ctx.user.id, readAt: null } });
   return { unread, items: rows.map((n: Record<string, any>) => ({ id: n.id, type: n.type, title: n.title, body: n.body, entityType: n.entityType, entityId: n.entityId, read: !!n.readAt, createdAt: iso(n.createdAt) })) }; // eslint-disable-line @typescript-eslint/no-explicit-any

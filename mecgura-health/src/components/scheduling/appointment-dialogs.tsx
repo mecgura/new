@@ -19,7 +19,7 @@ export interface Perms { canCreate: boolean; canEdit: boolean; canCheckIn: boole
 
 const pickerToPayload = (p: PickerValue) => (!p ? {} : p.kind === "ref" ? { patient: p.ref } : { contactName: p.name, contactPhone: p.phone });
 
-export function NewAppointmentModal({ open, onClose, doctors, services, defaultDoctor, today, onDone, presetPatient }: { presetPatient?: { ref: import("./patient-picker").PatientRefValue; label: string }; open: boolean; onClose: () => void; doctors: DoctorOpt[]; services: ServiceOpt[]; defaultDoctor?: string; today: string; onDone: () => void }) {
+export function NewAppointmentModal({ open, onClose, doctors, services, defaultDoctor, today, onDone, presetPatient, presetType, presetReason, presetDate, followUpId }: { presetType?: string; presetReason?: string; presetDate?: string; followUpId?: string; presetPatient?: { ref: import("./patient-picker").PatientRefValue; label: string }; open: boolean; onClose: () => void; doctors: DoctorOpt[]; services: ServiceOpt[]; defaultDoctor?: string; today: string; onDone: () => void }) {
   const toast = useToast();
   const [doctor, setDoctor] = useState(defaultDoctor ?? doctors[0]?.id ?? "");
   const [date, setDate] = useState(today);
@@ -33,12 +33,12 @@ export function NewAppointmentModal({ open, onClose, doctors, services, defaultD
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string>();
 
-  useEffect(() => { if (open) { setStartsAt(""); setErrors({}); setMsg(undefined); setPatient(presetPatient ? { kind: "ref", ref: presetPatient.ref, label: presetPatient.label } : null); setReason(""); setDate(today); setDoctor(defaultDoctor ?? doctors[0]?.id ?? ""); }   // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open) { setStartsAt(""); setErrors({}); setMsg(undefined); setPatient(presetPatient ? { kind: "ref", ref: presetPatient.ref, label: presetPatient.label } : null); setReason(presetReason ?? ""); setType(presetType ?? "OPD"); setDate(presetDate && presetDate >= today ? presetDate : today); setDoctor(defaultDoctor ?? doctors[0]?.id ?? ""); }   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultDoctor, doctors, today, presetPatient?.label]);
 
   async function save() {
     setBusy(true); setErrors({}); setMsg(undefined);
-    const r = await apiFetch("/api/appointments", { method: "POST", body: JSON.stringify({ doctorUserId: doctor, startsAt: startsAt || undefined, type, serviceId: serviceId || undefined, reason: reason || undefined, ...pickerToPayload(patient) }) });
+    const r = await apiFetch("/api/appointments", { method: "POST", body: JSON.stringify({ doctorUserId: doctor, startsAt: startsAt || undefined, type, serviceId: serviceId || undefined, reason: reason || undefined, followUpId: followUpId || undefined, ...pickerToPayload(patient) }) });
     setBusy(false);
     if (!r.ok) { setErrors(r.error.fieldErrors ?? {}); setMsg(r.error.message); if (r.error.code === "CONFLICT") setStartsAt(""); return; }
     toast({ tone: "success", title: "Appointment booked" }); onDone(); onClose();

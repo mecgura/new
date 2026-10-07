@@ -9,6 +9,7 @@ const TABS = [
   { href: "/settings/branding", label: "Theme & branding" },
   { href: "/settings/scheduling", label: "Scheduling & OPD" },
   { href: "/settings/lab", label: "Laboratory" },
+  { href: "/settings/followups", label: "Follow-ups" },
   { href: "/settings/integrations", label: "Integrations" },
 ];
 

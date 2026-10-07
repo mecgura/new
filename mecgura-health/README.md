@@ -119,3 +119,6 @@ Doctors start a consultation from Live OPD, record vitals, complaint/history/exa
 
 ## Phase 6 — investigations, lab workflow & reports
 Doctors order investigations from a consultation; lab staff collect, receive (or reject → recollect) samples with a full chain of custody, enter structured results (flags only from configured reference ranges), generate a report that a lab reviewer verifies and releases as an immutable version, and the doctor reviews it. Configurable test master, categories, sample types, departments and rejection reasons under `/settings/lab`. Pages: `/lab`, `/lab/orders/[id]`, `/lab/reports/[id]`, slip/label print pages; Patient 360 gets a Reports tab and timeline events. External laboratories are tracked manually; no billing, WhatsApp/SMS/email, barcode hardware or AI. Details: [docs/phase6-lab.md](docs/phase6-lab.md).
+
+## Phase 7 — follow-up CRM, recalls & reminders
+Follow-ups from consultations, prescriptions, lab reports, no-shows, recalls or manual tasks; a command center (`/followups`), worklist with server-side filters, contact log (manual), booking through the existing appointment engine, reschedule history, outcomes, bounded recalls, in-app reminders, Patient 360 tab/timeline and clinic-level rules (`/settings/followups`). No automatic patient messaging. Details: [docs/phase7-followups.md](docs/phase7-followups.md).
