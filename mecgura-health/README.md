@@ -113,3 +113,6 @@ Staff pages: `/appointments`, `/opd`, `/settings/scheduling`. Public (clinic hos
 
 ## Phase 4 — Patient CRM & digital file
 Patient list/search/registration with duplicate detection, a Patient 360 file (overview, timeline, visits, appointments, allergies, medicines summary, medical & family history, notes, consent, family grouping), archive/restore, and tiered access (identity → view → clinical). Details and rules: [`docs/phase4-patient-crm.md`](docs/phase4-patient-crm.md). Pages: `/patients`, `/patients/new`, `/patients/<id>`. Live check: `node e2e/phase4-patients.mjs` (prod build, after `npm run db:seed`).
+
+## Phase 5 — consultation, prescription & doctor orders
+Doctors start a consultation from Live OPD, record vitals, complaint/history/examination, assessment and diagnosis, build and finalize a prescription (versioned, clinic-branded document), plan follow-up and create orders. Finalized records are immutable (amend → new version). No automatic diagnosis, prescribing or medicine data. Details: [`docs/phase5-consultation.md`](docs/phase5-consultation.md). Pages: `/consultations`, `/consultations/<id>`, `/consultations/<id>/prescription`, `/orders`. Live check: `node e2e/phase5-consultation.mjs`.

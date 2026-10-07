@@ -73,6 +73,9 @@ async function seedScheduling(tenantId: string, key: "A" | "B") {
   if (!doctor) return;
   const tz = "Asia/Kolkata";
   const today = todayIn(tz);
+  await db.consultation.deleteMany({ where: { tenantId } }); // cascades vitals, diagnoses, prescriptions, versions, orders
+  await db.consultationTemplate.deleteMany({ where: { tenantId } });
+  await db.medicineReference.deleteMany({ where: { tenantId } });
   await db.opdVisit.deleteMany({ where: { tenantId } });
   await db.appointment.deleteMany({ where: { tenantId } });
   await db.blockedTime.deleteMany({ where: { tenantId } });

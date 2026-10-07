@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { AlertOctagon, Clock, Megaphone, Pause, Play, Plus, SkipForward, Siren, Check, RotateCcw, UserRoundCheck } from "lucide-react";
+import { AlertOctagon, Clock, Megaphone, Stethoscope, Pause, Play, Plus, SkipForward, Siren, Check, RotateCcw, UserRoundCheck } from "lucide-react";
 import { Alert, Badge, Button, Card, EmptyState, ErrorState, Field, LoadingState, Modal, Select, TextInput, useToast } from "@/components/ui";
 import { apiFetch } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
@@ -12,15 +13,17 @@ import { usePolling } from "./use-poll";
 
 interface Visit {
   id: string; patientId: string; token: string; status: string; priority: string; queueType: string; doctorUserId: string; patientName: string; patientCode: string; patientAge: string | null; patientGender: string | null;
+  consultationId: string | null; consultationStatus: string | null;
   visitType: string; note: string | null; waitedMinutes: number; estimatedWaitMinutes: number | null; stale: boolean;
 }
 interface Snapshot { date: string; doctors: { id: string; name: string; room: string | null; avgConsultMinutes: number }[]; visits: Visit[] }
-export interface OpdPerms { manage: boolean; call: boolean; priority: boolean; patients?: boolean }
+export interface OpdPerms { manage: boolean; call: boolean; priority: boolean; patients?: boolean; consult?: boolean }
 
 async function post(url: string, body: unknown) { return apiFetch<Record<string, unknown>>(url, { method: "POST", body: JSON.stringify(body) }); }
 
 export function OpdBoard({ mode, perms, doctors: allDoctors }: { mode: "reception" | "doctor"; perms: OpdPerms; doctors: { id: string; name: string }[] }) {
   const toast = useToast();
+  const router = useRouter();
   const { data, error, loading, updatedAt, refresh } = usePolling<Snapshot>("/api/opd", { intervalMs: 5000 });
   const [filter, setFilter] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -37,6 +40,14 @@ export function OpdBoard({ mode, perms, doctors: allDoctors }: { mode: "receptio
     if (!r.ok) { setActionError(r.error.fieldErrors ? Object.values(r.error.fieldErrors).join(" ") : r.error.message); await refresh(); return false; }
     if (okMsg) toast({ tone: "success", title: okMsg });
     await refresh(); return true;
+  }
+  async function openConsult(v: Visit) {
+    if (v.consultationId) { router.push(`/consultations/${v.consultationId}`); return; }
+    setBusyId(v.id); setActionError(undefined);
+    const r = await post("/api/consultations/start", { visitId: v.id });
+    setBusyId(null);
+    if (!r.ok) { setActionError(r.error.message); await refresh(); return; }
+    router.push(`/consultations/${String(r.data.id)}`);
   }
   async function callNext(doctorUserId: string) {
     setBusyId(`next:${doctorUserId}`); setActionError(undefined);
@@ -97,8 +108,9 @@ export function OpdBoard({ mode, perms, doctors: allDoctors }: { mode: "receptio
                       <Badge tone={v.status === "CALLED" ? "info" : "success"}>{STATUS_LABEL[v.status]}</Badge><PriorityBadge priority={v.priority} />
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {v.status === "CALLED" && <Button size="sm" onClick={() => run(v, "start", {}, "Consultation started")} loading={busyId === v.id}><Play aria-hidden className="size-4" />Start</Button>}
-                      {v.status === "IN_CONSULTATION" && <Button size="sm" variant="success" onClick={() => run(v, "complete", {}, "Visit completed")} loading={busyId === v.id}><Check aria-hidden className="size-4" />Complete</Button>}
+                      {perms.consult && <Button size="sm" onClick={() => openConsult(v)} loading={busyId === v.id}><Stethoscope aria-hidden className="size-4" />{v.consultationId ? "Open consultation" : "Start consultation"}</Button>}
+                      {!perms.consult && v.status === "CALLED" && <Button size="sm" onClick={() => run(v, "start", {}, "Consultation started")} loading={busyId === v.id}><Play aria-hidden className="size-4" />Start</Button>}
+                      {v.status === "IN_CONSULTATION" && (!perms.consult || v.consultationStatus === "CANCELLED") && <Button size="sm" variant="success" onClick={() => run(v, "complete", {}, "Visit completed")} loading={busyId === v.id}><Check aria-hidden className="size-4" />Complete</Button>}
                       {v.status === "CALLED" && <Button size="sm" variant="outline" onClick={() => run(v, "skip", {}, "Skipped")}><SkipForward aria-hidden className="size-4" />Skip</Button>}
                       {v.status === "CALLED" && perms.manage && <Button size="sm" variant="outline" onClick={() => run(v, "recall", {}, "Back to waiting")}><RotateCcw aria-hidden className="size-4" />Back to waiting</Button>}
                       <Button size="sm" variant="outline" onClick={() => run(v, "hold", {}, "Put on hold")}><Pause aria-hidden className="size-4" />Hold</Button>
@@ -118,6 +130,7 @@ export function OpdBoard({ mode, perms, doctors: allDoctors }: { mode: "receptio
                       <PriorityBadge priority={v.priority} />
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
+                      {perms.consult && <Button size="sm" onClick={() => openConsult(v)} loading={busyId === v.id}><Stethoscope aria-hidden className="size-4" />Start consultation</Button>}
                       {(perms.manage || perms.call) && <Button size="sm" variant="outline" onClick={() => run(v, "call", {}, `Called ${v.token}`)} loading={busyId === v.id}>Call</Button>}
                       {(perms.manage || perms.call) && <Button size="sm" variant="ghost" onClick={() => run(v, "hold", {}, "Put on hold")}>Hold</Button>}
                       {(perms.manage || perms.call) && <Button size="sm" variant="ghost" onClick={() => run(v, "skip", {}, "Skipped")}>Skip</Button>}

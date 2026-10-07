@@ -60,10 +60,18 @@ export const PERMISSIONS = {
   "consultation.view": { module: "consultations", description: "View consultations" },
   "consultation.create": { module: "consultations", description: "Record consultations" },
   "consultation.edit": { module: "consultations", description: "Edit consultations" },
+  "consultation.finalize": { module: "consultations", description: "Finalize and amend your own consultations (doctors only)" },
+  "vitals.record": { module: "consultations", description: "Record vitals on an open consultation" },
+  "orders.view": { module: "consultations", description: "View doctor orders / tasks" },
+  "orders.create": { module: "consultations", description: "Create doctor orders" },
+  "orders.update": { module: "consultations", description: "Move assigned doctor orders through their operational steps" },
+  "medicines.manage": { module: "consultations", description: "Manage the clinic's medicine list" },
 
   "prescription.view": { module: "prescriptions", description: "View prescriptions" },
   "prescription.create": { module: "prescriptions", description: "Write prescriptions" },
   "prescription.edit": { module: "prescriptions", description: "Edit prescriptions" },
+  "prescription.finalize": { module: "prescriptions", description: "Finalize and amend your own prescriptions (doctors only)" },
+  "prescription.print": { module: "prescriptions", description: "Print or download finalized prescriptions" },
 
   "tests.view": { module: "tests", description: "View tests and orders" },
   "tests.order": { module: "tests", description: "Order tests" },
@@ -118,6 +126,6 @@ export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
  * the role (admin/platform powers). Everything else may be granted to e.g. a STAFF member.
  */
 export const NON_GRANTABLE_PERMISSIONS: readonly Permission[] = [
-  "platform.manage", "website.publish", "schedule.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view", "patients.archive", "patients.export",
+  "platform.manage", "website.publish", "schedule.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view", "patients.archive", "patients.export", "consultation.finalize", "prescription.finalize",
 ];
 export const GRANTABLE_PERMISSIONS = ALL_PERMISSIONS.filter((p) => !NON_GRANTABLE_PERMISSIONS.includes(p));

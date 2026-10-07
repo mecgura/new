@@ -184,15 +184,16 @@ model User {
   updatedAt        DateTime  @updatedAt
   deletedAt        DateTime?
 
-  auditLogs            AuditLog[]
-  doctorProfile        DoctorProfile?
-  staffProfile         StaffProfile?
-  invitations          Invitation[]
-  permissionGrants     UserPermissionGrant[]
-  doctorSchedule       DoctorSchedule?
-  appointmentsAsDoctor Appointment[]         @relation("AppointmentDoctor")
-  opdVisitsAsDoctor    OpdVisit[]            @relation("OpdVisitDoctor")
-  doctorPublicProfile  DoctorPublicProfile?
+  auditLogs             AuditLog[]
+  doctorProfile         DoctorProfile?
+  staffProfile          StaffProfile?
+  invitations           Invitation[]
+  permissionGrants      UserPermissionGrant[]
+  doctorSchedule        DoctorSchedule?
+  appointmentsAsDoctor  Appointment[]         @relation("AppointmentDoctor")
+  opdVisitsAsDoctor     OpdVisit[]            @relation("OpdVisitDoctor")
+  doctorPublicProfile   DoctorPublicProfile?
+  consultationsAsDoctor Consultation[]        @relation("ConsultationDoctor")
 
   @@index([tenantId, status])
   @@index([tenantId, roleId])
@@ -537,6 +538,7 @@ model Patient {
   familyHistory            PatientFamilyHistory[]
   notes                    PatientNote[]
   consents                 PatientConsent[]
+  consultations            Consultation[]
 
   @@unique([tenantId, code])
   @@index([tenantId, phone])
@@ -780,6 +782,8 @@ model Appointment {
   updatedAt          DateTime  @updatedAt
   opdVisit           OpdVisit?
 
+  consultation Consultation?
+
   @@unique([tenantId, publicId])
   @@index([tenantId, startsAt])
   @@index([tenantId, doctorUserId, startsAt])
@@ -829,6 +833,8 @@ model OpdVisit {
   updatedAt         DateTime     @updatedAt
 
   /// a token number is unique per clinic + day + queue prefix
+  consultation Consultation?
+
   @@unique([tenantId, tokenDate, tokenPrefix, tokenNumber])
   @@index([tenantId, tokenDate, doctorUserId, status])
   @@index([tenantId, tokenDate, status])
@@ -854,4 +860,264 @@ model OpdSettings {
   displayKey        String?  @unique
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+}
+
+/// ---------------------------------------------------------------------------------------------------------------
+/// Phase 5 — consultation, vitals, diagnosis, prescription, orders. Every row is tenant-scoped (tenantDb) and linked
+/// to the Phase 3/4 patient + OPD visit (no duplicate core models). Doctors own clinical content; finalized content is
+/// immutable and only changes through versioned amendments.
+/// ---------------------------------------------------------------------------------------------------------------
+model Consultation {
+  id                String                  @id @default(cuid())
+  tenantId          String
+  /// CONS-2026-000145 — clinic-scoped, separate from patient id, token and prescription number
+  number            String
+  patientId         String
+  patient           Patient                 @relation(fields: [patientId], references: [id])
+  doctorUserId      String
+  doctor            User                    @relation("ConsultationDoctor", fields: [doctorUserId], references: [id])
+  /// at most ONE consultation per OPD visit
+  opdVisitId        String                  @unique
+  opdVisit          OpdVisit                @relation(fields: [opdVisitId], references: [id])
+  appointmentId     String?                 @unique
+  appointment       Appointment?            @relation(fields: [appointmentId], references: [id])
+  /// DRAFT | IN_PROGRESS | READY_FOR_REVIEW | FINALIZED | CANCELLED
+  status            String                  @default("IN_PROGRESS")
+  /// optimistic-concurrency counter for autosave
+  rev               Int                     @default(0)
+  /// JSON arrays: [{ text, duration, severity, notes }] and [{ name, duration, severity, onset, notes }]
+  chiefComplaints   String                  @default("[]")
+  symptoms          String                  @default("[]")
+  /// JSON object of free-text sections: hpi, pastMedical, surgical, family, medication, allergy, social, other
+  history           String                  @default("{}")
+  /// JSON object of free-text sections: general, respiratory, cardiovascular, abdomen, neurological, other, custom[]
+  examination       String                  @default("{}")
+  assessment        String?
+  impression        String?
+  differential      String?
+  assessmentNotes   String?
+  clinicalNotes     String?
+  advice            String?
+  followUpRequired  Boolean                 @default(false)
+  followUpAfterDays Int?
+  followUpDate      String?
+  followUpNotes     String?
+  startedAt         DateTime                @default(now())
+  readyAt           DateTime?
+  finalizedAt       DateTime?
+  finalizedById     String?
+  /// bumps each time a finalized consultation is amended and finalized again
+  version           Int                     @default(0)
+  amendReason       String?
+  cancelledAt       DateTime?
+  cancelReason      String?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  vitals            ConsultationVitals[]
+  diagnoses         ConsultationDiagnosis[]
+  prescription      Prescription?
+  orders            DoctorOrder[]
+  versions          ConsultationVersion[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, patientId, startedAt])
+  @@index([tenantId, doctorUserId, status])
+}
+
+/// Immutable snapshot written every time a consultation is finalized (v1, v2 …). contentHash proves it wasn't altered.
+model ConsultationVersion {
+  id             String       @id @default(cuid())
+  tenantId       String
+  consultationId String
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  version        Int
+  snapshot       String
+  contentHash    String
+  reason         String?
+  createdById    String
+  createdAt      DateTime     @default(now())
+
+  @@unique([consultationId, version])
+}
+
+model ConsultationVitals {
+  id             String       @id @default(cuid())
+  tenantId       String
+  consultationId String
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  patientId      String
+  /// units are fixed: mmHg, bpm, °F (or °C per tempUnit), %, breaths/min, kg, cm, mg/dL
+  systolic       Int?
+  diastolic      Int?
+  pulse          Int?
+  temperature    Float?
+  tempUnit       String       @default("F")
+  spo2           Int?
+  respRate       Int?
+  weightKg       Float?
+  heightCm       Float?
+  bmi            Float?
+  bloodSugar     Float?
+  /// FASTING | RANDOM | PRE_MEAL | POST_MEAL
+  sugarType      String?
+  painScore      Int?
+  notes          String?
+  recordedById   String
+  recordedAt     DateTime     @default(now())
+
+  @@index([tenantId, consultationId])
+  @@index([tenantId, patientId, recordedAt])
+}
+
+model ConsultationDiagnosis {
+  id             String       @id @default(cuid())
+  tenantId       String
+  consultationId String
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  patientId      String
+  name           String
+  /// only when a real terminology source supplied it (none is configured yet)
+  code           String?
+  codeSystem     String?
+  /// PRIMARY | SECONDARY
+  type           String       @default("SECONDARY")
+  notes          String?
+  createdById    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([tenantId, consultationId])
+  @@index([tenantId, patientId])
+}
+
+/// One prescription per consultation; its history lives in PrescriptionVersion. Items are the editable working copy.
+model Prescription {
+  id             String                @id @default(cuid())
+  tenantId       String
+  consultationId String                @unique
+  consultation   Consultation          @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  patientId      String
+  doctorUserId   String
+  /// RX-2026-000001, assigned at first finalization; unique per clinic
+  number         String?
+  /// DRAFT | REVIEW | FINALIZED
+  status         String                @default("DRAFT")
+  /// 0 until the first finalization
+  currentVersion Int                   @default(0)
+  /// set while a finalized prescription is being amended
+  amendReason    String?
+  finalizedAt    DateTime?
+  finalizedById  String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  items          PrescriptionItem[]
+  versions       PrescriptionVersion[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, patientId])
+}
+
+model PrescriptionItem {
+  id             String       @id @default(cuid())
+  tenantId       String
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  position       Int
+  name           String
+  genericName    String?
+  brandName      String?
+  strength       String?
+  dose           String?
+  route          String?
+  frequency      String?
+  morning        Boolean      @default(false)
+  afternoon      Boolean      @default(false)
+  evening        Boolean      @default(false)
+  night          Boolean      @default(false)
+  /// BEFORE_FOOD | AFTER_FOOD | WITH_FOOD | ANYTIME
+  foodTiming     String?
+  durationDays   Int?
+  quantity       Float?
+  quantityUnit   String?
+  startDate      String?
+  endDate        String?
+  instructions   String?
+  /// set when the doctor picked it from the clinic medicine list (otherwise typed manually)
+  medicineRefId  String?
+
+  @@index([prescriptionId, position])
+}
+
+/// Immutable: a finalized prescription as the doctor approved it. Never updated, never deleted.
+model PrescriptionVersion {
+  id             String       @id @default(cuid())
+  tenantId       String
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  version        Int
+  snapshot       String
+  contentHash    String
+  reason         String?
+  createdById    String
+  createdAt      DateTime     @default(now())
+
+  @@unique([prescriptionId, version])
+}
+
+/// Operational task created from a consultation. Never changes the prescription.
+model DoctorOrder {
+  id             String       @id @default(cuid())
+  tenantId       String
+  patientId      String
+  consultationId String
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  doctorUserId   String
+  assignedToId   String?
+  /// MEDICATION | INVESTIGATION | DOCUMENT | FOLLOW_UP | OTHER
+  type           String
+  title          String
+  description    String?
+  /// NORMAL | HIGH | URGENT
+  priority       String       @default("NORMAL")
+  /// PENDING | IN_PROGRESS | COMPLETED | CANCELLED
+  status         String       @default("PENDING")
+  createdById    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  completedAt    DateTime?
+  completedById  String?
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, consultationId])
+  @@index([tenantId, assignedToId, status])
+}
+
+/// A doctor's own drafting template. Applying one only copies editable skeleton text into a draft.
+model ConsultationTemplate {
+  id           String   @id @default(cuid())
+  tenantId     String
+  doctorUserId String
+  name         String
+  /// JSON: { chiefComplaint?, history?, examination?, assessment?, advice?, clinicalNotes? }
+  content      String
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId, doctorUserId])
+}
+
+/// The clinic's imported medicine list (formulary). EMPTY unless the clinic loads a real list — nothing is seeded or invented.
+model MedicineReference {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  genericName String?
+  brandName   String?
+  strength    String?
+  form        String?
+  source      String   @default("CLINIC_IMPORT")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, name])
+  @@index([tenantId, genericName])
 }

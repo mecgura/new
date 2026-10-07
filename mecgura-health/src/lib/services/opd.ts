@@ -147,7 +147,7 @@ async function avgConsultMinutes(client: Client, tenantId: string, tokenDate: st
 
 export interface QueueVisit {
   id: string; patientId: string; token: string; status: OpdStatus; priority: Priority; queueType: string; doctorUserId: string; patientName: string; patientCode: string; patientAge: string | null; patientGender: string | null;
-  appointmentId: string | null; visitType: string; note: string | null; checkedInAt: string; waitedMinutes: number; estimatedWaitMinutes: number | null; stale: boolean; calledAt: string | null;
+  consultationId: string | null; consultationStatus: string | null; appointmentId: string | null; visitType: string; note: string | null; checkedInAt: string; waitedMinutes: number; estimatedWaitMinutes: number | null; stale: boolean; calledAt: string | null;
 }
 
 export async function queueSnapshot(ctx: TenantRequestContext, opts: { doctorUserId?: string; etag?: string } = {}) {
@@ -164,7 +164,7 @@ export async function queueSnapshot(ctx: TenantRequestContext, opts: { doctorUse
   if (opts.etag && opts.etag === etag) return { notModified: true as const, etag };
 
   const [rows, doctors] = await Promise.all([
-    tdb.opdVisit.findMany({ where, orderBy: { queueSeq: "asc" }, take: 400, include: { patient: { select: { code: true, name: true, gender: true, dateOfBirth: true, ageYears: true } } } }),
+    tdb.opdVisit.findMany({ where, orderBy: { queueSeq: "asc" }, take: 400, include: { patient: { select: { code: true, name: true, gender: true, dateOfBirth: true, ageYears: true } }, consultation: { select: { id: true, status: true } } } }),
     tdb.user.findMany({ where: { role: { key: "DOCTOR" }, status: "ACTIVE", deletedAt: null, ...(doctorFilter ? { id: doctorFilter } : {}) }, select: { id: true, name: true, doctorSchedule: { select: { slotMinutes: true, roomLabel: true } } }, orderBy: { name: "asc" } }),
   ]);
   const now = Date.now();
@@ -182,7 +182,7 @@ export async function queueSnapshot(ctx: TenantRequestContext, opts: { doctorUse
       const idx = waiting.findIndex((w) => w.id === r.id);
       visits.push({
         id: r.id, patientId: r.patientId, token: r.tokenLabel, status: r.status as OpdStatus, priority: r.priority as Priority, queueType: r.queueType, doctorUserId: r.doctorUserId,
-        patientName: r.patient.name, patientCode: r.patient.code, patientAge: ageLabel(r.patient), patientGender: r.patient.gender, appointmentId: r.appointmentId, visitType: r.visitType, note: r.note,
+        patientName: r.patient.name, patientCode: r.patient.code, patientAge: ageLabel(r.patient), patientGender: r.patient.gender, consultationId: r.consultation?.id ?? null, consultationStatus: r.consultation?.status ?? null, appointmentId: r.appointmentId, visitType: r.visitType, note: r.note,
         checkedInAt: r.checkedInAt.toISOString(), waitedMinutes: ["WAITING", "ON_HOLD", "SKIPPED"].includes(r.status) ? Math.max(0, Math.round((now - r.checkedInAt.getTime()) / 60000)) : 0,
         estimatedWaitMinutes: idx >= 0 ? (idx + busy) * perPatient : null, stale: r.tokenDate < today, calledAt: r.calledAt?.toISOString() ?? null,
       });

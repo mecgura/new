@@ -29,6 +29,7 @@ export function accessFor(ctx: TenantRequestContext) {
     view: hasView(ctx), clinical: hasClinical(ctx), clinicalEdit: ctx.permissions.has("patients.clinical_edit"),
     edit: ctx.permissions.has("patients.edit"), archive: ctx.permissions.has("patients.archive"), export: ctx.permissions.has("patients.export"),
     appointments: ctx.permissions.has("appointments.create"), opd: ctx.permissions.has("opd.manage"),
+    consultations: ctx.permissions.has("consultation.view") && ctx.permissions.has("patients.clinical") && ctx.user.role !== "SUPER_ADMIN",
   };
 }
 
@@ -239,7 +240,7 @@ export async function listPatientAppointments(ctx: TenantRequestContext, id: str
 }
 
 /* ---------------------------------- timeline ---------------------------------- */
-export interface TimelineEvent { id: string; type: string; category: "patient" | "appointments" | "opd" | "clinical"; at: string; title: string; detail?: string }
+export interface TimelineEvent { id: string; type: string; category: "patient" | "appointments" | "opd" | "clinical"; at: string; title: string; detail?: string; href?: string }
 const T_PAGE = 20;
 
 /**
@@ -285,6 +286,27 @@ export async function patientTimeline(ctx: TenantRequestContext, id: string, raw
     for (const a of al) ev.push({ id: `al-${a.id}`, type: "ALLERGY_RECORDED", category: "clinical", at: a.recordedAt.toISOString(), title: "Allergy recorded", detail: a.allergen });
     for (const h of hi) ev.push({ id: `hi-${h.id}`, type: "HISTORY_ADDED", category: "clinical", at: h.recordedAt.toISOString(), title: "Medical history entry added", detail: h.title });
     for (const m of me) ev.push({ id: `me-${m.id}`, type: "MEDICATION_RECORDED", category: "clinical", at: m.recordedAt.toISOString(), title: "Medicine recorded in summary", detail: m.name });
+  }
+  if (want("clinical") && clinical && ctx.permissions.has("consultation.view") && ctx.user.role !== "SUPER_ADMIN") {
+    const [cons, vit, dx, rxs] = await Promise.all([
+      tdb.consultation.findMany({ where: { patientId: id }, orderBy: { startedAt: "desc" }, take: 40, include: { doctor: { select: { name: true } } } }),
+      tdb.consultationVitals.findMany({ where: { patientId: id }, orderBy: { recordedAt: "desc" }, take: 60, select: { id: true, consultationId: true, recordedAt: true } }),
+      tdb.consultationDiagnosis.findMany({ where: { patientId: id }, orderBy: { createdAt: "desc" }, take: 60, select: { id: true, consultationId: true, name: true, createdAt: true } }),
+      tdb.prescription.findMany({ where: { patientId: id }, take: 40, include: { versions: { select: { version: true, createdAt: true } } } }),
+    ]);
+    const link = (cid: string) => `/consultations/${cid}`;
+    for (const c of cons) {
+      ev.push({ id: `cs-${c.id}`, type: "CONSULTATION_STARTED", category: "clinical", at: c.startedAt.toISOString(), title: "Consultation started", detail: `${c.doctor.name} · ${c.number}`, href: link(c.id) });
+      if (c.finalizedAt) ev.push({ id: `cf-${c.id}`, type: "CONSULTATION_FINALIZED", category: "clinical", at: c.finalizedAt.toISOString(), title: "Consultation finalized", detail: c.doctor.name, href: link(c.id) });
+    }
+    for (const v of vit) ev.push({ id: `vi-${v.id}`, type: "VITALS_RECORDED", category: "clinical", at: v.recordedAt.toISOString(), title: "Vitals recorded", href: link(v.consultationId) });
+    for (const d of dx) ev.push({ id: `dx-${d.id}`, type: "DIAGNOSIS_ADDED", category: "clinical", at: d.createdAt.toISOString(), title: "Diagnosis added", detail: d.name, href: link(d.consultationId) });
+    for (const r of rxs) {
+      ev.push({ id: `rc-${r.id}`, type: "PRESCRIPTION_CREATED", category: "clinical", at: r.createdAt.toISOString(), title: "Prescription drafted", href: link(r.consultationId) });
+      for (const v of r.versions) ev.push({ id: `rf-${r.id}-${v.version}`, type: "PRESCRIPTION_FINALIZED", category: "clinical", at: v.createdAt.toISOString(), title: v.version > 1 ? `Prescription amended (version ${v.version})` : "Prescription finalized", detail: r.number ?? undefined, href: link(r.consultationId) });
+    }
+    const orders = await tdb.doctorOrder.findMany({ where: { patientId: id }, orderBy: { createdAt: "desc" }, take: 40, select: { id: true, consultationId: true, title: true, createdAt: true } });
+    for (const o of orders) ev.push({ id: `or-${o.id}`, type: "ORDER_CREATED", category: "clinical", at: o.createdAt.toISOString(), title: "Doctor order created", detail: o.title, href: link(o.consultationId) });
   }
   if (q.filter === "all") {
     const logs = await (await import("@/lib/db")).db.auditLog.findMany({ where: { tenantId: ctx.tenantId, entityType: "patient", entityId: id, action: { in: [AUDIT_ACTIONS.PATIENT_UPDATED, AUDIT_ACTIONS.PATIENT_ARCHIVED, AUDIT_ACTIONS.PATIENT_RESTORED, AUDIT_ACTIONS.PATIENT_CONSENT_RECORDED] } }, orderBy: { createdAt: "desc" }, take: 50, select: { id: true, action: true, createdAt: true } });

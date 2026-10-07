@@ -73,7 +73,7 @@ const NOTES: RecordConfig = {
 
 /* ------------------------------------ workspace ------------------------------------ */
 interface Props { profile: ProfileFull; doctors: DoctorOpt[]; services: ServiceOpt[]; today: string }
-type SectionKey = "overview" | "timeline" | "visits" | "appointments" | "medical" | "allergies" | "medications" | "documents" | "reports" | "notes" | "family" | "billing" | "followup";
+type SectionKey = "overview" | "consultations" | "timeline" | "visits" | "appointments" | "medical" | "allergies" | "medications" | "documents" | "reports" | "notes" | "family" | "billing" | "followup";
 
 export function PatientWorkspace({ profile, doctors, services, today }: Props) {
   const router = useRouter();
@@ -90,6 +90,7 @@ export function PatientWorkspace({ profile, doctors, services, today }: Props) {
   const sections: { key: SectionKey; label: string; show: boolean }[] = [
     { key: "overview", label: "Overview", show: true }, { key: "timeline", label: "Timeline", show: true }, { key: "visits", label: "Visits", show: true },
     { key: "appointments", label: "Appointments", show: true },
+    { key: "consultations", label: "Consultations", show: access.consultations },
     { key: "medical", label: "Medical information", show: access.clinical }, { key: "allergies", label: "Allergies", show: access.clinical }, { key: "medications", label: "Medications", show: access.clinical },
     { key: "documents", label: "Documents", show: true }, { key: "reports", label: "Reports", show: true }, { key: "notes", label: "Notes", show: true }, { key: "family", label: "Family", show: true },
     { key: "billing", label: "Billing", show: true }, { key: "followup", label: "Follow-up", show: true },
@@ -166,6 +167,7 @@ export function PatientWorkspace({ profile, doctors, services, today }: Props) {
         <div id="patient-panel" role="tabpanel" aria-labelledby={`tab-${tab}`} tabIndex={0} className="min-w-0 space-y-section focus:outline-none">
           {tab === "overview" && <Overview profile={profile} />}
           {tab === "timeline" && <Timeline id={p.id} clinical={access.clinical} />}
+          {tab === "consultations" && <Consultations id={p.id} />}
           {tab === "visits" && <Visits id={p.id} />}
           {tab === "appointments" && <Appointments id={p.id} />}
           {tab === "medical" && <><RecordSection patientId={p.id} cfg={HISTORY} readOnly={archived} /><RecordSection patientId={p.id} cfg={FAMILY_HISTORY} readOnly={archived} /></>}
@@ -265,7 +267,7 @@ function Overview({ profile }: { profile: ProfileFull }) {
 }
 
 /* -------------------------------------- timeline -------------------------------------- */
-interface Ev { id: string; type: string; category: string; at: string; title: string; detail?: string }
+interface Ev { id: string; type: string; category: string; at: string; title: string; detail?: string; href?: string }
 interface TL { filter: string; available: boolean; restricted: boolean; page: number; pageSize: number; total: number; events: Ev[] }
 const FILTERS: [string, string, boolean][] = [["all", "All", true], ["appointments", "Appointments", true], ["opd", "OPD visits", true], ["clinical", "Clinical", true], ["documents", "Documents", false], ["reports", "Reports", false], ["billing", "Billing", false], ["followup", "Follow-up", false]];
 function Timeline({ id, clinical }: { id: string; clinical: boolean }) {
@@ -297,7 +299,7 @@ function Timeline({ id, clinical }: { id: string; clinical: boolean }) {
             {events.map((e) => (
               <li key={e.id} className="relative">
                 <span aria-hidden className={cn("absolute -left-[1.6rem] top-1.5 size-3 rounded-full border-2 border-surface", e.category === "opd" ? "bg-primary" : e.category === "appointments" ? "bg-info" : e.category === "clinical" ? "bg-warning" : "bg-muted")} />
-                <p className="type-label">{e.title}</p>
+                <p className="type-label">{e.href ? <Link href={e.href}>{e.title}</Link> : e.title}</p>
                 {e.detail && <p className="type-secondary">{e.detail}</p>}
                 <p className="type-caption"><time dateTime={e.at}>{e.at.replace("T", " ").slice(0, 16)} UTC</time></p>
               </li>
@@ -409,5 +411,22 @@ function QuickOpd({ open, onClose, patientId, doctors, canPriority, onDone }: { 
         <Field label="Note (optional)"><Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={200} /></Field>
       </div>
     </Modal>
+  );
+}
+
+/* --------------------------------------- consultations (Phase 5) --------------------------------------- */
+interface Cons { id: string; number: string; status: string; date: string; doctor: string; complaint: string | null; diagnoses: string[]; prescription: string | null; followUp: string | null }
+function Consultations({ id }: { id: string }) {
+  const { data, error, loading, reload } = useApi<{ total: number; rows: Cons[] }>(`/api/consultations?patientId=${id}`);
+  return (
+    <Card><CardHeader title="Consultations" description="Clinical visits with the doctor. Open one to read it in full." />
+      {loading && !data ? <LoadingState /> : error ? <ErrorState code={error.code} description={error.message} action={<Button onClick={reload}>Try again</Button>} /> : !data?.rows.length ? <EmptyState title="No consultations yet" description="They appear here after a doctor starts a consultation from the Live OPD queue." /> : (
+        <ul className="divide-y divide-line">{data.rows.map((c) => (
+          <li key={c.id} className="space-y-1 p-card"><div className="flex flex-wrap items-center justify-between gap-2"><p className="type-label">{c.date} · {c.doctor}</p><StatusBadge tone={c.status === "FINALIZED" ? "success" : c.status === "CANCELLED" ? "danger" : "info"}>{cap(c.status.replace(/_/g, " "))}</StatusBadge></div>
+            <p className="type-secondary">{c.complaint ?? "No complaint recorded"}{c.diagnoses.length ? ` → ${c.diagnoses.join(", ")}` : ""}</p>
+            <p className="type-caption">{c.number}{c.prescription ? ` · ${c.prescription}` : ""}{c.followUp ? ` · follow-up ${c.followUp}` : ""} · <Link href={`/consultations/${c.id}`}>View full consultation</Link></p></li>
+        ))}</ul>
+      )}
+    </Card>
   );
 }
