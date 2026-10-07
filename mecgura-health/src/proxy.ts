@@ -57,13 +57,7 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    {
-      source: "/((?!api|_next/static|_next/image|favicon.ico|icon.svg|.*\\.(?:png|jpg|jpeg|svg|webp|ico)$).*)",
-      missing: [
-        { type: "header", key: "next-router-prefetch" },
-        { type: "header", key: "purpose", value: "prefetch" },
-      ],
-    },
-  ],
+  // Prefetch requests are NOT excluded: on a clinic's own host they must be rewritten to the public site like any other
+  // request, otherwise every <Link> prefetch would 404.
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|icon.svg|.*\\.(?:png|jpg|jpeg|svg|webp|ico)$).*)"],
 };

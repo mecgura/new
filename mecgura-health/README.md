@@ -1,4 +1,4 @@
-# MECGURA HEALTH — Phase 0 foundation + Phase 1 (multi-tenant clinics)
+# MECGURA HEALTH — foundation, multi-tenancy, website, appointments & OPD (Phases 0–3)
 
 White-label doctor & clinic operating system. **Phase 0 only**: design system, app shell, auth, multi-tenant
 and role foundations, security, audit, error handling. No clinic modules (patients, OPD, appointments,
@@ -106,3 +106,7 @@ NEXT_DIST_DIR=.next-prod npm run build && NEXT_DIST_DIR=.next-prod npx next star
 # CMS: sign in as admin@demo.mecgura.test → Website
 node e2e/phase2-website.mjs     # live checks (needs playwright-core)
 ```
+
+## Phase 3 — appointments, calendar, live OPD & tokens
+Doctor availability, server-side slot calculation, DB-enforced double-booking prevention, day/week/month calendar, reception + doctor live queue with unique daily tokens and priorities, public booking on the clinic website, waiting-room display (tokens only) and a patient token page. Details, rules and roles: [`docs/phase3-appointments-opd.md`](docs/phase3-appointments-opd.md).
+Staff pages: `/appointments`, `/opd`, `/settings/scheduling`. Public (clinic host): `/book-appointment`, `/display/<secret>`, `/token/<token>`. Reminders are events only and Google Calendar is an unconfigured interface — nothing is sent or synced yet.

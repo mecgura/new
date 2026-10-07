@@ -67,6 +67,14 @@ model Tenant {
   faqItems             FaqItem[]
   articles             Article[]
   contactEnquiries     ContactEnquiry[]
+  patients             Patient[]
+  counters             TenantCounter[]
+  doctorSchedules      DoctorSchedule[]
+  availabilityWindows  AvailabilityWindow[]
+  blockedTimes         BlockedTime[]
+  appointments         Appointment[]
+  opdVisits            OpdVisit[]
+  opdSettings          OpdSettings?
 
   @@index([status])
   @@index([clinicType])
@@ -175,12 +183,15 @@ model User {
   updatedAt        DateTime  @updatedAt
   deletedAt        DateTime?
 
-  auditLogs           AuditLog[]
-  doctorProfile       DoctorProfile?
-  staffProfile        StaffProfile?
-  invitations         Invitation[]
-  permissionGrants    UserPermissionGrant[]
-  doctorPublicProfile DoctorPublicProfile?
+  auditLogs            AuditLog[]
+  doctorProfile        DoctorProfile?
+  staffProfile         StaffProfile?
+  invitations          Invitation[]
+  permissionGrants     UserPermissionGrant[]
+  doctorSchedule       DoctorSchedule?
+  appointmentsAsDoctor Appointment[]         @relation("AppointmentDoctor")
+  opdVisitsAsDoctor    OpdVisit[]            @relation("OpdVisitDoctor")
+  doctorPublicProfile  DoctorPublicProfile?
 
   @@index([tenantId, status])
   @@index([tenantId, roleId])
@@ -466,4 +477,223 @@ model ContactEnquiry {
   updatedAt DateTime @updatedAt
 
   @@index([tenantId, status, createdAt])
+}
+
+/// MINIMAL patient registry (identity only — name, mobile, age/DOB, a clinic-unique code). No medical data:
+/// the full patient record (history, documents, timeline) is Phase 4 and extends this model.
+model Patient {
+  id           String        @id @default(cuid())
+  tenantId     String
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  /// Clinic-unique, human-readable, e.g. P-000042
+  code         String
+  name         String
+  /// normalised +91XXXXXXXXXX (not unique: families share a number)
+  phone        String?
+  email        String?
+  /// MALE | FEMALE | OTHER | UNDISCLOSED
+  gender       String?
+  dateOfBirth  DateTime?
+  /// used when only an approximate age is known
+  ageYears     Int?
+  createdById  String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+  appointments Appointment[]
+  opdVisits    OpdVisit[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, phone])
+  @@index([tenantId, name])
+}
+
+/// Atomic per-clinic counters (patient codes, daily tokens, queue order). Incremented inside transactions.
+model TenantCounter {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  key      String
+  value    Int    @default(0)
+
+  @@unique([tenantId, key])
+}
+
+/// Per-doctor booking rules.
+model DoctorSchedule {
+  id               String   @id @default(cuid())
+  tenantId         String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  doctorUserId     String   @unique
+  doctor           User     @relation(fields: [doctorUserId], references: [id], onDelete: Cascade)
+  slotMinutes      Int      @default(15)
+  bufferMinutes    Int      @default(0)
+  maxPerDay        Int?
+  /// offer this doctor on the public website
+  onlineBooking    Boolean  @default(false)
+  advanceDays      Int      @default(30)
+  minNoticeMinutes Int      @default(60)
+  /// shown on the waiting-room display, e.g. "Doctor Room 1"
+  roomLabel        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+/// Weekly working window (several per day = breaks in between). Minutes are clinic-local minutes after midnight.
+model AvailabilityWindow {
+  id           String @id @default(cuid())
+  tenantId     String
+  tenant       Tenant @relation(fields: [tenantId], references: [id])
+  doctorUserId String
+  /// 0 = Sunday … 6 = Saturday
+  weekday      Int
+  startMinutes Int
+  endMinutes   Int
+
+  @@index([tenantId, doctorUserId, weekday])
+}
+
+/// Holiday / leave / closure. doctorUserId null = the whole clinic. Stored in UTC.
+model BlockedTime {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  doctorUserId String?
+  startsAt     DateTime
+  endsAt       DateTime
+  /// HOLIDAY | LEAVE | MEETING | EMERGENCY | CLOSURE | OTHER
+  kind         String   @default("OTHER")
+  reason       String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId, startsAt])
+  @@index([tenantId, doctorUserId, startsAt])
+}
+
+model Appointment {
+  id                 String    @id @default(cuid())
+  tenantId           String
+  tenant             Tenant    @relation(fields: [tenantId], references: [id])
+  /// Short unguessable reference shown to the patient, e.g. AP-7K3QH9XM
+  publicId           String
+  doctorUserId       String
+  doctor             User      @relation("AppointmentDoctor", fields: [doctorUserId], references: [id])
+  /// resolved by STAFF at check-in/creation — never chosen by an anonymous visitor
+  patientId          String?
+  patient            Patient?  @relation(fields: [patientId], references: [id])
+  /// WebsiteService id (validated against the clinic)
+  serviceId          String?
+  /// ONLINE_APPOINTMENT | WALK_IN | FOLLOW_UP | EMERGENCY | OPD | PROCEDURE | OTHER
+  type               String    @default("OPD")
+  /// WEBSITE | PHONE | WALK_IN | RECEPTION | WHATSAPP | REFERRAL | OTHER
+  source             String    @default("RECEPTION")
+  /// REQUESTED | CONFIRMED | CHECKED_IN | WAITING | CALLED | IN_CONSULTATION | COMPLETED | CANCELLED | NO_SHOW | ON_HOLD | SKIPPED
+  status             String    @default("CONFIRMED")
+  /// UTC instants
+  startsAt           DateTime
+  endsAt             DateTime
+  /// "<doctorUserId>|<startsAt ISO>" while the slot is occupied, NULL once CANCELLED/NO_SHOW.
+  /// UNIQUE ⇒ the database itself refuses a second booking of the same doctor+slot (NULLs don't collide).
+  slotLock           String?   @unique
+  /// contact snapshot from the booking form (patient identity is resolved by staff later)
+  contactName        String?
+  contactPhone       String?
+  contactEmail       String?
+  contactDob         String?
+  contactGender      String?
+  reason             String?
+  notes              String?
+  createdById        String?
+  confirmedAt        DateTime?
+  checkedInAt        DateTime?
+  calledAt           DateTime?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancelledById      String?
+  cancellationReason String?
+  noShowAt           DateTime?
+  noShowById         String?
+  noShowReason       String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  opdVisit           OpdVisit?
+
+  @@unique([tenantId, publicId])
+  @@index([tenantId, startsAt])
+  @@index([tenantId, doctorUserId, startsAt])
+  @@index([tenantId, status, startsAt])
+  @@index([patientId])
+}
+
+/// One patient visit in the live queue (walk-in, emergency or checked-in appointment). Hands over to Phase 5 consultation.
+model OpdVisit {
+  id                String       @id @default(cuid())
+  tenantId          String
+  tenant            Tenant       @relation(fields: [tenantId], references: [id])
+  patientId         String
+  patient           Patient      @relation(fields: [patientId], references: [id])
+  doctorUserId      String
+  doctor            User         @relation("OpdVisitDoctor", fields: [doctorUserId], references: [id])
+  /// at most ONE visit per appointment (no duplicate check-ins)
+  appointmentId     String?      @unique
+  appointment       Appointment? @relation(fields: [appointmentId], references: [id])
+  /// ONLINE_APPOINTMENT | WALK_IN | FOLLOW_UP | EMERGENCY | PROCEDURE | OPD | OTHER
+  visitType         String       @default("WALK_IN")
+  /// GENERAL | FOLLOW_UP | EMERGENCY | PROCEDURE | ONLINE_APPOINTMENT | WALK_IN
+  queueType         String       @default("GENERAL")
+  /// NORMAL | HIGH | EMERGENCY
+  priority          String       @default("NORMAL")
+  /// WAITING | CALLED | IN_CONSULTATION | COMPLETED | ON_HOLD | SKIPPED | CANCELLED
+  status            String       @default("WAITING")
+  /// clinic-local day, yyyy-mm-dd
+  tokenDate         String
+  tokenPrefix       String       @default("")
+  tokenNumber       Int
+  tokenLabel        String
+  /// unguessable id for the patient-facing token page
+  publicToken       String       @unique
+  /// monotonic arrival order within the clinic day
+  queueSeq          Int
+  checkedInAt       DateTime     @default(now())
+  calledAt          DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  heldAt            DateTime?
+  skippedAt         DateTime?
+  priorityChangedAt DateTime?
+  note              String?
+  createdById       String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  /// a token number is unique per clinic + day + queue prefix
+  @@unique([tenantId, tokenDate, tokenPrefix, tokenNumber])
+  @@index([tenantId, tokenDate, doctorUserId, status])
+  @@index([tenantId, tokenDate, status])
+  @@index([patientId])
+}
+
+model OpdSettings {
+  id                String   @id @default(cuid())
+  tenantId          String   @unique
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// NUMERIC (07) | PREFIXED (A-007)
+  tokenFormat       String   @default("NUMERIC")
+  tokenPad          Int      @default(2)
+  /// JSON map queueType -> prefix, used when tokenFormat = PREFIXED
+  prefixes          String   @default("{}")
+  voiceAnnouncement Boolean  @default(false)
+  showNextOnDisplay Boolean  @default(true)
+  /// assign a token when an online appointment is booked (default: at clinic check-in)
+  onlineTokens      Boolean  @default(false)
+  /// AUTO_CONFIRM | REQUIRES_CONFIRMATION
+  bookingMode       String   @default("AUTO_CONFIRM")
+  /// secret in the public waiting-room URL (/display/<key>); null = display switched off
+  displayKey        String?  @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }

@@ -42,7 +42,11 @@ export const PERMISSIONS = {
   "patients.edit": { module: "patients", description: "Edit patients" },
 
   "opd.view": { module: "opd", description: "View the live OPD queue" },
-  "opd.manage": { module: "opd", description: "Move tokens and manage the queue" },
+  "opd.manage": { module: "opd", description: "Run the queue for any doctor: call, hold, resume, skip, reassign" },
+  "opd.call": { module: "opd", description: "Call and consult patients in your own queue" },
+  "opd.priority": { module: "opd", description: "Change queue priority and mark emergencies" },
+  "schedule.manage": { module: "appointments", description: "Manage every doctor's availability, blocked time and OPD settings" },
+  "schedule.own": { module: "appointments", description: "Manage your own availability and blocked time" },
 
   "appointments.view": { module: "appointments", description: "View appointments" },
   "appointments.create": { module: "appointments", description: "Book appointments" },
@@ -109,6 +113,6 @@ export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
  * the role (admin/platform powers). Everything else may be granted to e.g. a STAFF member.
  */
 export const NON_GRANTABLE_PERMISSIONS: readonly Permission[] = [
-  "platform.manage", "website.publish", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view",
+  "platform.manage", "website.publish", "schedule.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view",
 ];
 export const GRANTABLE_PERMISSIONS = ALL_PERMISSIONS.filter((p) => !NON_GRANTABLE_PERMISSIONS.includes(p));

@@ -7,6 +7,7 @@ import { withBase } from "@/lib/website/paths";
 import type { PublicArticle, PublicArticleCard, PublicDoctor, PublicService, SiteData } from "@/lib/website/types";
 import type { BaseProps } from "../types";
 import { Btn, Card, CtaRow, Img, PageHeading, Section, ServiceIcon, Stars, addressLines, mapHref, money } from "./parts";
+import { BookingFlow } from "./booking-flow";
 import { ContactForm } from "./contact-form";
 
 const initials = (n: string) => n.replace(/^(dr\.?\s+)/i, "").split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
@@ -387,10 +388,7 @@ export function Legal({ title, text }: BaseProps & { title: string; text: string
   return (<><PageHeading title={title} /><Section><div className="mx-auto max-w-3xl"><Markdown text={text} /></div></Section></>);
 }
 
-/**
- * Online booking arrives with the appointment engine (a later phase). Until then this page is an honest set-up state:
- * it never shows a form, a slot picker or a confirmation.
- */
+/** Online booking. The form only appears when the clinic has switched it on (published doctor + online booking); otherwise an honest "not available" state. */
 export function Appointments({ site, basePath, doctor }: BaseProps & { doctor?: PublicDoctor | null }) {
   const { identity: i } = site;
   return (
@@ -398,10 +396,7 @@ export function Appointments({ site, basePath, doctor }: BaseProps & { doctor?: 
       <PageHeading title="Book an appointment" intro={doctor ? `With ${doctor.name}` : undefined} />
       <Section>
         <div className="mx-auto max-w-2xl space-y-6">
-          <div role="status" className="rounded-card border border-info/30 bg-info-soft p-5">
-            <h2 className="text-lg font-semibold">Online booking isn&apos;t available yet</h2>
-            <p className="mt-1 text-muted">This clinic hasn&apos;t switched on online appointments. Please contact the clinic directly to arrange a visit.</p>
-          </div>
+          <BookingFlow initialDoctor={doctor?.slug} disabled={site.mode === "preview"} />
           <div className="flex flex-wrap gap-3">
             {i.phone && <Btn href={`tel:${i.phone}`}>Call {i.phone}</Btn>}
             {site.whatsappLink && <Btn href={site.whatsappLink} variant="whatsapp" external>WhatsApp</Btn>}

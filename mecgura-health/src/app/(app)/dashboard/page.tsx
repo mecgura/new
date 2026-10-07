@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Building2, Layers, MailPlus, ShieldCheck, Stethoscope, UserRound, UsersRound } from "lucide-react";
+import { Building2, CalendarClock, CalendarDays, CheckCircle2, Hourglass, Layers, MailPlus, ShieldCheck, Stethoscope, UserRound, UsersRound } from "lucide-react";
 import { SetupChecklist } from "@/components/clinic/setup-checklist";
 import { TenantStatusBadge, clinicTypeLabel } from "@/components/domain/badges";
 import { Alert, ButtonLink, Card, CardBody, CardHeader } from "@/components/ui";
 import { requirePagePermission, type TenantRequestContext } from "@/lib/auth/context";
 import { ROLE_LABELS } from "@/lib/permissions";
 import { clinicOverview } from "@/lib/services/overview";
+import { opdStats } from "@/lib/services/opd";
+import { formatInTz } from "@/lib/scheduling/time";
 import { platformStats } from "@/lib/services/clinics";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -45,6 +47,8 @@ export default async function DashboardPage() {
   const tctx = { ...ctx, tenant: ctx.tenant, tenantId: ctx.tenant.id } as TenantRequestContext;
   const o = await clinicOverview(tctx);
   const t = ctx.tenant;
+  const showSched = ctx.permissions.has("appointments.view") || ctx.permissions.has("opd.view");
+  const sched = showSched ? await opdStats(tctx) : null;
   return (
     <div className="space-y-section">
       <div>
@@ -58,6 +62,30 @@ export default async function DashboardPage() {
         <Stat icon={MailPlus} label="Pending invitations" value={o.invited} />
         <Stat icon={UserRound} label="You" value={ROLE_LABELS[ctx.user.role]} />
       </section>
+
+      {sched && (
+        <section aria-label="Today at the clinic" className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="type-section">Today</h2>
+            <div className="flex gap-3">
+              {ctx.permissions.has("appointments.view") && <Link href="/appointments" className="type-label">Appointments →</Link>}
+              {ctx.permissions.has("opd.view") && <Link href="/opd" className="type-label">Live OPD →</Link>}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 md:gap-4">
+            <Stat icon={CalendarDays} label="Appointments today" value={sched.appointmentsToday} />
+            <Stat icon={Hourglass} label="Waiting in queue" value={sched.waiting} />
+            <Stat icon={Stethoscope} label="With the doctor" value={sched.inConsultation} />
+            <Stat icon={CheckCircle2} label="Completed" value={sched.completed} />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 md:gap-4">
+            <Stat icon={CalendarClock} label="Next appointment" value={sched.nextAppointmentAt ? formatInTz(new Date(sched.nextAppointmentAt), sched.tz, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "None booked"} />
+            <Stat icon={MailPlus} label="Waiting for confirmation" value={sched.requested} />
+            <Stat icon={UserRound} label="No-shows today" value={sched.noShows} />
+            <Stat icon={CalendarDays} label="Cancelled today" value={sched.cancelled} />
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-section lg:grid-cols-3">
         <div className="lg:col-span-2"><SetupChecklist items={o.checklist} later={o.later} /></div>

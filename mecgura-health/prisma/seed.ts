@@ -11,6 +11,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { MODULE_KEYS } from "../src/config/modules";
 import sharp from "sharp";
 import { siteContentSchema } from "../src/lib/website/content";
+import { addDays, todayIn, zonedToUtc } from "../src/lib/scheduling/time";
 import { PERMISSIONS, ROLES, ROLE_LABELS, ROLE_PERMISSIONS } from "../src/lib/permissions";
 
 if (process.env.NODE_ENV === "production" || process.env.APP_ENV === "production") {
@@ -64,6 +65,49 @@ async function seedWebsite(tenantId: string, spec: { key: "A" | "B"; name: strin
     await db.doctorProfile.update({ where: { userId: doctor.id }, data: { qualification: "Demo qualification (sample)", specialization: spec.key === "A" ? "General practice (demo)" : "Specialist consultation (demo)", experienceYears: 8, registrationNumber: "DEMO-0000", consultationFee: 500 } });
     await db.doctorPublicProfile.upsert({ where: { userId: doctor.id }, update: { status: "PUBLISHED" }, create: { tenantId, userId: doctor.id, slug: `demo-doctor-${spec.key.toLowerCase()}`, shortBio: "Demo biography. Replace with the doctor's own words.", bio: "## Demo doctor\n\nSample profile text.", education: "Demo education (sample).", certifications: JSON.stringify(["Demo certification"]), languages: JSON.stringify(["English"]), showRegistration: false, status: "PUBLISHED", publishedAt: new Date() } });
   }
+}
+
+/** Demo scheduling: availability, a few DEMO patients, appointments and a small live queue. Idempotent. */
+async function seedScheduling(tenantId: string, key: "A" | "B") {
+  const doctor = await db.user.findFirst({ where: { tenantId, role: { key: "DOCTOR" } } });
+  if (!doctor) return;
+  const tz = "Asia/Kolkata";
+  const today = todayIn(tz);
+  await db.opdVisit.deleteMany({ where: { tenantId } });
+  await db.appointment.deleteMany({ where: { tenantId } });
+  await db.blockedTime.deleteMany({ where: { tenantId } });
+  await db.availabilityWindow.deleteMany({ where: { tenantId } });
+  await db.tenantCounter.deleteMany({ where: { tenantId } });
+  await db.patient.deleteMany({ where: { tenantId } });
+
+  await db.doctorSchedule.upsert({
+    where: { doctorUserId: doctor.id },
+    update: { slotMinutes: 15, onlineBooking: true, roomLabel: key === "A" ? "Consultation Room 1" : "Room B1" },
+    create: { tenantId, doctorUserId: doctor.id, slotMinutes: 15, bufferMinutes: 0, onlineBooking: true, advanceDays: 30, minNoticeMinutes: 30, roomLabel: key === "A" ? "Consultation Room 1" : "Room B1" },
+  });
+  const day = (weekday: number, a: number, b: number) => ({ tenantId, doctorUserId: doctor.id, weekday, startMinutes: a, endMinutes: b });
+  await db.availabilityWindow.createMany({ data: [1, 2, 3, 4, 5].flatMap((w) => [day(w, 10 * 60, 13 * 60), day(w, 14 * 60, 17 * 60)]).concat([day(6, 10 * 60, 13 * 60)]) });
+  await db.opdSettings.upsert({ where: { tenantId }, update: {}, create: { tenantId, tokenFormat: key === "A" ? "NUMERIC" : "PREFIXED", tokenPad: 2, prefixes: "{}", displayKey: `demo-display-${key.toLowerCase()}-${randomBytes(6).toString("hex")}` } });
+
+  const names = ["Demo Patient One", "Demo Patient Two", "Demo Patient Three"];
+  const patients: { id: string }[] = [];
+  for (const [i, name] of names.entries()) patients.push(await db.patient.create({ data: { tenantId, code: `P-${String(i + 1).padStart(6, "0")}`, name, phone: `+9190000000${i + 1}0`, gender: i === 1 ? "FEMALE" : "MALE", ageYears: 30 + i * 12 } }));
+  await db.tenantCounter.create({ data: { tenantId, key: "patient", value: patients.length } });
+
+  const at = (date: string, hh: number, mm: number) => zonedToUtc(date, hh * 60 + mm, tz);
+  const appt = async (date: string, hh: number, mm: number, over: Record<string, unknown>) => {
+    const startsAt = at(date, hh, mm);
+    return db.appointment.create({ data: { tenantId, doctorUserId: doctor.id, startsAt, endsAt: new Date(startsAt.getTime() + 15 * 60000), type: "OPD", source: "RECEPTION", status: "CONFIRMED", slotLock: `${doctor.id}|${startsAt.toISOString()}`, publicId: `AP-DEMO${randomBytes(3).toString("hex").toUpperCase()}`, ...over } });
+  };
+  const tomorrow = addDays(today, 1);
+  await appt(tomorrow, 10, 0, { patientId: patients[0].id });
+  await appt(tomorrow, 10, 15, { contactName: "Demo Online Visitor", contactPhone: "+919000000099", type: "ONLINE_APPOINTMENT", source: "WEBSITE", status: "REQUESTED", reason: "Demo booking request" });
+  await appt(today, 16, 0, { patientId: patients[2].id }); // a confirmed appointment today, ready for check-in
+  const visit = async (n: number, p: number, status: string, extra: Record<string, unknown> = {}) =>
+    db.opdVisit.create({ data: { tenantId, patientId: patients[p].id, doctorUserId: doctor.id, visitType: "WALK_IN", queueType: "WALK_IN", priority: "NORMAL", status, tokenDate: today, tokenPrefix: "", tokenNumber: n, tokenLabel: String(n).padStart(2, "0"), publicToken: `demo${key}${n}${randomBytes(5).toString("hex")}`, queueSeq: n, ...extra } });
+  await visit(1, 0, "COMPLETED", { startedAt: new Date(Date.now() - 40 * 60000), completedAt: new Date(Date.now() - 25 * 60000) });
+  await visit(2, 1, "WAITING");
+  await db.tenantCounter.createMany({ data: [{ tenantId, key: `token:${today}:`, value: 2 }, { tenantId, key: `queue:${today}`, value: 2 }] });
 }
 
 async function main() {
@@ -125,6 +169,7 @@ async function main() {
     await seedWebsite(tenant.id, c.slug === "demo-clinic"
       ? { key: "A", name: c.name, colour: "#0e7c86", hours: { monday: ["09:00", "17:00"], tuesday: ["09:00", "17:00"], wednesday: ["09:00", "17:00"], thursday: ["09:00", "17:00"], friday: ["09:00", "17:00"], saturday: ["09:00", "13:00"], sunday: null }, whatsapp: "911234567890", services: ["General Consultation (demo)", "Follow-up Consultation (demo)", "Health Check-up (demo)"], faq: [["How do I book an appointment? (demo)", "Demo answer: contact the clinic."], ["What should I bring? (demo)", "Demo answer."]] }
       : { key: "B", name: c.name, colour: "#5b21b6", hours: { monday: ["10:00", "19:00"], tuesday: ["10:00", "19:00"], wednesday: ["10:00", "19:00"], thursday: ["10:00", "19:00"], friday: ["10:00", "19:00"], saturday: ["10:00", "19:00"], sunday: null }, services: ["Specialist Consultation (demo)", "Second Opinion (demo)"], faq: [["Do you take walk-ins? (demo)", "Demo answer for clinic B."]] });
+    await seedScheduling(tenant.id, c.slug === "demo-clinic" ? "A" : "B");
   }
   await db.user.upsert({
     where: { email: "platform@demo.mecgura.test" },

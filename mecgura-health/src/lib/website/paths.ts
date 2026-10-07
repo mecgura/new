@@ -11,6 +11,7 @@ const SECTION_ROOTS = ["/about", "/services", "/doctors", "/clinic", "/testimoni
 
 /** Explicit allow-list, so a tenant host can never expose an app route by accident. */
 export function isPublicSitePath(pathname: string): boolean {
+  if (/^\/(display|token)\/[A-Za-z0-9_-]{8,40}\/?$/.test(pathname)) return true; // waiting-room screen + patient token page (secret in the URL)
   if (pathname === "/" || pathname === "/sitemap.xml" || pathname === "/robots.txt") return true;
   return SECTION_ROOTS.some((r) => pathname === r || pathname === `${r}/` || (["/services", "/doctors", "/articles"].includes(r) && pathname.startsWith(`${r}/`)));
 }
@@ -37,3 +38,10 @@ export function resolveSiteRoute(segments: string[] | undefined): SiteRoute | nu
 }
 
 export const withBase = (base: string, path: string) => (path === "/" ? base || "/" : `${base}${path}`);
+
+/** Clinic-tool pages on the clinic's host (not part of the CMS): waiting-room display and patient token page. */
+export function resolveToolRoute(segments: string[] | undefined): { tool: "display" | "token"; key: string } | null {
+  const s = (segments ?? []).filter(Boolean);
+  if (s.length === 2 && (s[0] === "display" || s[0] === "token") && /^[A-Za-z0-9_-]{8,40}$/.test(s[1])) return { tool: s[0], key: s[1] };
+  return null;
+}

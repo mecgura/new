@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Logo } from "@/components/brand/logo";
 import { toMetadata } from "@/lib/website/seo";
-import { resolveSiteRoute } from "@/lib/website/paths";
+import { resolveSiteRoute, resolveToolRoute } from "@/lib/website/paths";
+import { DisplayBoard } from "@/components/scheduling/display-board";
+import { TokenStatus } from "@/components/scheduling/token-status";
 import { brandToCssVars } from "@/theme/tokens";
 import { getOrigin, getPublicSite } from "@/lib/website/request";
 import { resolvePage, SitePage } from "@/website/render";
@@ -13,6 +15,8 @@ type Props = { params: Promise<{ path?: string[] }>; searchParams: Promise<{ pag
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const [{ path }, sp, loaded] = await Promise.all([params, searchParams, getPublicSite()]);
   if (!loaded) return { title: "Not found", robots: { index: false } };
+  const tool = resolveToolRoute(path);
+  if (tool) return { title: tool.tool === "display" ? "Waiting room" : "Your token", robots: { index: false, follow: false }, referrer: "no-referrer" };
   if (loaded.load.kind !== "ok") return { title: loaded.load.kind === "unpublished" ? `${loaded.load.name} — coming soon` : "Not found", robots: { index: false, follow: false } };
   const route = resolveSiteRoute(path);
   if (!route) return { title: "Not found", robots: { index: false } };
@@ -27,7 +31,19 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
 
 export default async function PublicSite({ params, searchParams }: Props) {
   const [{ path }, sp, loaded] = await Promise.all([params, searchParams, getPublicSite()]);
-  if (!loaded || loaded.load.kind === "missing") notFound();
+  if (!loaded) notFound();
+  // clinic tools work even before the marketing website is published (the queue doesn't depend on the CMS)
+  const tool = resolveToolRoute(path);
+  if (tool?.tool === "display") return <DisplayBoard displayKey={tool.key} />;
+  if (tool?.tool === "token") {
+    const brand = loaded.load.kind === "ok" ? loaded.load.site.brand : loaded.load.kind === "unpublished" ? loaded.load.brand : null;
+    return (
+      <div className="brand-scope min-h-dvh bg-app px-4 py-8" style={(brand ? brandToCssVars(brand) : undefined) as React.CSSProperties | undefined}>
+        <main id="content" className="mx-auto max-w-lg"><h1 className="type-page-title mb-4 text-center">Your queue token</h1><TokenStatus token={tool.key} /></main>
+      </div>
+    );
+  }
+  if (loaded.load.kind === "missing") notFound();
   if (loaded.load.kind === "unpublished") {
     const u = loaded.load;
     return (

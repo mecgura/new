@@ -14,6 +14,12 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    // These components load data on mount / when a filter changes (fetch -> setState). That is the intended pattern here;
+    // the rule would force a data-fetching library we deliberately don't use.
+    files: ["src/components/scheduling/**", "src/website/templates/modern-medical/booking-flow.tsx"],
+    rules: { "react-hooks/set-state-in-effect": "off" },
+  },
 ]);
 
 export default eslintConfig;
