@@ -3,6 +3,9 @@ FROM node:22-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1 PRISMA_SCHEMA=prisma/schema.postgres.prisma
+# Placeholder so `prisma generate` / `next build` can read the config; nothing connects at build time.
+# The real DATABASE_URL is injected by docker-compose at run time.
+ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
 COPY package.json package-lock.json prisma.config.ts ./
 COPY prisma ./prisma
 RUN npm ci
