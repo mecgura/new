@@ -1,0 +1,33 @@
+# MECGURA Platform on a VPS: app + PostgreSQL. Put nginx/Caddy in front (see docs/VPS.md).
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mecgura
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: mecgura
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mecgura -d mecgura"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?set NEXT_PUBLIC_APP_URL in .env}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://mecgura:${POSTGRES_PASSWORD}@db:5432/mecgura
+      PRISMA_SCHEMA: prisma/schema.postgres.prisma
+    ports:
+      - "127.0.0.1:3000:3000"
+volumes:
+  dbdata:
