@@ -1,4 +1,5 @@
 import "server-only";
+import { notifyPrescription } from "@/lib/communications/triggers";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import type { TenantRequestContext } from "@/lib/auth/context";
 import { parseJson, sha256, type PrescriptionSnapshot } from "@/lib/clinical/snapshot";
@@ -143,6 +144,7 @@ export async function prescriptionAction(ctx: TenantRequestContext, consultation
   if (input.confirm !== true) throw new AppError("VALIDATION_ERROR", { message: "Confirm “Finalize prescription” to approve it.", fieldErrors: { confirm: "Please confirm." } });
   const out = await db(ctx).$transaction((tx: Client) => finalizePrescriptionTx(ctx, tx, consultationId, { requireReview: true, tz, reason: input.reason }));
   await recordAudit({ action: AUDIT_ACTIONS.PRESCRIPTION_FINALIZED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "prescription", entityId: out!.id, metadata: { number: out!.number, version: out!.version, consultationId } });
+  await notifyPrescription(ctx.tenantId, consultationId);
   return { status: "FINALIZED", number: out!.number, version: out!.version };
 }
 

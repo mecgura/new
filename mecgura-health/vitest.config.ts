@@ -13,6 +13,6 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     fileParallelism: false,
     globalSetup: ["./src/test/global-setup.ts"],
-    env: { DATABASE_URL: `file:${path.resolve(__dirname, ".test-db/test.db")}`, AUTH_SECRET: "test-secret-test-secret-test-secret-123456" },
+    env: { COMMUNICATIONS_INLINE_WORKER: "false", DATABASE_URL: `file:${path.resolve(__dirname, ".test-db/test.db")}`, AUTH_SECRET: "test-secret-test-secret-test-secret-123456" },
   },
 });

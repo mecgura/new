@@ -1,4 +1,5 @@
 import "server-only";
+import { notifyFollowUpCreated } from "@/lib/communications/triggers";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import type { TenantRequestContext } from "@/lib/auth/context";
 import { CLINICAL_TYPES, EDITABLE_STATUS_FOR_START, METHOD_PREF, OPEN_STATUSES, OUTCOME_STATUS, daysBetween, isOpen, type FollowUpType } from "@/lib/followups/core";
@@ -169,6 +170,7 @@ export async function createFollowUp(ctx: TenantRequestContext, raw: unknown) {
   const yr = await yearOf(ctx.tenantId);
   const fu = await tdb.$transaction(async (tx: Client) => insertFollowUp(tx, ctx.tenantId, { patientId: l.patientId, doctorUserId: l.doctorUserId, consultationId: l.consultationId, prescriptionId: l.prescriptionId, investigationOrderId: l.investigationOrderId, labReportId: l.labReportId, doctorOrderId: l.doctorOrderId, type: l.type, title: v.title, description: v.description, doctorNotes: hasClinical(ctx) ? v.doctorNotes : null, notes: v.notes, dueDate, preferredDate: v.preferredDate, priority: v.priority, assignedToId: v.assignedToId, source: l.source, createdById: ctx.user.id }, yr, ctx.user.id));
   await recordAudit({ action: AUDIT_ACTIONS.FOLLOWUP_CREATED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "followup", entityId: fu!.id, metadata: { number: fu!.followUpNumber, type: l.type, source: l.source, priority: v.priority, assigned: !!v.assignedToId } });
+  await notifyFollowUpCreated(ctx.tenantId, fu!.id);
   return { id: fu!.id, followUpNumber: fu!.followUpNumber };
 }
 

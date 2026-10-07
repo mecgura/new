@@ -22,7 +22,7 @@ const eslintConfig = defineConfig([
   },
   {
     // Pharmacy services work on the `Client = any` tenant-scoped Prisma client (same pattern as every other service); result rows are typed at the boundary.
-    files: ["src/lib/services/pharmacy-*.ts", "src/lib/services/portal-*.ts"],
+    files: ["src/lib/services/pharmacy-*.ts", "src/lib/services/portal-*.ts", "src/lib/services/comms-*.ts", "src/lib/communications/**/*.ts"],
     rules: { "@typescript-eslint/no-explicit-any": "off" },
   },
 ]);

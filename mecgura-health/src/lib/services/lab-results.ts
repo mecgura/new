@@ -1,4 +1,5 @@
 import "server-only";
+import { notifyReportReleased } from "@/lib/communications/triggers";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import type { TenantRequestContext } from "@/lib/auth/context";
 import { parseJson, sha256 } from "@/lib/clinical/snapshot";
@@ -175,6 +176,7 @@ export async function reportAction(ctx: TenantRequestContext, orderId: string, r
       return { id: o.report.id as string, version, reportNumber: o.report.reportNumber as string };
     });
     await recordAudit({ action: out.version > 1 ? AUDIT_ACTIONS.REPORT_AMENDED : AUDIT_ACTIONS.REPORT_RELEASED, tenantId, actorId: uid, entityType: "lab_report", entityId: out.id, metadata: { orderId, version: out.version } });
+    await notifyReportReleased(tenantId, out.id);
     return out;
   }
 

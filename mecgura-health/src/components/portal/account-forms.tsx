@@ -8,23 +8,28 @@ import { apiFetch } from "@/lib/api/client";
 import { dayLabel } from "./portal-labels";
 
 /* ------------------------------ communication preferences ------------------------------ */
-interface Prefs { categories: { appointments: boolean; followUps: boolean; billing: boolean; reports: boolean; general: boolean }; channels: { email: string; sms: string; whatsapp: string; phone: string }; configured: { email: boolean; sms: boolean; whatsapp: boolean }; note: string }
+interface Prefs { categories: { appointments: boolean; followUps: boolean; billing: boolean; reports: boolean; general: boolean }; channels: { email: string; sms: string; whatsapp: string; phone: string }; configured: { email: boolean; sms: boolean; whatsapp: boolean }; language: string | null; note: string }
 const CATS: [keyof Prefs["categories"], string, string][] = [["appointments", "Appointments", "Confirmed, changed or cancelled"], ["followUps", "Follow-up reminders", "When a check-up is due"], ["billing", "Bills and payments", "New bills and payments received"], ["reports", "Lab reports", "When a report is ready"], ["general", "Other clinic updates", "Prescriptions and general messages"]];
 const CH: [keyof Prefs["channels"], string][] = [["email", "Email"], ["sms", "SMS"], ["whatsapp", "WhatsApp"], ["phone", "Phone call"]];
 export function PreferencesForm({ initial }: { initial: Prefs }) {
   const toast = useToast(); const [p, setP] = useState(initial); const [busy, setBusy] = useState(false);
-  async function save(next: Prefs) { setP(next); setBusy(true); const r = await apiFetch<Prefs>("/api/patient/preferences", { method: "PUT", body: JSON.stringify({ categories: next.categories, channels: Object.fromEntries(Object.entries(next.channels).filter(([, v]) => v !== "UNKNOWN")) }) }); setBusy(false); if (!r.ok) { toast({ tone: "danger", title: r.error.message }); return; } setP(r.data); toast({ tone: "success", title: "Saved" }); }
+  async function save(next: Prefs) { setP(next); setBusy(true); const r = await apiFetch<Prefs>("/api/patient/preferences", { method: "PUT", body: JSON.stringify({ categories: next.categories, channels: Object.fromEntries(Object.entries(next.channels).filter(([, v]) => v !== "UNKNOWN")), ...(next.language ? { language: next.language } : {}) }) }); setBusy(false); if (!r.ok) { toast({ tone: "danger", title: r.error.message }); return; } setP(r.data); toast({ tone: "success", title: "Saved" }); }
   return (
     <div className="space-y-5">
       <section className="rounded-2xl border border-line bg-surface">
-        <div className="border-b border-line px-4 py-3"><h2 className="type-card-title">What should appear in your notifications?</h2><p className="type-caption">These show up in the bell inside this portal.</p></div>
+        <div className="border-b border-line px-4 py-3"><h2 className="type-card-title">Which notifications do you want?</h2><p className="type-caption">Applies to the bell in this portal and to any message the clinic sends you.</p></div>
         <ul className="divide-y divide-line">{CATS.map(([k, l, d]) => <li key={k} className="flex items-center justify-between gap-3 px-4 py-3"><div><p className="type-label">{l}</p><p className="type-caption">{d}</p></div><Toggle label={l} checked={p.categories[k]} disabled={busy} onChange={(v) => save({ ...p, categories: { ...p.categories, [k]: v } })} /></li>)}</ul>
+      </section>
+      <section className="rounded-2xl border border-line bg-surface p-4">
+        <label className="type-label" htmlFor="pref-lang">Language for messages</label>
+        <select id="pref-lang" className="mt-2 block min-h-11 w-full rounded-lg border border-line bg-surface px-3" value={p.language ?? ""} disabled={busy} onChange={(e) => save({ ...p, language: e.target.value || null })}><option value="">Clinic default</option><option value="en">English</option><option value="hi">हिन्दी (Hindi)</option><option value="pa">ਪੰਜਾਬੀ (Punjabi)</option></select>
+        <p className="type-caption mt-1">Where the clinic has the message in your language, you receive it in that language.</p>
       </section>
       <section className="rounded-2xl border border-line bg-surface">
         <div className="border-b border-line px-4 py-3"><h2 className="type-card-title">How may the clinic contact you?</h2></div>
         <Alert tone="info" className="m-4">{p.note}</Alert>
         <ul className="divide-y divide-line"><li className="flex items-center justify-between gap-3 px-4 py-3"><span className="type-label inline-flex items-center gap-2"><Bell aria-hidden className="size-4" />In this portal</span><span className="type-caption">Always on</span></li>
-          {CH.map(([k, l]) => <li key={k} className="flex items-center justify-between gap-3 px-4 py-3"><div><p className="type-label">{l}</p><p className="type-caption">{(k === "email" || k === "sms" || k === "whatsapp") && !p.configured[k] ? "Not in use yet — your choice is saved" : "Your choice"}</p></div><Toggle label={`Allow ${l}`} checked={p.channels[k] === "ALLOWED"} disabled={busy} onChange={(v) => save({ ...p, channels: { ...p.channels, [k]: v ? "ALLOWED" : "NOT_ALLOWED" } })} /></li>)}</ul>
+          {CH.map(([k, l]) => <li key={k} className="flex items-center justify-between gap-3 px-4 py-3"><div><p className="type-label">{l}</p><p className="type-caption">{(k === "email" || k === "sms" || k === "whatsapp") && !p.configured[k] ? "The clinic is not using this yet — your choice is saved" : k === "whatsapp" ? "Only if you switch it on" : k === "phone" ? "Your choice" : "On unless you switch it off"}</p></div><Toggle label={`Allow ${l}`} checked={k === "email" || k === "sms" ? p.channels[k] !== "NOT_ALLOWED" : p.channels[k] === "ALLOWED"} disabled={busy} onChange={(v) => save({ ...p, channels: { ...p.channels, [k]: v ? "ALLOWED" : "NOT_ALLOWED" } })} /></li>)}</ul>
       </section>
     </div>
   );

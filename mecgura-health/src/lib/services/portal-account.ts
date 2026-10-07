@@ -9,6 +9,7 @@ import { consentSchema, correctionSchema, deactivationSchema, prefsSchema, profi
 import { nextCounter, type Client } from "./clinic-shared";
 import { AUDIT_ACTIONS, clinicContact, iso, loadPortalSettings, paudit, pdb } from "./portal-core";
 import { RELEASED_REPORT } from "./portal-records";
+import { usableChannels } from "@/lib/communications/readiness";
 
 const pad = (n: number) => String(n).padStart(6, "0");
 const parse = <T,>(s: string | null | undefined, d: T): T => { try { return s ? (JSON.parse(s) as T) : d; } catch { return d; } };
@@ -84,15 +85,19 @@ export async function cancelMyRequest(ctx: PatientContext, id: string) {
 const DEFAULT_CATEGORIES = { appointments: true, followUps: true, billing: true, reports: true, general: true };
 /** Preferences only. No external channel is configured, so only "In-app" is active; the others record the patient's choice for later and are labelled as not yet in use. */
 export async function getPreferences(ctx: PatientContext) {
-  const tdb = pdb(ctx); const [acc, p] = await Promise.all([tdb.patientAccount.findFirst({ where: { id: ctx.accountId }, select: { prefs: true } }), tdb.patient.findFirst({ where: { id: ctx.patientId }, select: { prefEmail: true, prefSms: true, prefWhatsapp: true, prefPhone: true } })]);
+  const tdb = pdb(ctx); const [acc, p, usable] = await Promise.all([tdb.patientAccount.findFirst({ where: { id: ctx.accountId }, select: { prefs: true } }), tdb.patient.findFirst({ where: { id: ctx.patientId }, select: { prefEmail: true, prefSms: true, prefWhatsapp: true, prefPhone: true } }), usableChannels(ctx.tenantId)]);
   const ch = (v: string) => (v === "NOT_ALLOWED" ? "NOT_ALLOWED" : v === "ALLOWED" ? "ALLOWED" : "UNKNOWN");
-  return { categories: { ...DEFAULT_CATEGORIES, ...parse<Record<string, boolean>>(acc?.prefs, {}) }, channels: { email: ch(p.prefEmail), sms: ch(p.prefSms), whatsapp: ch(p.prefWhatsapp), phone: ch(p.prefPhone) }, inApp: { available: true }, configured: { email: false, sms: false, whatsapp: false, otp: otpConfigured() }, note: "The clinic doesn't send email, SMS or WhatsApp messages from this system yet. Your choices are saved for when it does." };
+  const stored = parse<Record<string, unknown>>(acc?.prefs, {}); const cats = { ...DEFAULT_CATEGORIES }; for (const k of Object.keys(DEFAULT_CATEGORIES) as (keyof typeof DEFAULT_CATEGORIES)[]) if (typeof stored[k] === "boolean") cats[k] = stored[k] as boolean;
+  const language = ["en", "hi", "pa"].includes(stored.language as string) ? (stored.language as string) : null;
+  const on = [usable.WHATSAPP && "WhatsApp", usable.SMS && "SMS", usable.EMAIL && "email"].filter(Boolean) as string[];
+  return { categories: cats, channels: { email: ch(p.prefEmail), sms: ch(p.prefSms), whatsapp: ch(p.prefWhatsapp), phone: ch(p.prefPhone) }, inApp: { available: true }, configured: { email: usable.EMAIL, sms: usable.SMS, whatsapp: usable.WHATSAPP, otp: otpConfigured() }, language,
+    note: on.length ? `${ctx.tenant.name} can message you by ${on.join(", ")}. WhatsApp needs your OK below; SMS and email are used unless you switch them off. Messages never contain medical results — they point you to this portal.` : "The clinic isn't sending WhatsApp, SMS or email messages yet. Your choices are saved for when it does." };
 }
 export async function savePreferences(ctx: PatientContext, raw: unknown) {
   const v = parseOrThrow(prefsSchema, raw); const tdb = pdb(ctx);
-  if (v.categories) { const acc = await tdb.patientAccount.findFirst({ where: { id: ctx.accountId }, select: { prefs: true } }); await tdb.patientAccount.update({ where: { id: ctx.accountId }, data: { prefs: JSON.stringify({ ...parse<Record<string, boolean>>(acc?.prefs, {}), ...v.categories }) } }); }
+  if (v.categories || v.language) { const acc = await tdb.patientAccount.findFirst({ where: { id: ctx.accountId }, select: { prefs: true } }); await tdb.patientAccount.update({ where: { id: ctx.accountId }, data: { prefs: JSON.stringify({ ...parse<Record<string, unknown>>(acc?.prefs, {}), ...(v.categories ?? {}), ...(v.language ? { language: v.language } : {}) }) } }); }
   if (v.channels) { const d: Record<string, string> = {}; if (v.channels.email) d.prefEmail = v.channels.email; if (v.channels.sms) d.prefSms = v.channels.sms; if (v.channels.whatsapp) d.prefWhatsapp = v.channels.whatsapp; if (v.channels.phone) d.prefPhone = v.channels.phone; if (Object.keys(d).length) await tdb.patient.update({ where: { id: ctx.patientId }, data: d }); }
-  await paudit(ctx, AUDIT_ACTIONS.PORTAL_PREFERENCES_CHANGED, "patient_account", ctx.accountId, { categories: Object.keys(v.categories ?? {}), channels: Object.keys(v.channels ?? {}) });
+  await paudit(ctx, AUDIT_ACTIONS.PORTAL_PREFERENCES_CHANGED, "patient_account", ctx.accountId, { categories: Object.keys(v.categories ?? {}), channels: Object.keys(v.channels ?? {}), language: !!v.language });
   return getPreferences(ctx);
 }
 

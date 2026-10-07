@@ -2278,3 +2278,143 @@ model PortalSettings {
   consentVersion    String   @default("v1")
   updatedAt         DateTime @updatedAt
 }
+
+/// Phase 11 — outbound patient communication (WhatsApp / SMS / email). Provider CREDENTIALS are never stored here: they come from environment variables only.
+model CommunicationSettings {
+  id                 String   @id @default(cuid())
+  tenantId           String   @unique
+  whatsappEnabled    Boolean  @default(false)
+  smsEnabled         Boolean  @default(false)
+  emailEnabled       Boolean  @default(false)
+  /// JSON array: which channel to try first, in order. Only ONE channel is used per message (no spamming on every channel).
+  channelOrder       String   @default("[\"WHATSAPP\",\"SMS\",\"EMAIL\"]")
+  /// name shown to the patient as the sender (falls back to the clinic name)
+  senderName         String?
+  replyTo            String?
+  defaultLanguage    String   @default("en")
+  /// JSON: { "<EVENT>": true|false } overrides of the built-in per-event defaults
+  eventToggles       String   @default("{}")
+  /// JSON array of minutes before an appointment at which a reminder is sent, e.g. [1440,120]
+  reminderOffsets    String   @default("[1440]")
+  quietEnabled       Boolean  @default(false)
+  /// minutes after local midnight, clinic timezone
+  quietStartMin      Int      @default(1320)
+  quietEndMin        Int      @default(480)
+  /// JSON: { "WHATSAPP": "SMS" } — used only when explicitly configured, and only if the patient allows the fallback channel
+  fallbackRules      String   @default("{}")
+  maxRetries         Int      @default(3)
+  /// per patient per channel per 24 h (security messages excluded)
+  dailyCapPerPatient Int      @default(8)
+  updatedAt          DateTime @updatedAt
+}
+
+model CommunicationTemplate {
+  id                 String   @id @default(cuid())
+  tenantId           String
+  /// WHATSAPP | SMS | EMAIL
+  channel            String
+  eventType          String
+  name               String
+  /// en | hi | pa
+  language           String   @default("en")
+  subject            String?
+  body               String
+  /// WhatsApp: the provider-APPROVED template name; SMS: the operator (DLT) template id. Required before WhatsApp can send.
+  providerTemplateId String?
+  /// JSON array: ordered variable names (WhatsApp positional parameters follow this order)
+  variables          String   @default("[]")
+  /// DRAFT | ACTIVE | INACTIVE | ARCHIVED
+  status             String   @default("DRAFT")
+  isDefault          Boolean  @default(false)
+  createdById        String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([tenantId, channel, eventType, language, name])
+  @@index([tenantId, channel, eventType, status])
+}
+
+model CommunicationMessage {
+  id                String                 @id @default(cuid())
+  tenantId          String
+  patientId         String?
+  /// WHATSAPP | SMS | EMAIL
+  channel           String
+  eventType         String
+  /// TRANSACTIONAL | SECURITY | MARKETING
+  category          String                 @default("TRANSACTIONAL")
+  /// LOW | NORMAL | HIGH | CRITICAL
+  priority          String                 @default("NORMAL")
+  templateId        String?
+  language          String                 @default("en")
+  entityType        String?
+  entityId          String?
+  recipient         String
+  subject           String?
+  /// rendered text actually sent (names, dates and portal links only — never results, diagnoses or secrets)
+  body              String
+  /// the portal link that was included, if any (no medical data in it)
+  link              String?
+  /// JSON { eventKey, vars, linkPath } — the non-sensitive values the text was built from, so a retry / fallback / resend can rebuild it in another channel or language
+  context           String?
+  provider          String?
+  providerMessageId String?
+  /// QUEUED | PROCESSING | RETRYING | SENT | DELIVERED | READ | FAILED | CANCELLED | SKIPPED
+  status            String                 @default("QUEUED")
+  scheduledAt       DateTime               @default(now())
+  nextAttemptAt     DateTime?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  failedAt          DateTime?
+  /// short machine code (PROVIDER_NOT_CONFIGURED, NO_CONSENT, PROVIDER_REJECTED …) — never a stack trace or credential
+  failureCode       String?
+  failureReason     String?
+  attempts          Int                    @default(0)
+  maxAttempts       Int                    @default(3)
+  /// idempotency: the same business event + channel can never create two messages
+  dedupeKey         String
+  fallbackOfId      String?
+  resendOfId        String?
+  createdById       String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  attemptsLog       CommunicationAttempt[]
+
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, status, scheduledAt])
+  @@index([tenantId, patientId, createdAt])
+  @@index([tenantId, channel, eventType, createdAt])
+  @@index([entityType, entityId])
+  @@index([provider, providerMessageId])
+  @@index([status, nextAttemptAt])
+}
+
+/// Delivery history of one message: every state change, with the provider's (safe) code.
+model CommunicationAttempt {
+  id        String               @id @default(cuid())
+  tenantId  String
+  messageId String
+  message   CommunicationMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  status    String
+  /// PROVIDER | WEBHOOK | SYSTEM
+  source    String               @default("SYSTEM")
+  code      String?
+  note      String?
+  createdAt DateTime             @default(now())
+
+  @@index([tenantId, messageId, createdAt])
+}
+
+/// Inbound provider callbacks. `eventKey` makes every callback idempotent and replay-proof. Not tenant-scoped: it is written before the message (and so the clinic) is known.
+model CommunicationWebhookEvent {
+  id         String   @id @default(cuid())
+  provider   String
+  eventKey   String   @unique
+  messageId  String?
+  status     String?
+  outcome    String
+  receivedAt DateTime @default(now())
+
+  @@index([provider, receivedAt])
+}

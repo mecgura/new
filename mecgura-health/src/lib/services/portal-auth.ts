@@ -1,4 +1,5 @@
 import "server-only";
+import { notifyAccount } from "@/lib/communications/triggers";
 import { createHmac } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { TenantRequestContext } from "@/lib/auth/context";
@@ -53,6 +54,7 @@ export async function issuePortalInvite(ctx: TenantRequestContext, patientId: st
     await tx.patientInvite.create({ data: { tenantId: ctx.tenantId, patientId, codeHash: hashCode(code), purpose, expiresAt, createdById: ctx.user.id } });
   });
   await recordAudit({ action: AUDIT_ACTIONS.PORTAL_INVITE_ISSUED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "patient", entityId: patientId, metadata: { purpose } });
+  if (purpose === "ACCESS_RESET") await notifyAccount(ctx.tenantId, patientId, "reset_issued", patientId);
   return { code: fmt(code), purpose, expiresAt: expiresAt.toISOString(), hours: INVITE_HOURS };
 }
 export async function setPortalAccountStatus(ctx: TenantRequestContext, patientId: string, action: "suspend" | "reactivate") {
@@ -109,6 +111,7 @@ export async function activatePortalAccount(raw: unknown, ip: string | null) {
       return { accountId: acc.id, userId: user.id, reset: false };
     });
     await recordAudit({ action: AUDIT_ACTIONS.PORTAL_ACTIVATED, tenantId, actorId: result.userId, entityType: "patient_account", entityId: result.accountId, metadata: { reset: result.reset } });
+    await notifyAccount(tenantId, patient.id, result.reset ? "reset_done" : "activated", result.accountId);
     return { identifier: v.identifier, reset: result.reset };
   } catch (e) {
     if (isUniqueViolation(e)) throw new AppError("CONFLICT", { message: `This ${id.kind === "email" ? "email address" : "mobile number"} is already used for another portal account. Use a different one that the clinic has on file for you, or ask the clinic for help.` });
@@ -132,10 +135,12 @@ export async function changePortalPassword(ctx: PatientContext, raw: unknown) {
   const passwordHash = await bcrypt.hash(v.next, 12);
   await db.$transaction([db.user.update({ where: { id: ctx.user.id }, data: { passwordHash, failedLoginCount: 0, lockedUntil: null } }), db.patientAccount.update({ where: { id: ctx.accountId }, data: { passwordChangedAt: new Date(), sessionsValidFrom: new Date() } })]);
   await paudit(ctx, AUDIT_ACTIONS.PORTAL_SECURITY_CHANGED, "patient_account", ctx.accountId, { change: "credentials" });
+  await notifyAccount(ctx.tenantId, ctx.patientId, "password_changed", ctx.accountId);
   return { signedOut: true }; // every session, including this one, must sign in again
 }
 export async function logoutEverywhere(ctx: PatientContext) {
   await db.patientAccount.update({ where: { id: ctx.accountId }, data: { sessionsValidFrom: new Date() } });
   await paudit(ctx, AUDIT_ACTIONS.PORTAL_SECURITY_CHANGED, "patient_account", ctx.accountId, { change: "logout_everywhere" });
+  await notifyAccount(ctx.tenantId, ctx.patientId, "logout_all", ctx.accountId);
   return { signedOut: true };
 }

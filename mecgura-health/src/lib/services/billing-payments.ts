@@ -1,4 +1,5 @@
 import "server-only";
+import { notifyPayment } from "@/lib/communications/triggers";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import type { TenantRequestContext } from "@/lib/auth/context";
 import { COLLECTIBLE, dueOf } from "@/lib/billing/money";
@@ -60,6 +61,7 @@ export async function recordPayment(ctx: TenantRequestContext, invoiceId: string
       });
       await recordAudit({ action: AUDIT_ACTIONS.PAYMENT_RECORDED, tenantId, actorId: ctx.user.id, entityType: "payment", entityId: out.id, metadata: { number: out.paymentNumber, invoiceId, amountMinor: v.amountMinor, method: v.method } });
       await recordAudit({ action: AUDIT_ACTIONS.RECEIPT_GENERATED, tenantId, actorId: ctx.user.id, entityType: "payment", entityId: out.id, metadata: { receipt: out.receiptNumber } });
+      await notifyPayment(tenantId, out.id);
       return out;
     } catch (e) {
       if (isUniqueViolation(e)) {

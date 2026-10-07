@@ -40,6 +40,7 @@ export const correctionSchema = z.object({
 export const deactivationSchema = z.object({ reason: requiredText("Reason", { max: 500, min: 3 }) });
 
 export const prefsSchema = z.object({
+  language: z.enum(["en", "hi", "pa"], { error: "Choose English, Hindi or Punjabi." }).optional(),
   categories: z.object({ appointments: z.boolean(), followUps: z.boolean(), billing: z.boolean(), reports: z.boolean(), general: z.boolean() }).partial().optional(),
   channels: z.object({ email: z.enum(["ALLOWED", "NOT_ALLOWED"]), sms: z.enum(["ALLOWED", "NOT_ALLOWED"]), whatsapp: z.enum(["ALLOWED", "NOT_ALLOWED"]), phone: z.enum(["ALLOWED", "NOT_ALLOWED"]) }).partial().optional(),
 });

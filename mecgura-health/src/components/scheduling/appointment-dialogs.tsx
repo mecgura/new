@@ -1,4 +1,5 @@
 "use client";
+import { CommunicationStatus } from "@/components/communications/communication-status";
 import { BillingStatus } from "@/components/billing/billing-status";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -120,6 +121,7 @@ export function AppointmentDetailModal({ id, onClose, perms, today, doctors, onC
             {a.cancellationReason && <><dt className="text-muted">Cancelled</dt><dd>{a.cancellationReason}</dd></>}
           </dl>
           {a.patientId && <BillingStatus kind="appointment" id={a.id} />}
+          {a.patientId && <CommunicationStatus appointmentId={a.id} />}
           {msg && <Alert tone="danger">{msg}</Alert>}
 
           {!panel && (

@@ -106,6 +106,10 @@ async function seedScheduling(tenantId: string, key: "A" | "B") {
   await db.followUp.deleteMany({ where: { tenantId } }); // cascades contacts + events
   await db.recall.deleteMany({ where: { tenantId } });
   await db.followUpSettings.deleteMany({ where: { tenantId } });
+  await db.communicationAttempt.deleteMany({ where: { tenantId } });
+  await db.communicationMessage.deleteMany({ where: { tenantId } });
+  await db.communicationTemplate.deleteMany({ where: { tenantId } });
+  await db.communicationSettings.deleteMany({ where: { tenantId } });
   await db.patientInvite.deleteMany({ where: { tenantId } });
   await db.patientRequest.deleteMany({ where: { tenantId } });
   await db.patientAccount.deleteMany({ where: { tenantId } });

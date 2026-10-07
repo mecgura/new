@@ -15,7 +15,9 @@ const REASONS: Record<string, string> = { expired: "Your session has ended. Plea
 export default async function PortalLoginPage({ searchParams }: { searchParams: Promise<{ clinic?: string; reason?: string; callbackUrl?: string }> }) {
   const sp = await searchParams; const { ctx } = await getPatientAccess();
   if (ctx) redirect(safePortalPath(sp.callbackUrl));
-  const tenant = await portalPublicTenant(sp.clinic);
+  // message links look like /portal/appointments/x?clinic=slug — carry that clinic through the login redirect
+  let cb: string | null = null; try { cb = sp.callbackUrl ? new URL(sp.callbackUrl, "http://x").searchParams.get("clinic") : null; } catch { /* ignore */ }
+  const tenant = await portalPublicTenant(sp.clinic ?? cb ?? undefined);
   const fromHost = !!tenant?.fromHost;
   return (
     <PublicFrame tenant={tenant} title="Patient sign in" subtitle="See your appointments, prescriptions, reports and bills.">

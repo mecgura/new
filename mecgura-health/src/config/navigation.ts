@@ -22,6 +22,7 @@ export interface NavItemConfig {
 export const NAV_ITEMS: readonly NavItemConfig[] = [
   { module: "dashboard", label: "Dashboard", href: "/dashboard", icon: "dashboard", permission: "dashboard.view" },
   { module: "platform", label: "Clinics", href: "/platform/clinics", icon: "clinics", permission: "platform.manage" },
+  { module: "platform", label: "Communications", href: "/platform/communications", icon: "communications", permission: "platform.manage" },
   { module: "team", label: "Team", href: "/team", icon: "team", permission: "users.view" },
   { module: "patients", label: "Patients", href: "/patients", icon: "patients", permission: "patients.view" },
   { module: "patients", label: "Portal requests", href: "/patients/requests", icon: "patients", permission: "portal.manage" },

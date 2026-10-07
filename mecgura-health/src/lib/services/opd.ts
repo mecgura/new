@@ -1,4 +1,5 @@
 import "server-only";
+import { notifyOpd } from "@/lib/communications/triggers";
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
@@ -97,6 +98,7 @@ export async function registerVisit(ctx: TenantRequestContext, raw: unknown) {
     queueType, priority: input.emergency ? "EMERGENCY" : "NORMAL", note: input.note, createdById: ctx.user.id,
   });
   await auditVisit(ctx, visit);
+  await notifyOpd(ctx.tenantId, visit.id, "checked_in"); // off unless the clinic enables it; queued only
   return { id: visit.id, token: visit.tokenLabel as string, publicToken: visit.publicToken as string, priority: visit.priority as Priority };
 }
 
@@ -131,6 +133,7 @@ export async function checkInAppointment(ctx: TenantRequestContext, a: Appointme
   }
   await recordAudit({ action: AUDIT_ACTIONS.PATIENT_CHECKED_IN, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "appointment", entityId: a.id, metadata: { queueNo: visit.tokenLabel } });
   await auditVisit(ctx, visit, a.id);
+  await notifyOpd(ctx.tenantId, visit.id, "checked_in");
   return { status: "WAITING", token: visit.tokenLabel as string, visitId: visit.id as string };
 }
 
@@ -224,6 +227,7 @@ async function moveVisit(ctx: TenantRequestContext, v: Awaited<ReturnType<typeof
     }
   });
   await recordAudit({ action: (AUDIT_FOR[action] ?? AUDIT_ACTIONS.OPD_STATUS_CHANGED) as never, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "opd_visit", entityId: v.id, metadata: { queueNo: v.tokenLabel, from, to, action } });
+  if (to === "CALLED") await notifyOpd(ctx.tenantId, v.id, "called");
   return { status: to };
 }
 

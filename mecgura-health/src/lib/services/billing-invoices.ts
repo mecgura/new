@@ -1,4 +1,5 @@
 import "server-only";
+import { notifyInvoiceIssued } from "@/lib/communications/triggers";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import type { TenantRequestContext } from "@/lib/auth/context";
 import { COLLECTIBLE, computeInvoice, deriveInvoiceStatus, dueOf, isOverdue, MoneyError, type Discount, type LineInput } from "@/lib/billing/money";
@@ -160,6 +161,7 @@ export async function issueInvoice(ctx: TenantRequestContext, id: string) {
     await addInvoiceEvent(tx, ctx.tenantId, cur, "ISSUED", ctx.user.id, { amountMinor: cur.totalMinor });
   });
   await recordAudit({ action: AUDIT_ACTIONS.INVOICE_ISSUED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "invoice", entityId: id, metadata: { number: cur.invoiceNumber, totalMinor: cur.totalMinor, taxMode: cur.taxMode } });
+  await notifyInvoiceIssued(ctx.tenantId, id);
   return { status: "ISSUED" };
 }
 

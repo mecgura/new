@@ -14,6 +14,7 @@ import { autoBill } from "./billing-invoices";
 import { syncConsultationFollowUp } from "./followups";
 import { queueAction } from "./opd";
 import { finalizePrescriptionTx, prescriptionSummary } from "./prescription";
+import { notifyPrescription } from "@/lib/communications/triggers";
 
 /**
  * Doctor consultation. Rules enforced here (never in the browser):
@@ -237,6 +238,7 @@ export async function consultationAction(ctx: TenantRequestContext, id: string, 
       });
       await audit(AUDIT_ACTIONS.CONSULTATION_FINALIZED, { version: out.version, prescription: out.rx?.number ?? null });
       if (out.rx) await recordAudit({ action: AUDIT_ACTIONS.PRESCRIPTION_FINALIZED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "prescription", entityId: out.rx.id, metadata: { number: out.rx.number, version: out.rx.version, consultationId: id } });
+      if (out.rx) await notifyPrescription(ctx.tenantId, id); // queued after commit; a messaging problem can never undo the finalization
       await autoBill(ctx, "consultation", id); // only when the clinic switched automatic draft invoices on
       await syncConsultationFollowUp(ctx, id); // the doctor's own follow-up plan becomes one follow-up task
       // OPD queue: complete the visit through the normal Phase 3 rules; if the queue has moved on (e.g. already completed) the consultation stays finalized
