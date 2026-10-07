@@ -1,0 +1,199 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-base: #ffffff;
+  --color-surface: #f2f7f2;
+  --color-surface-2: #e8f0e8;
+  --color-line: #dfe8df;
+  --color-accent: #78ce57;
+  --color-accent-2: #10b981;
+  /* MECGURA brand green — sampled from the official logo */
+  --color-brand-100: #effbea;
+  --color-brand-200: #d6f3cb;
+  --color-brand-300: #a9e498;
+  --color-brand-400: #78ce57;
+  --color-brand-500: #57b53e;
+  --color-brand-600: #3f9430;
+  --color-brand-700: #337a27;
+  --color-brand-800: #2a6122;
+  --color-brand-900: #245a20;
+  --color-ink: #0c160d;
+  --color-muted: #4c5c4f;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-space), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-base);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Body MUST flip with the theme. Plain CSS beats layered Tailwind
+   utilities, so this explicit pair guarantees it ( utilities alone
+   lose to the `body` rule above). */
+.dark body {
+  background-color: #0a0a0f;
+  color: #f4f4f6;
+  color-scheme: dark;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+::selection {
+  background: rgba(120, 206, 87, 0.35);
+}
+
+/* Visible focus states for accessibility */
+:focus-visible {
+  outline: 2px solid #3f9430;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Subtle glow helpers */
+.glow-accent {
+  box-shadow: 0 0 24px rgba(120, 206, 87, 0.35), 0 8px 32px rgba(12, 22, 13, 0.08);
+}
+
+.card-hover {
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.card-hover:hover {
+  transform: translateY(-3px);
+  border-color: rgba(87, 181, 62, 0.55);
+  box-shadow: 0 12px 32px rgba(12, 22, 13, 0.1), 0 0 20px rgba(120, 206, 87, 0.15);
+}
+
+:root {
+  --grid-line: rgba(12, 22, 13, 0.055);
+}
+
+.dark {
+  --grid-line: rgba(255, 255, 255, 0.05);
+}
+
+.hero-grid {
+  background-image: linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 90% 80% at 50% 20%, black 40%, transparent 100%);
+}
+
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float-slow {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* =====================================================================
+   MECGURA PRODUCT DESIGN SYSTEM (app shell: /dashboard, /settings, /admin)
+   Single source of truth for the dark SaaS UI. Components in
+   src/components/ds use ONLY these tokens — no ad-hoc hex colors.
+   ===================================================================== */
+@theme {
+  /* Surfaces — dark charcoal with a faint green undertone */
+  --color-app-bg: #090d0b;
+  --color-app-surface: #0f1512;
+  --color-app-elevated: #151d19;
+  --color-app-hover: #1b2520;
+  --color-app-border: #222d27;
+  --color-app-border-strong: #2f3d35;
+
+  /* Text */
+  --color-app-text: #f2f5f3;
+  --color-app-muted: #9aa8a0;
+  --color-app-subtle: #6d7a72;
+
+  /* Brand — emerald */
+  --color-app-primary: #10b981;
+  --color-app-primary-hover: #34d399;
+  --color-app-primary-soft: rgba(16, 185, 129, 0.12);
+  --color-app-on-primary: #03150e;
+
+  /* Status */
+  --color-app-success: #22c55e;
+  --color-app-warning: #f59e0b;
+  --color-app-danger: #ef4444;
+  --color-app-info: #3b82f6;
+
+  /* Typography scale (size / line-height / weight / tracking) */
+  --text-display: 2.25rem;
+  --text-display--line-height: 2.75rem;
+  --text-display--font-weight: 700;
+  --text-display--letter-spacing: -0.02em;
+  --text-h1: 1.75rem;
+  --text-h1--line-height: 2.25rem;
+  --text-h1--font-weight: 700;
+  --text-h1--letter-spacing: -0.015em;
+  --text-h2: 1.25rem;
+  --text-h2--line-height: 1.75rem;
+  --text-h2--font-weight: 600;
+  --text-h2--letter-spacing: -0.01em;
+  --text-h3: 1rem;
+  --text-h3--line-height: 1.5rem;
+  --text-h3--font-weight: 600;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.375rem;
+  --text-small: 0.8125rem;
+  --text-small--line-height: 1.25rem;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1rem;
+  --text-caption--letter-spacing: 0.01em;
+
+  --radius-card: 0.875rem;
+  --radius-control: 0.625rem;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.app-root {
+  background-color: var(--color-app-bg);
+  color: var(--color-app-text);
+  color-scheme: dark;
+}
+.app-root :focus-visible {
+  outline: 2px solid var(--color-app-primary);
+  outline-offset: 2px;
+}
+.app-root ::selection {
+  background: rgba(16, 185, 129, 0.35);
+}
+.app-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.app-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-app-border-strong);
+  border-radius: 999px;
+}
+dialog.ds-dialog::backdrop {
+  background: rgba(3, 6, 5, 0.72);
+  backdrop-filter: blur(2px);
+}

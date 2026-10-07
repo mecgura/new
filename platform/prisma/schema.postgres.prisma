@@ -1,0 +1,1218 @@
+// PostgreSQL-compatible schema. Uses String IDs (cuid), String status fields
+// (instead of enums) and String-encoded JSON (instead of Json) so the same
+// schema runs on SQLite locally and PostgreSQL in production.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Platform account. `role` is the PLATFORM role only ("SUPER_ADMIN" or
+// "USER"); tenant roles (CLIENT_OWNER / MANAGER / AGENT) live on
+// OrganizationMember so one user can hold different roles per organization.
+// Legacy rows with role "admin" are treated as SUPER_ADMIN (see lib/authz).
+model User {
+  id             String    @id @default(cuid())
+  name           String?
+  email          String    @unique
+  passwordHash   String
+  role           String    @default("USER")
+  status         String    @default("active") // active | disabled
+  // Bumped on password change / "sign out everywhere" to revoke old sessions.
+  sessionVersion Int       @default(0)
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  memberships           OrganizationMember[]
+  notifications         Notification[]
+  passwordResetTokens   PasswordResetToken[]
+  auditLogs             AuditLog[]
+  ownedContacts         Contact[]            @relation("ContactOwner")
+  assignedConversations Conversation[]       @relation("ConversationAssignee")
+  sentMessages          Message[]            @relation("MessageSender")
+  contactNotes          ContactNote[]
+  consentRecords        ConsentRecord[]
+  messageTemplates      MessageTemplate[]
+  segments              Segment[]
+  campaigns             Campaign[]
+  automations           Automation[]
+  flows                 Flow[]
+  aiAgents              AiAgent[]
+  apiKeys               ApiKey[]
+  webhookEndpoints      WebhookEndpoint[]
+
+  @@index([email])
+  @@index([role])
+}
+
+// Tenant. Every client business on the platform is one Organization.
+model Organization {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  status       String   @default("active") // active | suspended
+  contactEmail String   @default("")
+  contactPhone String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  members                 OrganizationMember[]
+  auditLogs               AuditLog[]
+  notifications           Notification[]
+  services                OrganizationService[]
+  settings                OrganizationSettings?
+  subscriptions           Subscription[]
+  whatsappAccounts        WhatsAppAccount[]
+  usageCounters           UsageCounter[]
+  wabas                   WhatsAppBusinessAccount[]
+  phoneNumbers            PhoneNumber[]
+  whatsappConnections     WhatsAppConnection[]
+  webhookConfigs          WebhookConfiguration[]
+  webhookEvents           WebhookEvent[]
+  contacts                Contact[]
+  tags                    Tag[]
+  conversations           Conversation[]
+  messages                Message[]
+  conversationAssignments ConversationAssignment[]
+  contactNotes            ContactNote[]
+  consentRecords          ConsentRecord[]
+  messageTemplates        MessageTemplate[]
+  segments                Segment[]
+  campaigns               Campaign[]
+  campaignRecipients      CampaignRecipient[]
+  automations             Automation[]
+  automationExecutions    AutomationExecution[]
+  flows                   Flow[]
+  flowSubmissions         FlowSubmission[]
+  aiAgents                AiAgent[]
+  appointments            Appointment[]
+  apiKeys                 ApiKey[]
+  apiRequestLogs          ApiRequestLog[]
+  webhookEndpoints        WebhookEndpoint[]
+  webhookDeliveries       WebhookDelivery[]
+  invoices                Invoice[]
+  payments                Payment[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrganizationMember {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  role           String // CLIENT_OWNER | MANAGER | AGENT
+  agentStatus    String    @default("offline") // online | away | offline (inbox availability)
+  agentStatusAt  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+// Append-only security/activity trail. Never store passwords, tokens or secrets
+// in `metadata` (enforced by lib/audit redaction).
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String?
+  actorUserId    String?
+  action         String
+  targetType     String   @default("")
+  targetId       String   @default("")
+  // JSON-encoded object (SQLite + PostgreSQL compatible)
+  metadata       String   @default("{}")
+  ip             String   @default("")
+  userAgent      String   @default("")
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  actor        User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([actorUserId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Notification {
+  id             String    @id @default(cuid())
+  userId         String
+  organizationId String?
+  type           String    @default("info") // info | success | warning | security
+  title          String
+  body           String    @default("")
+  link           String    @default("")
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([createdAt])
+}
+
+// Only a SHA-256 hash of the token is stored; the raw token lives in the email link.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model SiteSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @default("")
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — client management
+// ---------------------------------------------------------------------------
+
+// Subscription plan offered to clients. Prices are in paise (INR minor units).
+model Plan {
+  id                 String   @id @default(cuid())
+  name               String
+  slug               String   @unique
+  description        String   @default("")
+  priceMonthly       Int      @default(0)
+  currency           String   @default("INR")
+  maxUsers           Int      @default(3)
+  maxWhatsAppNumbers Int      @default(1)
+  maxMonthlyMessages Int      @default(1000)
+  maxContacts        Int      @default(1000)
+  // -1 = unlimited. maxCampaigns: launched per month · maxAutomations: active at once · maxAiReplies / maxApiRequests: per month.
+  maxCampaigns       Int      @default(-1)
+  maxAutomations     Int      @default(-1)
+  maxAiReplies       Int      @default(-1)
+  maxApiRequests     Int      @default(-1)
+  features           String   @default("[\"campaigns\",\"automations\",\"flows\",\"ai_agent\",\"api\",\"webhooks\",\"analytics\"]") // JSON array of feature keys
+  isActive           Boolean  @default(true)
+  selfServe          Boolean  @default(true) // false = clients can't pick it themselves ("contact sales"); the admin can still assign it
+  sortOrder          Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  subscriptions Subscription[]
+
+  @@index([isActive, sortOrder])
+}
+
+// Plan assignment history. Exactly one row per organization has status "active";
+// a plan change ends the old row and opens a new one (keeps revenue history).
+model Subscription {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  planId             String
+  status             String    @default("active") // active | ended
+  priceMonthly       Int // snapshot of the plan price at assignment
+  startedAt          DateTime  @default(now())
+  endedAt            DateTime?
+  endReason          String    @default("") // replaced | canceled
+  // "complimentary" = contracted by MECGURA, no automatic invoices. "invoiced" = billed every period.
+  billingMode        String    @default("complimentary")
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime? // next billing date
+  cancelAtPeriodEnd  Boolean   @default(false)
+  canceledAt         DateTime?
+  pendingPlanId      String? // downgrade scheduled for the end of the period
+  createdAt          DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan         Plan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+  invoices     Invoice[]
+
+  @@index([organizationId, status])
+  @@index([planId, status])
+}
+
+// Product modules enabled for a client (WHATSAPP_AUTOMATION, CRM, SOCIAL_MEDIA, ATS, HRMS, AI_ASSISTANT).
+model OrganizationService {
+  id             String   @id @default(cuid())
+  organizationId String
+  service        String
+  enabled        Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, service])
+}
+
+model OrganizationSettings {
+  id                String   @id @default(cuid())
+  organizationId    String   @unique
+  timezone          String   @default("Asia/Kolkata")
+  locale            String   @default("en-IN")
+  currency          String   @default("INR")
+  notificationEmail String   @default("")
+  // JSON-encoded weekly hours (SQLite + PostgreSQL compatible)
+  businessHours     String   @default("{}")
+  updatedAt         DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// A client's WhatsApp number as MECGURA manages it (the card on /whatsapp/accounts).
+// Created by Super Admin registration (status "pending") or by a connection flow.
+// Meta-side details live on PhoneNumber / WhatsAppBusinessAccount.
+model WhatsAppAccount {
+  id             String    @id @default(cuid())
+  organizationId String
+  displayName    String
+  businessName   String    @default("")
+  phoneNumber    String    @unique // E.164, e.g. +919876543210
+  status         String    @default("pending") // pending | connected | demo | disconnected | disabled
+  provider       String    @default("meta_cloud_api")
+  wabaId         String    @default("") // Meta WABA id (denormalised for admin lists)
+  phoneNumberId  String    @default("") // Meta phone number id
+  isDemo         Boolean   @default(false)
+  wabaRecordId   String?
+  phoneRecordId  String?   @unique
+  connectionId   String?
+  connectedAt    DateTime?
+  disconnectedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization  Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  waba          WhatsAppBusinessAccount? @relation(fields: [wabaRecordId], references: [id], onDelete: SetNull)
+  phone         PhoneNumber?             @relation(fields: [phoneRecordId], references: [id], onDelete: SetNull)
+  connection    WhatsAppConnection?      @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  conversations Conversation[]
+  campaigns     Campaign[]
+  automations   Automation[]
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 — WhatsApp Connection Center
+// ---------------------------------------------------------------------------
+
+// Meta WhatsApp Business Account (WABA). One WABA can belong to one MECGURA client.
+model WhatsAppBusinessAccount {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  wabaId              String    @unique
+  name                String    @default("")
+  businessPortfolioId String    @default("")
+  currency            String    @default("")
+  timezoneId          String    @default("")
+  // Account-level health from Meta (account_update / review webhooks, sync)
+  accountStatus       String    @default("")
+  lastAccountEvent    String    @default("")
+  lastAccountEventAt  DateTime?
+  isDemo              Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  phoneNumbers PhoneNumber[]
+  accounts     WhatsAppAccount[]
+  connections  WhatsAppConnection[]
+  webhooks     WebhookConfiguration[]
+  templates    MessageTemplate[]
+  flows        Flow[]
+
+  @@index([organizationId])
+}
+
+// Mirror of a Meta phone number object (synced from the Graph API / webhooks).
+model PhoneNumber {
+  id                     String    @id @default(cuid())
+  organizationId         String
+  wabaRecordId           String
+  phoneNumberId          String    @unique // Meta id
+  displayPhoneNumber     String
+  e164                   String
+  verifiedName           String    @default("")
+  qualityRating          String    @default("UNKNOWN") // GREEN | YELLOW | RED | UNKNOWN
+  messagingLimitTier     String    @default("")
+  codeVerificationStatus String    @default("")
+  nameStatus             String    @default("")
+  platformType           String    @default("")
+  status                 String    @default("")
+  lastQualityEvent       String    @default("")
+  messagesSent           Int       @default(0)
+  messagesReceived       Int       @default(0)
+  isDemo                 Boolean   @default(false)
+  lastSyncedAt           DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  waba         WhatsAppBusinessAccount @relation(fields: [wabaRecordId], references: [id], onDelete: Cascade)
+  account      WhatsAppAccount?
+
+  @@index([organizationId])
+}
+
+// One onboarding attempt / credential set. Secrets are AES-256-GCM encrypted
+// (lib/crypto) and never returned by any API.
+model WhatsAppConnection {
+  id                   String    @id @default(cuid())
+  organizationId       String
+  method               String // embedded_signup | coexistence | manual | demo
+  status               String    @default("pending") // pending | active | failed | cancelled | disconnected
+  isDemo               Boolean   @default(false)
+  stateHash            String?   @unique // embedded-signup CSRF state (SHA-256)
+  stateExpiresAt       DateTime?
+  wabaRecordId         String?
+  encryptedAccessToken String    @default("")
+  tokenLast4           String    @default("")
+  encryptedAppSecret   String    @default("")
+  tokenObtainedAt      DateTime?
+  error                String    @default("")
+  createdById          String?
+  connectedAt          DateTime?
+  disconnectedAt       DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  waba         WhatsAppBusinessAccount? @relation(fields: [wabaRecordId], references: [id], onDelete: SetNull)
+  accounts     WhatsAppAccount[]
+  webhook      WebhookConfiguration?
+
+  @@index([organizationId, status])
+}
+
+// Webhook subscription for a connection. MECGURA's own Meta app uses the
+// platform verify token; developer-mode connections get their own token.
+model WebhookConfiguration {
+  id                   String    @id @default(cuid())
+  organizationId       String
+  connectionId         String    @unique
+  wabaRecordId         String?
+  callbackUrl          String
+  verifyTokenHash      String    @default("") // SHA-256, used to match GET verification
+  encryptedVerifyToken String    @default("")
+  subscribedFields     String    @default("[\"messages\"]") // JSON array
+  status               String    @default("pending") // pending | subscribed | failed | disabled
+  lastVerifiedAt       DateTime?
+  lastEventAt          DateTime?
+  error                String    @default("")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connection   WhatsAppConnection       @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  waba         WhatsAppBusinessAccount? @relation(fields: [wabaRecordId], references: [id], onDelete: SetNull)
+
+  @@index([verifyTokenHash])
+}
+
+// Raw inbound webhook events (idempotent by dedupeKey). Processing is
+// foundation-level in Phase 3; the inbox consumes these later.
+model WebhookEvent {
+  id             String    @id @default(cuid())
+  provider       String    @default("meta")
+  organizationId String?
+  wabaId         String    @default("")
+  field          String    @default("")
+  eventType      String    @default("")
+  dedupeKey      String    @unique
+  payload        String
+  status         String    @default("received") // received | processed | ignored | failed
+  error          String    @default("")
+  receivedAt     DateTime  @default(now())
+  processedAt    DateTime?
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, receivedAt])
+  @@index([status])
+}
+
+// Daily metered usage per client (messages_sent, contacts_created, ai_replies, api_calls).
+// Written by the messaging/CRM modules; Phase 2 only reads it.
+model UsageCounter {
+  id             String   @id @default(cuid())
+  organizationId String
+  metric         String
+  day            String // YYYY-MM-DD (IST)
+  value          Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, metric, day])
+  @@index([metric, day])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4 — Inbox, contacts & CRM
+// ---------------------------------------------------------------------------
+
+model Contact {
+  id                String    @id @default(cuid())
+  organizationId    String
+  name              String    @default("")
+  phone             String // E.164
+  email             String    @default("")
+  lifecycle         String    @default("lead") // lead | customer
+  leadStatus        String    @default("new") // new | contacted | qualified | proposal | won | lost
+  source            String    @default("manual") // manual | whatsapp | import | api
+  ownerUserId       String?
+  optInStatus       String    @default("unknown") // unknown | opted_in | opted_out
+  suppressed        Boolean   @default(false)
+  suppressionReason String    @default("")
+  customFields      String    @default("{}") // JSON object of string values
+  lastMessageAt     DateTime?
+  lastInboundAt     DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner                User?                 @relation("ContactOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  tags                 ContactTag[]
+  conversations        Conversation[]
+  notes                ContactNote[]
+  consents             ConsentRecord[]
+  campaignRecipients   CampaignRecipient[]
+  automationExecutions AutomationExecution[]
+  flowSubmissions      FlowSubmission[]
+  appointments         Appointment[]
+
+  @@unique([organizationId, phone])
+  @@index([organizationId, lifecycle])
+  @@index([organizationId, optInStatus])
+  @@index([organizationId, lastMessageAt])
+}
+
+model Tag {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  color          String   @default("emerald")
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contacts     ContactTag[]
+
+  @@unique([organizationId, name])
+}
+
+model ContactTag {
+  contactId String
+  tagId     String
+  createdAt DateTime @default(now())
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+  @@index([tagId])
+}
+
+// One thread per contact per WhatsApp number (like WhatsApp itself); closed threads reopen.
+model Conversation {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  contactId          String
+  whatsappAccountId  String
+  status             String    @default("open") // open | closed
+  assignedToUserId   String?
+  unreadCount        Int       @default(0)
+  lastMessageAt      DateTime  @default(now())
+  lastMessagePreview String    @default("")
+  lastInboundAt      DateTime?
+  isDemo             Boolean   @default(false)
+  // AI agent state: "" (not engaged) | active | handoff
+  aiStatus           String    @default("")
+  aiHandoffAt        DateTime?
+  aiHandoffReason    String    @default("")
+  aiResumeAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  organization    Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact         Contact                  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  whatsappAccount WhatsAppAccount          @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+  assignedTo      User?                    @relation("ConversationAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  messages        Message[]
+  assignments     ConversationAssignment[]
+
+  @@unique([whatsappAccountId, contactId])
+  @@index([organizationId, lastMessageAt])
+  @@index([organizationId, assignedToUserId])
+  @@index([organizationId, status])
+}
+
+model Message {
+  id             String    @id @default(cuid())
+  organizationId String
+  conversationId String
+  direction      String // inbound | outbound | internal
+  type           String // text | image | document | video | audio | template | interactive | button | note | unsupported
+  body           String    @default("")
+  payload        String    @default("{}") // JSON: template / buttons / interactive reply data
+  externalId     String?   @unique // WhatsApp message id (wamid)
+  status         String    @default("pending") // pending | sent | delivered | read | failed | received
+  error          String    @default("")
+  replyToId      String?
+  senderUserId   String?
+  isDemo         Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  readAt         DateTime?
+  failedAt       DateTime?
+
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversation      Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender            User?               @relation("MessageSender", fields: [senderUserId], references: [id], onDelete: SetNull)
+  replyTo           Message?            @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies           Message[]           @relation("MessageReply")
+  attachments       MessageAttachment[]
+  campaignRecipient CampaignRecipient?
+
+  @@index([conversationId, createdAt])
+  @@index([organizationId, createdAt])
+}
+
+// Media metadata only. Bytes stay with Meta (fetched through an authenticated proxy).
+model MessageAttachment {
+  id              String   @id @default(cuid())
+  messageId       String
+  kind            String // image | document | video | audio
+  mimeType        String   @default("")
+  filename        String   @default("")
+  sizeBytes       Int      @default(0)
+  providerMediaId String   @default("")
+  url             String   @default("") // public https link when sent by link
+  sha256          String   @default("")
+  caption         String   @default("")
+  createdAt       DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
+
+model ConversationAssignment {
+  id             String   @id @default(cuid())
+  organizationId String
+  conversationId String
+  action         String // assigned | transferred | claimed | unassigned
+  fromUserId     String?
+  toUserId       String?
+  byUserId       String?
+  note           String   @default("")
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+model ContactNote {
+  id             String   @id @default(cuid())
+  organizationId String
+  contactId      String
+  authorUserId   String?
+  body           String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  author       User?        @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([contactId, createdAt])
+}
+
+// Append-only consent trail; Contact.optInStatus is the latest value.
+model ConsentRecord {
+  id             String   @id @default(cuid())
+  organizationId String
+  contactId      String
+  status         String // opted_in | opted_out
+  channel        String   @default("whatsapp")
+  source         String // manual | import | inbound_keyword | api
+  evidence       String   @default("")
+  recordedById   String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  recordedBy   User?        @relation(fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([contactId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 — templates, segments, campaigns
+// ---------------------------------------------------------------------------
+
+// WhatsApp message template. Belongs to a WABA (Meta reviews templates per WABA).
+model MessageTemplate {
+  id             String    @id @default(cuid())
+  organizationId String
+  wabaRecordId   String
+  name           String // lowercase letters, digits, underscores (Meta rule)
+  language       String // Meta locale code, e.g. en, en_US, hi
+  category       String // MARKETING | UTILITY | AUTHENTICATION
+  status         String    @default("draft") // draft | pending | approved | rejected | paused | disabled
+  headerType     String    @default("none") // none | text | image | video | document
+  headerText     String    @default("")
+  body           String    @default("")
+  footer         String    @default("")
+  buttons        String    @default("[]") // JSON array of buttons
+  examples       String    @default("{}") // JSON: sample values Meta needs for review
+  authOptions    String    @default("{}") // JSON (AUTHENTICATION only)
+  metaTemplateId String    @default("")
+  metaStatus     String    @default("") // raw status from Meta
+  rejectedReason String    @default("")
+  qualityScore   String    @default("UNKNOWN") // GREEN | YELLOW | RED | UNKNOWN
+  source         String    @default("mecgura") // mecgura | meta_sync
+  isDemo         Boolean   @default(false)
+  createdById    String?
+  submittedAt    DateTime?
+  reviewedAt     DateTime?
+  lastSyncedAt   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  waba         WhatsAppBusinessAccount @relation(fields: [wabaRecordId], references: [id], onDelete: Cascade)
+  createdBy    User?                   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  campaigns    Campaign[]
+
+  @@unique([wabaRecordId, name, language])
+  @@index([organizationId, status])
+  @@index([metaTemplateId])
+}
+
+// Saved audience definition, evaluated when a campaign is reviewed/sent.
+model Segment {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String   @default("")
+  filters        String   @default("{}") // JSON: tags, tagMode, leadStatuses, lifecycles, consent, sources
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  campaigns    Campaign[]
+
+  @@unique([organizationId, name])
+}
+
+model Campaign {
+  id                String    @id @default(cuid())
+  organizationId    String
+  name              String
+  description       String    @default("")
+  whatsappAccountId String?
+  templateId        String?
+  segmentId         String?
+  status            String    @default("draft") // draft | scheduled | sending | paused | completed | cancelled | failed
+  step              Int       @default(1) // furthest wizard step reached
+  audience          String    @default("{}") // JSON audience definition
+  variables         String    @default("{}") // JSON variable mapping
+  scheduledAt       DateTime?
+  review            String    @default("{}") // JSON compliance snapshot
+  reviewedAt        DateTime?
+  statusReason      String    @default("")
+  totalRecipients   Int       @default(0)
+  isDemo            Boolean   @default(false)
+  createdById       String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  whatsappAccount WhatsAppAccount?    @relation(fields: [whatsappAccountId], references: [id], onDelete: SetNull)
+  template        MessageTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  segment         Segment?            @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  createdBy       User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  recipients      CampaignRecipient[]
+
+  @@index([organizationId, status])
+  @@index([status, scheduledAt])
+}
+
+model CampaignRecipient {
+  id             String    @id @default(cuid())
+  organizationId String
+  campaignId     String
+  contactId      String?
+  phone          String // E.164
+  name           String    @default("")
+  status         String    @default("queued") // queued | sending | sent | delivered | read | failed
+  variables      String    @default("{}") // JSON: resolved values
+  messageId      String?   @unique
+  error          String    @default("")
+  attemptedAt    DateTime? // when a worker claimed it for sending
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  readAt         DateTime?
+  failedAt       DateTime?
+  repliedAt      DateTime?
+  optedOutAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign     Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  message      Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@unique([campaignId, phone])
+  @@index([campaignId, status])
+  @@index([contactId, sentAt])
+  @@index([organizationId, sentAt])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6 — visual automations
+// ---------------------------------------------------------------------------
+
+model Automation {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  name               String
+  description        String    @default("")
+  status             String    @default("draft") // draft | active | inactive
+  whatsappAccountId  String? // number used for messages sent by this automation
+  graph              String    @default("{\"nodes\":[],\"edges\":[]}") // working draft (React Flow nodes/edges)
+  settings           String    @default("{}") // JSON: reentry
+  publishedVersionId String?
+  currentVersion     Int       @default(0)
+  // Denormalised from the published version for fast trigger matching
+  triggerType        String    @default("")
+  triggerConfig      String    @default("{}")
+  webhookSecretHash  String    @default("") // SHA-256 of the inbound webhook secret (shown once)
+  lastScheduledAt    DateTime?
+  lastRunAt          DateTime?
+  createdById        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  whatsappAccount WhatsAppAccount?      @relation(fields: [whatsappAccountId], references: [id], onDelete: SetNull)
+  createdBy       User?                 @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  versions        AutomationVersion[]
+  executions      AutomationExecution[]
+
+  @@index([organizationId, status])
+  @@index([status, triggerType])
+}
+
+model AutomationVersion {
+  id             String   @id @default(cuid())
+  organizationId String
+  automationId   String
+  version        Int
+  graph          String
+  triggerType    String
+  triggerConfig  String   @default("{}")
+  note           String   @default("")
+  publishedById  String?
+  createdAt      DateTime @default(now())
+
+  automation Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@unique([automationId, version])
+}
+
+model AutomationExecution {
+  id             String    @id @default(cuid())
+  organizationId String
+  automationId   String
+  version        Int       @default(0) // 0 = test run of the draft
+  graph          String // snapshot — edits never affect running executions
+  contactId      String?
+  conversationId String?
+  status         String    @default("queued") // queued | running | completed | failed | stopped
+  waitState      String    @default("") // "" | delay | reply | retry
+  triggerType    String
+  triggerData    String    @default("{}")
+  context        String    @default("{}") // JSON variables (reply text, ai response, webhook result…)
+  currentNodeId  String?
+  nextRunAt      DateTime?
+  lockedUntil    DateTime? // worker lease — prevents two workers running one execution
+  attempts       Int       @default(0) // retries of the current node
+  stepCount      Int       @default(0)
+  depth          Int       @default(0) // nesting: executions started by another execution's action
+  dedupeKey      String?   @unique
+  isTest         Boolean   @default(false)
+  skipDelays     Boolean   @default(false)
+  error          String    @default("")
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  automation   Automation                @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  contact      Contact?                  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  steps        AutomationExecutionStep[]
+
+  @@index([automationId, createdAt])
+  @@index([status, nextRunAt])
+  @@index([organizationId, contactId, status])
+}
+
+model AutomationExecutionStep {
+  id             String    @id @default(cuid())
+  organizationId String
+  executionId    String
+  nodeId         String
+  nodeType       String
+  status         String // completed | failed | skipped | waiting | retrying
+  attempt        Int       @default(1)
+  output         String    @default("{}")
+  error          String    @default("")
+  startedAt      DateTime  @default(now())
+  finishedAt     DateTime?
+
+  execution AutomationExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@index([executionId, startedAt])
+  @@index([organizationId, nodeId])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 — WhatsApp Flows, AI agent, appointments
+// ---------------------------------------------------------------------------
+
+// A WhatsApp Flow (in-chat form). `definition` is MECGURA's editable model; `flowJson` is what Meta receives.
+model Flow {
+  id               String    @id @default(cuid())
+  organizationId   String
+  wabaRecordId     String?
+  name             String
+  category         String // Meta category: APPOINTMENT_BOOKING | LEAD_GENERATION | CONTACT_US | CUSTOMER_SUPPORT | SURVEY | OTHER
+  template         String    @default("custom") // appointment | lead | product | feedback | order | custom
+  status           String    @default("draft") // draft | published | deprecated
+  definition       String    @default("{}") // JSON: screens, fields, confirmation, submit, crm actions
+  flowJson         String    @default("") // generated Flow JSON at the last publish
+  metaFlowId       String    @default("")
+  metaStatus       String    @default("")
+  validationErrors String    @default("[]") // JSON array from Meta
+  isDemo           Boolean   @default(false)
+  createdById      String?
+  publishedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  waba         WhatsAppBusinessAccount? @relation(fields: [wabaRecordId], references: [id], onDelete: SetNull)
+  createdBy    User?                    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  submissions  FlowSubmission[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, status])
+}
+
+model FlowSubmission {
+  id             String   @id @default(cuid())
+  organizationId String
+  flowId         String
+  contactId      String?
+  conversationId String?
+  messageId      String?
+  answers        String   @default("{}") // JSON: field name → value
+  source         String // whatsapp | demo | test
+  flowToken      String   @default("")
+  crmResult      String   @default("{}") // JSON: what the CRM action changed
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  flow         Flow         @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([flowId, createdAt])
+  @@index([organizationId, contactId])
+}
+
+model AiAgent {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  status         String   @default("draft") // draft | active | paused
+  accountIds     String   @default("[]") // JSON: WhatsApp account ids it answers on ([] = all)
+  instructions   String   @default("")
+  knowledge      String   @default("{}") // JSON: faqs, products, services, pricing
+  actions        String   @default("{}") // JSON: enabled actions + their settings
+  handoff        String   @default("{}") // JSON: keywords, assignment, resume rule, message
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  documents    AiDocument[]
+  interactions AiInteraction[]
+
+  @@index([organizationId, status])
+}
+
+// Knowledge-base document (text extracted at upload; the original file is not stored).
+model AiDocument {
+  id             String   @id @default(cuid())
+  organizationId String
+  agentId        String
+  name           String
+  mimeType       String   @default("text/plain")
+  sizeBytes      Int      @default(0)
+  content        String
+  createdAt      DateTime @default(now())
+
+  agent AiAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+}
+
+model AiInteraction {
+  id             String   @id @default(cuid())
+  organizationId String
+  agentId        String
+  conversationId String?
+  contactId      String?
+  mode           String // live | demo
+  kind           String // reply | summary | handoff | skipped | error
+  input          String   @default("")
+  output         String   @default("")
+  actions        String   @default("[]") // JSON: tools used (qualify, collect, book, transfer…)
+  model          String   @default("")
+  inputTokens    Int      @default(0)
+  outputTokens   Int      @default(0)
+  error          String   @default("")
+  isTest         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  agent AiAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, createdAt])
+  @@index([organizationId, conversationId])
+}
+
+model Appointment {
+  id             String    @id @default(cuid())
+  organizationId String
+  contactId      String?
+  conversationId String?
+  service        String    @default("")
+  requestedFor   String    @default("") // customer's preferred date/time as given
+  startsAt       DateTime?
+  notes          String    @default("")
+  status         String    @default("requested") // requested | confirmed | cancelled | completed
+  source         String // ai | flow | manual
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 8 — Public API keys and outgoing webhooks
+// ---------------------------------------------------------------------------
+
+// Only a SHA-256 hash of the secret is stored. The full key is shown once, at creation/rotation.
+model ApiKey {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  prefix         String // first characters of the key, for recognition ("mgk_a1b2c3d4")
+  keyHash        String    @unique
+  permissions    String    @default("[]") // JSON: scopes (contacts:read, messages:send, …)
+  createdById    String?
+  lastUsedAt     DateTime?
+  lastUsedIp     String    @default("")
+  expiresAt      DateTime? // set on the old key while a rotation grace period runs
+  revokedAt      DateTime?
+  rotatedFromId  String?
+  createdAt      DateTime  @default(now())
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  logs         ApiRequestLog[]
+
+  @@index([organizationId, createdAt])
+}
+
+// Request metadata only — never bodies, query strings, headers or secrets.
+model ApiRequestLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  apiKeyId       String?
+  method         String
+  path           String
+  status         Int
+  durationMs     Int      @default(0)
+  ip             String   @default("") // masked
+  userAgent      String   @default("")
+  errorCode      String   @default("")
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  apiKey       ApiKey?      @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([apiKeyId, createdAt])
+}
+
+// Customer-owned HTTPS endpoint that receives signed event callbacks.
+model WebhookEndpoint {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  url                 String
+  description         String    @default("")
+  events              String    @default("[]") // JSON array of event names
+  secretEnc           String // AES-GCM encrypted signing secret (needed to sign)
+  secretLast4         String    @default("")
+  status              String    @default("active") // active | disabled
+  disabledReason      String    @default("")
+  consecutiveFailures Int       @default(0)
+  lastSuccessAt       DateTime?
+  lastFailureAt       DateTime?
+  createdById         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  deliveries   WebhookDelivery[]
+
+  @@index([organizationId, status])
+}
+
+// One event for one endpoint. The payload is dropped as soon as the delivery succeeds (and after 7 days if it keeps failing).
+model WebhookDelivery {
+  id             String    @id @default(cuid())
+  organizationId String
+  endpointId     String
+  eventId        String
+  event          String
+  payload        String?
+  status         String    @default("pending") // pending | delivered | failed
+  attempts       Int       @default(0)
+  nextAttemptAt  DateTime?
+  lockedUntil    DateTime?
+  responseStatus Int?
+  durationMs     Int?
+  error          String    @default("")
+  createdAt      DateTime  @default(now())
+  deliveredAt    DateTime?
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  endpoint     WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([endpointId, createdAt])
+  @@index([organizationId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 9 — Billing: invoices, payments, payment-event idempotency
+// ---------------------------------------------------------------------------
+
+// Amounts are in paise. status: open | paid | void. Issuer and bill-to details are snapshotted at issue time.
+model Invoice {
+  id                String    @id @default(cuid())
+  organizationId    String
+  subscriptionId    String?
+  number            String    @unique
+  kind              String    @default("subscription") // subscription | upgrade | renewal
+  status            String    @default("open")
+  description       String    @default("")
+  currency          String    @default("INR")
+  subtotal          Int       @default(0)
+  taxBps            Int       @default(0) // tax rate in basis points (1800 = 18%)
+  taxAmount         Int       @default(0)
+  total             Int       @default(0)
+  lines             String    @default("[]") // JSON: [{ description, amount }]
+  issuer            String    @default("{}") // JSON snapshot: name, address, tax id
+  billTo            String    @default("{}") // JSON snapshot: name, email
+  periodStart       DateTime?
+  periodEnd         DateTime?
+  targetPlanId      String? // plan to activate when this invoice is paid (upgrades)
+  issuedAt          DateTime  @default(now())
+  dueAt             DateTime
+  paidAt            DateTime?
+  voidedAt          DateTime?
+  overdueNotifiedAt DateTime?
+  paidVia           String    @default("") // gateway id, or "manual"
+  paymentNote       String    @default("") // reference entered by the admin for a manual payment
+  createdAt         DateTime  @default(now())
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  payments     Payment[]
+
+  @@index([organizationId, issuedAt])
+  @@index([status, dueAt])
+}
+
+// One attempt to collect an invoice through a gateway.
+model Payment {
+  id               String    @id @default(cuid())
+  organizationId   String
+  invoiceId        String
+  gateway          String
+  gatewayRef       String    @default("") // e.g. Razorpay order id
+  gatewayPaymentId String    @default("")
+  amount           Int
+  currency         String    @default("INR")
+  status           String    @default("created") // created | succeeded | failed
+  failureCode      String    @default("")
+  failureReason    String    @default("")
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([status, createdAt])
+  @@index([gateway, gatewayRef])
+}
+
+// Gateway webhooks are processed once: (gateway, eventId) is unique. The payload itself is not kept.
+model PaymentEvent {
+  id          String    @id @default(cuid())
+  gateway     String
+  eventId     String
+  type        String    @default("")
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  outcome     String    @default("")
+
+  @@unique([gateway, eventId])
+}
+
+// Gap-free yearly invoice numbers: INV-2026-000001.
+model InvoiceSequence {
+  year Int @id
+  last Int @default(0)
+}

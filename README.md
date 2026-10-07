@@ -13,3 +13,9 @@ npm run dev
 `public/hero.mp4` is the hero background video. If it is missing, the hero falls back to streaming it from the R2 URL above.
 
 The full one-shot rebuild prompt is in [`AURORA_PROMPT.md`](AURORA_PROMPT.md).
+
+## `platform/` — MECGURA Platform (separate Next.js app)
+
+`platform/` is a standalone Next.js application (WhatsApp automation workspace + Super Admin) with its own database and deployment. It shares no code with the Aurora landing page above and is **not** connected to any other MECGURA website. See `platform/README.md`.
+
+To deploy it on Vercel, create a project from this repository and set **Root Directory** to `platform`.
