@@ -90,7 +90,6 @@ check("found a bookable day for A", !!slot);
 }
 
 /* ---------- staff API: permissions & isolation ---------- */
-const today = ymd(new Date());
 const listA = await api(recepA, "GET", `/api/appointments?from=${bookDate}&to=${bookDate}`);
 const booked = listA.json?.data?.appointments?.find((a) => a.patientLabel.startsWith("E2E"));
 check("reception sees the website booking in the calendar (short name)", !!booked && booked.patientLabel === "E2E V.", JSON.stringify(listA.json?.data?.appointments?.map((a) => a.patientLabel)));
