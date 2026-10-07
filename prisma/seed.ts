@@ -15,23 +15,26 @@ const db = new PrismaClient({ adapter });
 
 async function main() {
   const adminEmail = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
-  if (!adminEmail) throw new Error("SEED_ADMIN_EMAIL environment variable is required to seed the admin account.");
-  const seedPassword = process.env.SEED_ADMIN_PASSWORD;
-  const existingAdmin = await db.user.findUnique({ where: { email: adminEmail } });
-  if (seedPassword) {
-    // Explicit password provided → (re)set it.
-    const passwordHash = await bcrypt.hash(seedPassword, 12);
-    await db.user.upsert({
-      where: { email: adminEmail },
-      update: { passwordHash, role: "SUPER_ADMIN", name: "MECGURA Admin" },
-      create: { email: adminEmail, name: "MECGURA Admin", passwordHash, role: "SUPER_ADMIN" },
-    });
-    console.log(`Seeded admin user: ${adminEmail}`);
-  } else if (existingAdmin) {
-    // No password provided and admin already exists → keep current password untouched.
-    console.log("Kept existing admin password (set SEED_ADMIN_PASSWORD to change it).");
+  if (!adminEmail) {
+    console.log("SEED_ADMIN_EMAIL not set — skipping the admin account (plans are still seeded).");
   } else {
-    throw new Error("SEED_ADMIN_PASSWORD environment variable is required to seed the admin account.");
+    const seedPassword = process.env.SEED_ADMIN_PASSWORD;
+    const existingAdmin = await db.user.findUnique({ where: { email: adminEmail } });
+    if (seedPassword) {
+      // Explicit password provided → (re)set it.
+      const passwordHash = await bcrypt.hash(seedPassword, 12);
+      await db.user.upsert({
+        where: { email: adminEmail },
+        update: { passwordHash, role: "SUPER_ADMIN", name: "MECGURA Admin" },
+        create: { email: adminEmail, name: "MECGURA Admin", passwordHash, role: "SUPER_ADMIN" },
+      });
+      console.log(`Seeded admin user: ${adminEmail}`);
+    } else if (existingAdmin) {
+      // No password provided and admin already exists → keep current password untouched.
+      console.log("Kept existing admin password (set SEED_ADMIN_PASSWORD to change it).");
+    } else {
+      throw new Error("SEED_ADMIN_PASSWORD environment variable is required to create the admin account.");
+    }
   }
 
   await seedPlans();

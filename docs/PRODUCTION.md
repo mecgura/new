@@ -149,6 +149,12 @@ After deploy:
 3. Register the Meta and Razorpay webhooks (section 7) and send a test event from each dashboard.
 4. Take a database backup schedule (daily + before every schema change).
 
+## 9c. Vercel
+
+* Build Command: `npm run build:vercel` — applies the schema (`prisma db push`, additive), seeds plans (and the first admin when `SEED_ADMIN_EMAIL` + `SEED_ADMIN_PASSWORD` are set), then builds. Remove `SEED_ADMIN_PASSWORD` after the first successful deploy so later deploys never reset the admin password.
+* Required Production env: `DATABASE_URL`, `PRISMA_SCHEMA=prisma/schema.postgres.prisma`, `AUTH_SECRET`, `WHATSAPP_ENCRYPTION_KEY`, `NEXT_PUBLIC_APP_URL`, `CRON_SECRET`.
+* Cron: Vercel **Hobby** only allows daily crons, so no per-minute cron is declared. Campaign/automation timers run when `GET /api/cron/campaigns` is called with `Authorization: Bearer $CRON_SECRET` — point an external pinger (cron-job.org, UptimeRobot, GitHub Actions) at it every minute, or upgrade to Pro and add a cron in `vercel.json`.
+
 ## 10. How this was verified
 
 | Check | Command | Covers |
