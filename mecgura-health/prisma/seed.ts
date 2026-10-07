@@ -79,6 +79,7 @@ async function seedScheduling(tenantId: string, key: "A" | "B") {
   await db.availabilityWindow.deleteMany({ where: { tenantId } });
   await db.tenantCounter.deleteMany({ where: { tenantId } });
   await db.patient.deleteMany({ where: { tenantId } });
+  await db.familyGroup.deleteMany({ where: { tenantId } });
 
   await db.doctorSchedule.upsert({
     where: { doctorUserId: doctor.id },
@@ -93,6 +94,15 @@ async function seedScheduling(tenantId: string, key: "A" | "B") {
   const patients: { id: string }[] = [];
   for (const [i, name] of names.entries()) patients.push(await db.patient.create({ data: { tenantId, code: `P-${String(i + 1).padStart(6, "0")}`, name, phone: `+9190000000${i + 1}0`, gender: i === 1 ? "FEMALE" : "MALE", ageYears: 30 + i * 12 } }));
   await db.tenantCounter.create({ data: { tenantId, key: "patient", value: patients.length } });
+  // synthetic CRM data (clearly demo; nothing here is real or medical advice)
+  await db.patient.update({ where: { id: patients[0].id }, data: { dateOfBirth: new Date("1988-04-12T00:00:00Z"), ageYears: null, addressLine: "1 Sample Road (demo)", city: "Demo City", state: "Demo State", country: "India", pincode: "000000", bloodGroup: "B+", emergencyContactName: "Demo Relative", emergencyContactRelation: "Sibling", emergencyContactPhone: "+919000000999", prefWhatsapp: "ALLOWED", prefSms: "NOT_ALLOWED" } });
+  await db.patientConsent.create({ data: { tenantId, patientId: patients[0].id, type: "PRIVACY", status: "GRANTED", version: "clinic-notice-v1" } });
+  await db.patientAllergy.create({ data: { tenantId, patientId: patients[0].id, allergen: "Demo allergen (sample)", reaction: "Rash (sample)", severity: "MODERATE" } });
+  await db.patientHistory.create({ data: { tenantId, patientId: patients[0].id, category: "SURGERY", title: "Demo procedure (sample entry)", occurredOn: "2018", status: "RESOLVED" } });
+  await db.patientMedication.create({ data: { tenantId, patientId: patients[0].id, name: "Demo medicine (sample)", strength: "10 mg", frequency: "once daily" } });
+  await db.patientNote.create({ data: { tenantId, patientId: patients[0].id, kind: "RECEPTION", content: "Demo note: prefers morning appointments.", authorId: doctor.id, authorRole: "DOCTOR" } });
+  const fam = await db.familyGroup.create({ data: { tenantId } });
+  await db.patient.updateMany({ where: { id: { in: [patients[0].id, patients[1].id] } }, data: { familyGroupId: fam.id } });
 
   const at = (date: string, hh: number, mm: number) => zonedToUtc(date, hh * 60 + mm, tz);
   const appt = async (date: string, hh: number, mm: number, over: Record<string, unknown>) => {

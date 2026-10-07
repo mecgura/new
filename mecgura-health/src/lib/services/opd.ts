@@ -146,7 +146,7 @@ async function avgConsultMinutes(client: Client, tenantId: string, tokenDate: st
 }
 
 export interface QueueVisit {
-  id: string; token: string; status: OpdStatus; priority: Priority; queueType: string; doctorUserId: string; patientName: string; patientCode: string; patientAge: string | null; patientGender: string | null;
+  id: string; patientId: string; token: string; status: OpdStatus; priority: Priority; queueType: string; doctorUserId: string; patientName: string; patientCode: string; patientAge: string | null; patientGender: string | null;
   appointmentId: string | null; visitType: string; note: string | null; checkedInAt: string; waitedMinutes: number; estimatedWaitMinutes: number | null; stale: boolean; calledAt: string | null;
 }
 
@@ -181,7 +181,7 @@ export async function queueSnapshot(ctx: TenantRequestContext, opts: { doctorUse
     for (const r of list) {
       const idx = waiting.findIndex((w) => w.id === r.id);
       visits.push({
-        id: r.id, token: r.tokenLabel, status: r.status as OpdStatus, priority: r.priority as Priority, queueType: r.queueType, doctorUserId: r.doctorUserId,
+        id: r.id, patientId: r.patientId, token: r.tokenLabel, status: r.status as OpdStatus, priority: r.priority as Priority, queueType: r.queueType, doctorUserId: r.doctorUserId,
         patientName: r.patient.name, patientCode: r.patient.code, patientAge: ageLabel(r.patient), patientGender: r.patient.gender, appointmentId: r.appointmentId, visitType: r.visitType, note: r.note,
         checkedInAt: r.checkedInAt.toISOString(), waitedMinutes: ["WAITING", "ON_HOLD", "SKIPPED"].includes(r.status) ? Math.max(0, Math.round((now - r.checkedInAt.getTime()) / 60000)) : 0,
         estimatedWaitMinutes: idx >= 0 ? (idx + busy) * perPatient : null, stale: r.tokenDate < today, calledAt: r.calledAt?.toISOString() ?? null,

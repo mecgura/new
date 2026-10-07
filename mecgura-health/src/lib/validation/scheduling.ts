@@ -27,6 +27,8 @@ export const patientVerificationSchema = z.object({
 
 export const patientRefSchema = z.union([
   z.object({ patientId: z.string().min(1), verification: patientVerificationSchema }),
+  /** staff opened this patient's profile (needs patients.view, checked on the server): no extra verification needed */
+  z.object({ patientId: z.string().min(1), viaProfile: z.literal(true) }),
   z.object({ newPatient: newPatientSchema, allowDuplicate: z.boolean().default(false) }),
 ]);
 export type PatientRef = z.infer<typeof patientRefSchema>;

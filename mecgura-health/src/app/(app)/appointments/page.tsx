@@ -18,7 +18,7 @@ export default async function AppointmentsPage() {
   return (
     <AppointmentsCalendar
       today={todayIn(ctx.tenant.timezone)} doctors={doctors} services={services} defaultDoctor={isDoctor ? ctx.user.id : undefined} doctorLocked={isDoctor}
-      perms={{ canCreate: ctx.permissions.has("appointments.create"), canEdit: ctx.permissions.has("appointments.edit"), canCheckIn: ctx.permissions.has("opd.manage"), canPriority: ctx.permissions.has("opd.priority") }}
+      perms={{ canCreate: ctx.permissions.has("appointments.create"), canEdit: ctx.permissions.has("appointments.edit"), canCheckIn: ctx.permissions.has("opd.manage"), canPriority: ctx.permissions.has("opd.priority"), canViewPatients: ctx.permissions.has("patients.view") }}
     />
   );
 }

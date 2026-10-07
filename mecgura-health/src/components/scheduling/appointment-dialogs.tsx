@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Alert, Button, Field, LoadingState, Modal, Select, Textarea, TextInput, useToast } from "@/components/ui";
 import { apiFetch } from "@/lib/api/client";
@@ -10,15 +11,15 @@ export interface DoctorOpt { id: string; name: string }
 export interface ServiceOpt { id: string; title: string }
 export interface Detail {
   id: string; publicId: string; type: string; source: string; status: string; startsAt: string; endsAt: string; date: string; time: string;
-  doctor: DoctorOpt; patientLabel: string; patientCode: string | null; hasPatient: boolean; serviceTitle: string | null; tokenLabel: string | null; queueStatus: string | null;
+  doctor: DoctorOpt; patientLabel: string; patientCode: string | null; hasPatient: boolean; patientId?: string | null; serviceTitle: string | null; tokenLabel: string | null; queueStatus: string | null;
   reason?: string | null; notes?: string | null; contactPhone?: string | null; contactEmail?: string | null; cancellationReason?: string | null; checkedInAt?: string | null;
 }
 
-export interface Perms { canCreate: boolean; canEdit: boolean; canCheckIn: boolean; canPriority: boolean }
+export interface Perms { canCreate: boolean; canEdit: boolean; canCheckIn: boolean; canPriority: boolean; canViewPatients?: boolean }
 
 const pickerToPayload = (p: PickerValue) => (!p ? {} : p.kind === "ref" ? { patient: p.ref } : { contactName: p.name, contactPhone: p.phone });
 
-export function NewAppointmentModal({ open, onClose, doctors, services, defaultDoctor, today, onDone }: { open: boolean; onClose: () => void; doctors: DoctorOpt[]; services: ServiceOpt[]; defaultDoctor?: string; today: string; onDone: () => void }) {
+export function NewAppointmentModal({ open, onClose, doctors, services, defaultDoctor, today, onDone, presetPatient }: { presetPatient?: { ref: import("./patient-picker").PatientRefValue; label: string }; open: boolean; onClose: () => void; doctors: DoctorOpt[]; services: ServiceOpt[]; defaultDoctor?: string; today: string; onDone: () => void }) {
   const toast = useToast();
   const [doctor, setDoctor] = useState(defaultDoctor ?? doctors[0]?.id ?? "");
   const [date, setDate] = useState(today);
@@ -26,12 +27,14 @@ export function NewAppointmentModal({ open, onClose, doctors, services, defaultD
   const [type, setType] = useState("OPD");
   const [serviceId, setServiceId] = useState("");
   const [reason, setReason] = useState("");
-  const [patient, setPatient] = useState<PickerValue>(null);
+  const preset: PickerValue = presetPatient ? { kind: "ref", ref: presetPatient.ref, label: presetPatient.label } : null;
+  const [patient, setPatient] = useState<PickerValue>(preset);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string>();
 
-  useEffect(() => { if (open) { setStartsAt(""); setErrors({}); setMsg(undefined); setPatient(null); setReason(""); setDate(today); setDoctor(defaultDoctor ?? doctors[0]?.id ?? ""); } }, [open, defaultDoctor, doctors, today]);
+  useEffect(() => { if (open) { setStartsAt(""); setErrors({}); setMsg(undefined); setPatient(presetPatient ? { kind: "ref", ref: presetPatient.ref, label: presetPatient.label } : null); setReason(""); setDate(today); setDoctor(defaultDoctor ?? doctors[0]?.id ?? ""); }   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultDoctor, doctors, today, presetPatient?.label]);
 
   async function save() {
     setBusy(true); setErrors({}); setMsg(undefined);
@@ -53,7 +56,7 @@ export function NewAppointmentModal({ open, onClose, doctors, services, defaultD
           {services.length > 0 && <Field label="Service" error={errors.serviceId}><Select value={serviceId} onChange={(e) => setServiceId(e.target.value)} placeholder="Not specified" options={services.map((s) => ({ value: s.id, label: s.title }))} /></Field>}
         </div>
         <Field label="Reason (optional)" error={errors.reason} hint="Keep this brief. No detailed medical notes."><TextInput value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} /></Field>
-        <PatientPicker value={patient} onChange={setPatient} errors={errors} allowContactOnly />
+        {presetPatient ? <p className="type-secondary">Patient: <strong>{presetPatient.label}</strong></p> : <PatientPicker value={patient} onChange={setPatient} errors={errors} allowContactOnly />}
       </div>
     </Modal>
   );
@@ -107,7 +110,7 @@ export function AppointmentDetailModal({ id, onClose, perms, today, doctors, onC
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2"><AppointmentStatusBadge status={a.status} />{a.tokenLabel && <span className="type-label rounded-pill bg-primary-soft px-2.5 py-0.5 text-primary">Token {a.tokenLabel}</span>}</div>
           <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2 text-sm">
-            <dt className="text-muted">Patient</dt><dd className="font-semibold">{a.patientLabel}{a.patientCode ? <span className="font-normal text-muted"> · {a.patientCode}</span> : null}</dd>
+            <dt className="text-muted">Patient</dt><dd className="font-semibold">{a.patientLabel}{a.patientCode ? <span className="font-normal text-muted"> · {a.patientCode}</span> : null}{perms.canViewPatients && a.patientId ? <> · <Link href={`/patients/${a.patientId}`} className="font-normal">Open patient file</Link></> : null}</dd>
             {a.contactPhone && <><dt className="text-muted">Phone</dt><dd>{a.contactPhone}</dd></>}
             <dt className="text-muted">Doctor</dt><dd>{a.doctor.name}</dd>
             <dt className="text-muted">When</dt><dd>{a.date} · {a.time}</dd>

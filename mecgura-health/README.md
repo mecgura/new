@@ -110,3 +110,6 @@ node e2e/phase2-website.mjs     # live checks (needs playwright-core)
 ## Phase 3 — appointments, calendar, live OPD & tokens
 Doctor availability, server-side slot calculation, DB-enforced double-booking prevention, day/week/month calendar, reception + doctor live queue with unique daily tokens and priorities, public booking on the clinic website, waiting-room display (tokens only) and a patient token page. Details, rules and roles: [`docs/phase3-appointments-opd.md`](docs/phase3-appointments-opd.md).
 Staff pages: `/appointments`, `/opd`, `/settings/scheduling`. Public (clinic host): `/book-appointment`, `/display/<secret>`, `/token/<token>`. Reminders are events only and Google Calendar is an unconfigured interface — nothing is sent or synced yet.
+
+## Phase 4 — Patient CRM & digital file
+Patient list/search/registration with duplicate detection, a Patient 360 file (overview, timeline, visits, appointments, allergies, medicines summary, medical & family history, notes, consent, family grouping), archive/restore, and tiered access (identity → view → clinical). Details and rules: [`docs/phase4-patient-crm.md`](docs/phase4-patient-crm.md). Pages: `/patients`, `/patients/new`, `/patients/<id>`. Live check: `node e2e/phase4-patients.mjs` (prod build, after `npm run db:seed`).

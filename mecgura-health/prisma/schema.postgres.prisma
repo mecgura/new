@@ -483,30 +483,187 @@ model ContactEnquiry {
 /// MINIMAL patient registry (identity only — name, mobile, age/DOB, a clinic-unique code). No medical data:
 /// the full patient record (history, documents, timeline) is Phase 4 and extends this model.
 model Patient {
-  id           String        @id @default(cuid())
-  tenantId     String
-  tenant       Tenant        @relation(fields: [tenantId], references: [id])
-  /// Clinic-unique, human-readable, e.g. P-000042
-  code         String
-  name         String
+  id                       String                 @id @default(cuid())
+  tenantId                 String
+  tenant                   Tenant                 @relation(fields: [tenantId], references: [id])
+  /// Clinic-unique, human-readable, never reused, not derived from phone or medical data, e.g. P-000042
+  code                     String
+  /// full name as the patient uses it (kept as one field: Phase 3 flows already depend on it)
+  name                     String
+  preferredName            String?
   /// normalised +91XXXXXXXXXX (not unique: families share a number)
-  phone        String?
-  email        String?
+  phone                    String?
+  alternatePhone           String?
+  email                    String?
   /// MALE | FEMALE | OTHER | UNDISCLOSED
-  gender       String?
-  dateOfBirth  DateTime?
+  gender                   String?
+  dateOfBirth              DateTime?
   /// used when only an approximate age is known
-  ageYears     Int?
-  createdById  String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  deletedAt    DateTime?
-  appointments Appointment[]
-  opdVisits    OpdVisit[]
+  ageYears                 Int?
+  addressLine              String?
+  city                     String?
+  state                    String?
+  country                  String?
+  pincode                  String?
+  /// A+ | A- | B+ | B- | AB+ | AB- | O+ | O-  (as stated by the patient / clinician; never inferred)
+  bloodGroup               String?
+  maritalStatus            String?
+  occupation               String?
+  emergencyContactName     String?
+  emergencyContactRelation String?
+  emergencyContactPhone    String?
+  /// ACTIVE | INACTIVE | ARCHIVED   (patients are archived, never hard-deleted)
+  status                   String                 @default("ACTIVE")
+  archivedAt               DateTime?
+  archivedReason           String?
+  /// ALLOWED | NOT_ALLOWED | UNKNOWN  — preferences only; nothing is sent in this phase
+  prefPhone                String                 @default("UNKNOWN")
+  prefWhatsapp             String                 @default("UNKNOWN")
+  prefSms                  String                 @default("UNKNOWN")
+  prefEmail                String                 @default("UNKNOWN")
+  /// Optional household grouping. Grouping NEVER merges or shares medical records.
+  familyGroupId            String?
+  familyGroup              FamilyGroup?           @relation(fields: [familyGroupId], references: [id])
+  familyRelation           String?
+  createdById              String?
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  deletedAt                DateTime?
+  appointments             Appointment[]
+  opdVisits                OpdVisit[]
+  allergies                PatientAllergy[]
+  medications              PatientMedication[]
+  history                  PatientHistory[]
+  familyHistory            PatientFamilyHistory[]
+  notes                    PatientNote[]
+  consents                 PatientConsent[]
 
   @@unique([tenantId, code])
   @@index([tenantId, phone])
   @@index([tenantId, name])
+  @@index([tenantId, status, createdAt])
+  @@index([familyGroupId])
+}
+
+model FamilyGroup {
+  id        String    @id @default(cuid())
+  tenantId  String
+  createdAt DateTime  @default(now())
+  members   Patient[]
+
+  @@index([tenantId])
+}
+
+/// Structured allergy record. Entered by staff from what the patient/clinician states; never inferred.
+model PatientAllergy {
+  id           String   @id @default(cuid())
+  tenantId     String
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  allergen     String
+  reaction     String?
+  /// MILD | MODERATE | SEVERE | UNKNOWN
+  severity     String   @default("UNKNOWN")
+  notes        String?
+  /// ACTIVE | INACTIVE | UNKNOWN
+  status       String   @default("ACTIVE")
+  recordedById String?
+  recordedAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, patientId])
+}
+
+/// Patient-level summary of medicines the patient says they take. A record only — not a prescription.
+model PatientMedication {
+  id           String   @id @default(cuid())
+  tenantId     String
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name         String
+  strength     String?
+  frequency    String?
+  notes        String?
+  /// PATIENT_REPORTED | CLINICIAN_RECORDED | OTHER
+  source       String   @default("PATIENT_REPORTED")
+  active       Boolean  @default(true)
+  recordedById String?
+  recordedAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, patientId])
+}
+
+/// Medical history entry (condition, surgery, ...). Entered by staff; never inferred.
+model PatientHistory {
+  id           String   @id @default(cuid())
+  tenantId     String
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  /// CONDITION | SURGERY | HOSPITALIZATION | CHRONIC_CONDITION | PROCEDURE | OTHER
+  category     String
+  title        String
+  description  String?
+  /// free text year or date, e.g. "2019" or "2019-03"
+  occurredOn   String?
+  /// ACTIVE | RESOLVED | UNKNOWN
+  status       String   @default("UNKNOWN")
+  notes        String?
+  recordedById String?
+  recordedAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, patientId])
+}
+
+model PatientFamilyHistory {
+  id           String   @id @default(cuid())
+  tenantId     String
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  relation     String
+  condition    String
+  notes        String?
+  recordedById String?
+  recordedAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, patientId])
+}
+
+/// Internal note. kind decides who may read it: GENERAL/RECEPTION need patients.view, CLINICAL needs patients.clinical.
+model PatientNote {
+  id         String   @id @default(cuid())
+  tenantId   String
+  patientId  String
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  /// GENERAL | RECEPTION | CLINICAL
+  kind       String   @default("GENERAL")
+  content    String
+  authorId   String
+  authorRole String
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, patientId, createdAt])
+}
+
+/// Append-only consent log. The latest row per type is the current state; history is kept.
+model PatientConsent {
+  id           String   @id @default(cuid())
+  tenantId     String
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  /// PRIVACY | COMMUNICATION | DATA_PROCESSING
+  type         String
+  /// GRANTED | WITHDRAWN
+  status       String
+  /// the clinic's own notice/version label
+  version      String
+  note         String?
+  recordedById String?
+  recordedAt   DateTime @default(now())
+
+  @@index([tenantId, patientId, type, recordedAt])
 }
 
 /// Atomic per-clinic counters (patient codes, daily tokens, queue order). Incremented inside transactions.

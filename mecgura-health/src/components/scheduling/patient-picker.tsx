@@ -6,7 +6,7 @@ import { apiFetch } from "@/lib/api/client";
 
 export interface PatientCard { id: string; code: string; name: string; gender: string | null; age: string | null; phoneMasked: string }
 /** What the server receives: an EXISTING patient + proof of identity, or a NEW patient. Never just an id. */
-export type PatientRefValue = { patientId: string; verification: { phoneLast4?: string; dateOfBirth?: string; code?: string } } | { newPatient: Record<string, unknown>; allowDuplicate: boolean };
+export type PatientRefValue = { patientId: string; viaProfile: true } | { patientId: string; verification: { phoneLast4?: string; dateOfBirth?: string; code?: string } } | { newPatient: Record<string, unknown>; allowDuplicate: boolean };
 export type PickerValue = { kind: "ref"; ref: PatientRefValue; label: string } | { kind: "contact"; name: string; phone: string } | null;
 
 /**

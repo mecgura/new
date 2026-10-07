@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AlertOctagon, Clock, Megaphone, Pause, Play, Plus, SkipForward, Siren, Check, RotateCcw, UserRoundCheck } from "lucide-react";
 import { Alert, Badge, Button, Card, EmptyState, ErrorState, Field, LoadingState, Modal, Select, TextInput, useToast } from "@/components/ui";
@@ -10,11 +11,11 @@ import { PriorityBadge, STATUS_LABEL } from "./labels";
 import { usePolling } from "./use-poll";
 
 interface Visit {
-  id: string; token: string; status: string; priority: string; queueType: string; doctorUserId: string; patientName: string; patientCode: string; patientAge: string | null; patientGender: string | null;
+  id: string; patientId: string; token: string; status: string; priority: string; queueType: string; doctorUserId: string; patientName: string; patientCode: string; patientAge: string | null; patientGender: string | null;
   visitType: string; note: string | null; waitedMinutes: number; estimatedWaitMinutes: number | null; stale: boolean;
 }
 interface Snapshot { date: string; doctors: { id: string; name: string; room: string | null; avgConsultMinutes: number }[]; visits: Visit[] }
-export interface OpdPerms { manage: boolean; call: boolean; priority: boolean }
+export interface OpdPerms { manage: boolean; call: boolean; priority: boolean; patients?: boolean }
 
 async function post(url: string, body: unknown) { return apiFetch<Record<string, unknown>>(url, { method: "POST", body: JSON.stringify(body) }); }
 
@@ -92,7 +93,7 @@ export function OpdBoard({ mode, perms, doctors: allDoctors }: { mode: "receptio
                   <div key={v.id} className={cn("rounded-md border-2 p-3", v.priority === "EMERGENCY" ? "border-emergency bg-danger-soft" : "border-success bg-success-soft")}>
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="rounded-md bg-ink px-3 py-1 text-2xl font-bold tabular-nums text-surface" aria-label={`Token ${v.token}`}>{v.token}</span>
-                      <div className="min-w-0 flex-1"><p className="type-card-title truncate">{v.patientName}</p><p className="type-caption">{v.patientCode}{v.patientAge ? ` · ${v.patientAge}` : ""}{v.patientGender ? ` · ${v.patientGender.toLowerCase()}` : ""}</p></div>
+                      <div className="min-w-0 flex-1"><p className="type-card-title truncate">{perms.patients ? <Link href={`/patients/${v.patientId}`} className="!text-ink hover:underline">{v.patientName}</Link> : v.patientName}</p><p className="type-caption">{v.patientCode}{v.patientAge ? ` · ${v.patientAge}` : ""}{v.patientGender ? ` · ${v.patientGender.toLowerCase()}` : ""}</p></div>
                       <Badge tone={v.status === "CALLED" ? "info" : "success"}>{STATUS_LABEL[v.status]}</Badge><PriorityBadge priority={v.priority} />
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -112,7 +113,7 @@ export function OpdBoard({ mode, perms, doctors: allDoctors }: { mode: "receptio
                   <li key={v.id} className={cn("rounded-md border p-3", v.priority === "EMERGENCY" ? "border-emergency bg-danger-soft" : v.priority === "HIGH" ? "border-warning bg-warning-soft" : "border-line bg-surface")}>
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="min-w-12 rounded-md bg-surface-muted px-2.5 py-1 text-center text-lg font-bold tabular-nums">{v.token}</span>
-                      <div className="min-w-0 flex-1 basis-36"><p className="type-label truncate">{v.patientName}{v.stale && <span className="type-caption ml-1 !text-warning">(from an earlier day)</span>}</p>
+                      <div className="min-w-0 flex-1 basis-36"><p className="type-label truncate">{perms.patients ? <Link href={`/patients/${v.patientId}`} className="!text-ink hover:underline">{v.patientName}</Link> : v.patientName}{v.stale && <span className="type-caption ml-1 !text-warning">(from an earlier day)</span>}</p>
                         <p className="type-caption">{v.patientCode} · waiting {v.waitedMinutes} min{v.estimatedWaitMinutes != null ? ` · ≈${v.estimatedWaitMinutes} min to go` : ""}{i === 0 ? " · next" : ""}</p></div>
                       <PriorityBadge priority={v.priority} />
                     </div>
@@ -134,7 +135,7 @@ export function OpdBoard({ mode, perms, doctors: allDoctors }: { mode: "receptio
                   <ul className="space-y-2">{parked.map((v) => (
                     <li key={v.id} className="flex flex-wrap items-center gap-3 rounded-md border border-line p-3">
                       <span className="min-w-12 rounded-md bg-surface-muted px-2.5 py-1 text-center text-lg font-bold tabular-nums">{v.token}</span>
-                      <div className="min-w-0 flex-1 basis-32"><p className="type-label truncate">{v.patientName}</p><p className="type-caption">{STATUS_LABEL[v.status]}</p></div>
+                      <div className="min-w-0 flex-1 basis-32"><p className="type-label truncate">{perms.patients ? <Link href={`/patients/${v.patientId}`} className="!text-ink hover:underline">{v.patientName}</Link> : v.patientName}</p><p className="type-caption">{STATUS_LABEL[v.status]}</p></div>
                       {v.status === "ON_HOLD" && <Button size="sm" variant="outline" onClick={() => run(v, "resume", {}, "Back in the queue")}><UserRoundCheck aria-hidden className="size-4" />Resume (same place)</Button>}
                       {v.status === "SKIPPED" && <Button size="sm" variant="outline" onClick={() => run(v, "requeue", {}, "Moved to the end of the queue")}>Back to end of queue</Button>}
                       {perms.manage && <Button size="sm" variant="ghost" onClick={() => setCancelFor(v)}>Cancel</Button>}

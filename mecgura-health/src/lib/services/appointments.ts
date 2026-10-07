@@ -36,7 +36,7 @@ export async function toView(ctx: TenantRequestContext, rows: Row[], tz: string,
     return {
       id: a.id, publicId: a.publicId, type: a.type, source: a.source, status: a.status as AppointmentStatus,
       startsAt: a.startsAt.toISOString(), endsAt: a.endsAt.toISOString(), date: utcToZoned(a.startsAt, tz).date, time: timeInTz(a.startsAt, tz),
-      doctor: a.doctor, patientLabel: full ? name : shortName(name), patientCode: a.patient?.code ?? null, hasPatient: !!a.patientId,
+      doctor: a.doctor, patientLabel: full ? name : shortName(name), patientCode: a.patient?.code ?? null, hasPatient: !!a.patientId, patientId: a.patientId,
       serviceTitle: a.serviceId ? (titles.get(a.serviceId) ?? null) : null, tokenLabel: a.opdVisit?.tokenLabel ?? null, queueStatus: a.opdVisit?.status ?? null,
       ...(full ? { reason: a.reason, notes: a.notes, contactPhone: a.contactPhone, contactEmail: a.contactEmail, cancellationReason: a.cancellationReason, checkedInAt: a.checkedInAt?.toISOString() ?? null } : {}),
     };

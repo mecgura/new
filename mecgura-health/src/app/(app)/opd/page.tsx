@@ -11,5 +11,5 @@ export default async function OpdPage() {
   const manage = ctx.permissions.has("opd.manage");
   const doctorOnly = ctx.user.role === "DOCTOR" && !manage;
   const doctors = await tenantDb(ctx).user.findMany({ where: { role: { key: "DOCTOR" }, status: "ACTIVE", deletedAt: null, ...(doctorOnly ? { id: ctx.user.id } : {}) }, select: { id: true, name: true }, orderBy: { name: "asc" } });
-  return <OpdBoard mode={doctorOnly ? "doctor" : "reception"} doctors={doctors} perms={{ manage, call: ctx.permissions.has("opd.call"), priority: ctx.permissions.has("opd.priority") }} />;
+  return <OpdBoard mode={doctorOnly ? "doctor" : "reception"} doctors={doctors} perms={{ manage, call: ctx.permissions.has("opd.call"), priority: ctx.permissions.has("opd.priority"), patients: ctx.permissions.has("patients.view") }} />;
 }

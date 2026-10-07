@@ -30,15 +30,16 @@ export async function searchPatients(ctx: TenantRequestContext, raw: unknown): P
   const digits = q.replace(/\D/g, "");
   const or: object[] = [{ name: containsCI(q) }, { code: containsCI(q) }];
   if (digits.length >= 4) or.push({ phone: { contains: digits.length === 10 ? `+91${digits}` : digits } });
-  const rows = await tenantDb(ctx).patient.findMany({ where: { OR: or }, orderBy: { name: "asc" }, take: 10, select });
+  const rows = await tenantDb(ctx).patient.findMany({ where: { OR: or, status: { not: "ARCHIVED" } }, orderBy: { name: "asc" }, take: 10, select });
   return rows.map(card);
 }
 
 /** Returns the patient only if the verification matches; failures are throttled so ids/phones can't be probed. */
 export async function verifyPatient(ctx: TenantRequestContext, patientId: string, v: { phoneLast4?: string; dateOfBirth?: string; code?: string }) {
   guard(ctx);
-  const p = await tenantDb(ctx).patient.findFirst({ where: { id: patientId }, select: { ...select, email: true } });
+  const p = await tenantDb(ctx).patient.findFirst({ where: { id: patientId }, select: { ...select, email: true, status: true } });
   if (!p) throw new AppError("NOT_FOUND", { message: "Patient not found." });
+  if (p.status === "ARCHIVED") throw new AppError("CONFLICT", { message: "This patient record is archived. Ask a clinic admin to restore it first." });
   const ok =
     (v.phoneLast4 && p.phone && p.phone.slice(-4) === v.phoneLast4) ||
     (v.dateOfBirth && p.dateOfBirth && p.dateOfBirth.toISOString().slice(0, 10) === v.dateOfBirth) ||
@@ -50,9 +51,10 @@ export async function verifyPatient(ctx: TenantRequestContext, patientId: string
   return p;
 }
 
-export async function findDuplicates(ctx: TenantRequestContext, input: { phone?: string | null; name?: string; dateOfBirth?: string | null }): Promise<PatientCard[]> {
+export async function findDuplicates(ctx: TenantRequestContext, input: { phone?: string | null; email?: string | null; name?: string; dateOfBirth?: string | null }): Promise<PatientCard[]> {
   const or: object[] = [];
-  if (input.phone) or.push({ phone: input.phone });
+  if (input.phone) or.push({ phone: input.phone }, { alternatePhone: input.phone });
+  if (input.email) or.push({ email: input.email.toLowerCase() });
   if (input.name && input.dateOfBirth) or.push({ AND: [{ name: containsCI(input.name.trim()) }, { dateOfBirth: new Date(`${input.dateOfBirth}T00:00:00Z`) }] });
   if (!or.length) return [];
   return (await tenantDb(ctx).patient.findMany({ where: { OR: or }, take: 5, select })).map(card);
@@ -60,9 +62,9 @@ export async function findDuplicates(ctx: TenantRequestContext, input: { phone?:
 
 export async function checkDuplicates(ctx: TenantRequestContext, raw: unknown) {
   guard(ctx);
-  const b = (raw ?? {}) as { phone?: string; name?: string; dateOfBirth?: string };
+  const b = (raw ?? {}) as { phone?: string; email?: string; name?: string; dateOfBirth?: string };
   const normalized = b.phone ? phone.safeParse(b.phone) : null;
-  return findDuplicates(ctx, { phone: normalized?.success ? normalized.data : null, name: b.name, dateOfBirth: b.dateOfBirth || null });
+  return findDuplicates(ctx, { phone: normalized?.success ? normalized.data : null, email: typeof b.email === "string" && b.email.includes("@") ? b.email.trim() : null, name: b.name, dateOfBirth: b.dateOfBirth || null });
 }
 
 export async function createPatient(ctx: TenantRequestContext, input: NewPatientInput, opts: { allowDuplicate?: boolean; client?: Client } = {}) {
@@ -94,6 +96,13 @@ export async function createPatient(ctx: TenantRequestContext, input: NewPatient
 /** Turns "existing (verified) or new patient" from a request into a patient row belonging to THIS clinic. */
 export async function resolvePatientRef(ctx: TenantRequestContext, rawRef: unknown) {
   const ref: PatientRef = parseOrThrow(patientRefSchema, rawRef);
+  if ("viaProfile" in ref) {
+    if (!ctx.permissions.has("patients.view")) throw new AppError("FORBIDDEN");
+    const p = await tenantDb(ctx).patient.findFirst({ where: { id: ref.patientId }, select: { ...select, status: true } });
+    if (!p) throw new AppError("NOT_FOUND", { message: "Patient not found." });
+    if (p.status === "ARCHIVED") throw new AppError("CONFLICT", { message: "This patient record is archived. Ask a clinic admin to restore it first." });
+    return p;
+  }
   if ("patientId" in ref) return verifyPatient(ctx, ref.patientId, ref.verification);
   return createPatient(ctx, ref.newPatient, { allowDuplicate: ref.allowDuplicate });
 }
