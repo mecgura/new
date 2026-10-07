@@ -102,6 +102,7 @@ export function BookingFlow({ initialDoctor, disabled }: { initialDoctor?: strin
 
   return (
     <form onSubmit={submit} noValidate className="space-y-8">
+      <p className="type-caption">Already a patient of this clinic? <a href="/portal/login" className="font-medium underline">Sign in to your patient portal</a> to book, see reports and bills.</p>
       {msg && <Alert tone="danger" title="Couldn't complete the booking">{msg}</Alert>}
       <section aria-labelledby="bk-1" className="space-y-3">
         <h2 id="bk-1" className="text-lg font-semibold">1. Choose a doctor</h2>

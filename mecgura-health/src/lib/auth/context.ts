@@ -138,6 +138,7 @@ function hasTenant(ctx: RequestContext): ctx is TenantRequestContext {
 export async function requireContext(): Promise<RequestContext> {
   const { ctx, blocked } = await getAccess();
   if (!ctx) redirect(blocked ? `/login?reason=${blocked}` : "/login");
+  if (ctx.user.role === "PATIENT") redirect("/portal"); // patients use the portal, never the staff application
   return ctx;
 }
 

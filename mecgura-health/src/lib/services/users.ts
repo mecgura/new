@@ -27,7 +27,8 @@ export async function listUsers(ctx: TenantRequestContext, f: { q?: string; role
   assertPermission(ctx.permissions, "users.view");
   const { skip, take, page } = pageParams(f.page);
   const where = {
-    ...(f.role ? { role: { key: f.role } } : {}),
+    // portal patients are not staff: they never appear in (or can be managed from) the team screens
+    role: { key: f.role && f.role !== "PATIENT" ? f.role : { not: "PATIENT" } },
     ...(f.status && f.status in USER_STATUSES ? { status: f.status } : {}),
     ...(f.q ? { OR: [{ name: containsCI(f.q) }, { email: containsCI(f.q) }, { phone: containsCI(f.q) }] } : {}),
   };
@@ -42,7 +43,7 @@ export async function listUsers(ctx: TenantRequestContext, f: { q?: string; role
 export async function getUser(ctx: TenantRequestContext, id: string) {
   assertPermission(ctx.permissions, "users.view");
   const user = await tenantDb(ctx).user.findFirst({
-    where: { id },
+    where: { id, role: { key: { not: "PATIENT" } } },
     select: { ...listSelect, doctorProfile: true, staffProfile: true, permissionGrants: { select: { permission: true } } },
   });
   if (!user) throw new AppError("NOT_FOUND"); // also what a user of ANOTHER clinic gets: resource hiding
@@ -107,7 +108,7 @@ async function activeAdminCountExcluding(ctx: TenantRequestContext, userId: stri
 export async function updateUser(ctx: TenantRequestContext, id: string, input: UserUpdateInput) {
   assertPermission(ctx.permissions, "users.edit");
   const tdb = tenantDb(ctx);
-  const current = await tdb.user.findFirst({ where: { id }, select: { id: true, status: true, role: { select: { key: true } } } });
+  const current = await tdb.user.findFirst({ where: { id, role: { key: { not: "PATIENT" } } }, select: { id: true, status: true, role: { select: { key: true } } } });
   if (!current) throw new AppError("NOT_FOUND");
   if (input.phone) await assertNoDuplicate(undefined, input.phone, id);
 
@@ -146,7 +147,7 @@ export async function setUserStatus(ctx: TenantRequestContext, id: string, statu
   assertPermission(ctx.permissions, "users.disable");
   if (id === ctx.user.id) throw new AppError("FORBIDDEN", { message: "You can't change your own account status." });
   const tdb = tenantDb(ctx);
-  const u = await tdb.user.findFirst({ where: { id }, select: { status: true, passwordHash: true, role: { select: { key: true } } } });
+  const u = await tdb.user.findFirst({ where: { id, role: { key: { not: "PATIENT" } } }, select: { status: true, passwordHash: true, role: { select: { key: true } } } });
   if (!u) throw new AppError("NOT_FOUND");
   if (status !== "ACTIVE" && u.role.key === "CLINIC_ADMIN" && u.status === "ACTIVE" && (await activeAdminCountExcluding(ctx, id)) === 0) {
     throw new AppError("CONFLICT", { message: "A clinic needs at least one active Clinic Admin." });
@@ -162,7 +163,7 @@ export async function setUserStatus(ctx: TenantRequestContext, id: string, statu
 export async function reinviteUser(ctx: TenantRequestContext, id: string) {
   assertPermission(ctx.permissions, "users.create");
   const tdb = tenantDb(ctx);
-  const u = await tdb.user.findFirst({ where: { id }, select: { status: true, passwordHash: true } });
+  const u = await tdb.user.findFirst({ where: { id, role: { key: { not: "PATIENT" } } }, select: { status: true, passwordHash: true } });
   if (!u) throw new AppError("NOT_FOUND");
   if (u.passwordHash) throw new AppError("CONFLICT", { message: "This user has already set up their account." });
   const invite = newInviteToken();

@@ -6,6 +6,9 @@ import { parseTenantHost } from "@/lib/tenant/host";
 
 // Paths reachable without a session.
 const PUBLIC_PATHS = ["/login", "/invite", "/robots.txt"];
+// Patient portal: only the sign-in / activation screens are reachable without a session; everything else under /portal needs one.
+const PORTAL_PUBLIC = ["/portal/login", "/portal/activate", "/portal/register", "/portal/forgot"];
+const isPortal = (p: string) => p === "/portal" || p.startsWith("/portal/");
 
 /**
  * Runs before every page request (API routes and static assets are excluded in `config`).
@@ -35,15 +38,17 @@ export async function proxy(req: NextRequest) {
     return res;
   }
 
-  const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const portal = isPortal(pathname);
+  const isPublic = portal ? PORTAL_PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`)) : PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   if (!isPublic) {
     const token = await getToken({ req, secret: process.env.AUTH_SECRET });
     if (!token) {
-      const url = new URL("/login", req.nextUrl.origin);
+      const url = new URL(portal ? "/portal/login" : "/login", req.nextUrl.origin);
       if (pathname !== "/") url.searchParams.set("callbackUrl", pathname + req.nextUrl.search);
       const redirect = NextResponse.redirect(url);
       redirect.headers.set("Content-Security-Policy", csp);
+      redirect.headers.set("Cache-Control", "private, no-store");
       return redirect;
     }
   }
@@ -53,6 +58,11 @@ export async function proxy(req: NextRequest) {
   requestHeaders.set("Content-Security-Policy", csp);
   const res = NextResponse.next({ request: { headers: requestHeaders } });
   res.headers.set("Content-Security-Policy", csp);
+  if (portal) {
+    // Private pages: never indexed, never cached (so the back button after logout can't show them).
+    res.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+    res.headers.set("Cache-Control", "private, no-store, max-age=0");
+  }
   return res;
 }
 

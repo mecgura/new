@@ -24,6 +24,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
   { module: "platform", label: "Clinics", href: "/platform/clinics", icon: "clinics", permission: "platform.manage" },
   { module: "team", label: "Team", href: "/team", icon: "team", permission: "users.view" },
   { module: "patients", label: "Patients", href: "/patients", icon: "patients", permission: "patients.view" },
+  { module: "patients", label: "Portal requests", href: "/patients/requests", icon: "patients", permission: "portal.manage" },
   { module: "opd", label: "Live OPD", href: "/opd", icon: "opd", permission: "opd.view" },
   { module: "appointments", label: "Appointments", href: "/appointments", icon: "appointments", permission: "appointments.view" },
   { module: "consultations", label: "Consultations", href: "/consultations", icon: "consultations", permission: "consultation.view" },

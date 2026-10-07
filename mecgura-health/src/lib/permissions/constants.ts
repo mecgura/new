@@ -110,6 +110,8 @@ export const PERMISSIONS = {
 
   "inventory.view": { module: "inventory", description: "View inventory" },
   "inventory.edit": { module: "inventory", description: "Edit inventory" },
+  "portal.manage": { module: "patients", description: "Give patients portal access, reset it, and review patient portal requests" },
+  "portal.configure": { module: "patients", description: "Configure the patient portal policy" },
   "pharmacy.view": { module: "inventory", description: "View medicines, stock, batches and suppliers" },
   "pharmacy.dispense": { module: "inventory", description: "Dispense finalized prescriptions" },
   "pharmacy.receive": { module: "inventory", description: "Receive a purchase into stock" },
@@ -161,6 +163,6 @@ export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
  * the role (admin/platform powers). Everything else may be granted to e.g. a STAFF member.
  */
 export const NON_GRANTABLE_PERMISSIONS: readonly Permission[] = [
-  "platform.manage", "website.publish", "schedule.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view", "patients.archive", "patients.export", "consultation.finalize", "prescription.finalize", "lab.configure", "followups.configure", "pharmacy.configure", "pharmacy.adjust", "pharmacy.return_approve", "pharmacy.purchase", "pharmacy.medicines", "pharmacy.suppliers", "billing.configure", "billing.refund_approve",
+  "platform.manage", "website.publish", "schedule.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view", "patients.archive", "patients.export", "consultation.finalize", "prescription.finalize", "lab.configure", "followups.configure", "portal.configure", "pharmacy.configure", "pharmacy.adjust", "pharmacy.return_approve", "pharmacy.purchase", "pharmacy.medicines", "pharmacy.suppliers", "billing.configure", "billing.refund_approve",
 ];
 export const GRANTABLE_PERMISSIONS = ALL_PERMISSIONS.filter((p) => !NON_GRANTABLE_PERMISSIONS.includes(p));

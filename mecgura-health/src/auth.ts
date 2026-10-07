@@ -10,6 +10,7 @@ import { findTenantByHost } from "@/lib/tenant/resolve-core";
 import { loginSchema, normalizeIdentifier } from "@/lib/validation/schemas";
 import { STAFF_APP_ROLES, type RoleKey } from "@/lib/permissions";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
+import { authorizePatient, PATIENT_SESSION_MS } from "@/lib/portal/patient-login";
 
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MINUTES = 15;
@@ -27,6 +28,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt", maxAge: 60 * 60 * 8, updateAge: 60 * 30 },
   pages: { signIn: "/login", error: "/login" },
   providers: [
+    // Patient portal sign-in: a separate provider so a staff credential form can never produce a patient session or the reverse.
+    Credentials({ id: "patient", name: "Patient portal", credentials: { clinic: {}, identifier: {}, password: {} }, authorize: (credentials) => authorizePatient(credentials) }),
     Credentials({
       credentials: { identifier: {}, password: {} },
       async authorize(credentials) {
@@ -79,11 +82,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user?.id) token.uid = user.id;
+      if (user?.id) {
+        token.uid = user.id;
+        // Set ONCE at sign-in: a portal session has a fixed absolute lifetime and a sign-in time that "log out everywhere" can compare.
+        if (user.kind === "patient") { token.kind = "patient"; token.sa = Date.now(); token.pexp = token.sa + PATIENT_SESSION_MS; }
+        else { delete token.kind; delete token.sa; delete token.pexp; }
+      }
       return token;
     },
     async session({ session, token }) {
       if (session.user && typeof token.uid === "string") session.user.id = token.uid;
+      session.portal = token.kind === "patient" && typeof token.sa === "number" && typeof token.pexp === "number" ? { sa: token.sa, pexp: token.pexp } : null;
       return session;
     },
   },

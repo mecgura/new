@@ -2,7 +2,7 @@
 
 export const APPOINTMENT_TYPES = ["ONLINE_APPOINTMENT", "WALK_IN", "FOLLOW_UP", "EMERGENCY", "OPD", "PROCEDURE", "OTHER"] as const;
 export type AppointmentType = (typeof APPOINTMENT_TYPES)[number];
-export const APPOINTMENT_SOURCES = ["WEBSITE", "PHONE", "WALK_IN", "RECEPTION", "WHATSAPP", "REFERRAL", "OTHER"] as const;
+export const APPOINTMENT_SOURCES = ["WEBSITE", "PORTAL", "PHONE", "WALK_IN", "RECEPTION", "WHATSAPP", "REFERRAL", "OTHER"] as const;
 export type AppointmentSource = (typeof APPOINTMENT_SOURCES)[number];
 
 export const APPOINTMENT_STATUSES = ["REQUESTED", "CONFIRMED", "CHECKED_IN", "WAITING", "CALLED", "IN_CONSULTATION", "COMPLETED", "CANCELLED", "NO_SHOW", "ON_HOLD", "SKIPPED"] as const;

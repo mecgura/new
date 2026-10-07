@@ -22,7 +22,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
   ),
   RECEPTIONIST: P(
     "dashboard.view", "clinic.view", "settings.view",
-    "patients.view", "patients.identity", "patients.create", "patients.edit", "opd.view", "opd.manage", "opd.priority",
+    "patients.view", "patients.identity", "patients.create", "patients.edit", "portal.manage", "opd.view", "opd.manage", "opd.priority",
     "appointments.view", "appointments.create", "appointments.edit",
     "billing.view", "billing.create", "billing.edit", "billing.collect", "billing.discount", "billing.refund_request", "followups.view", "followups.manage", "followups.create", "followups.contact", "recalls.manage", "communications.view",
     "enquiries.view", "enquiries.manage", "tests.view", "tests.print",
@@ -42,7 +42,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
   // STAFF holds only the basics; anything more must be granted explicitly per user.
   STAFF: P("dashboard.view", "clinic.view", "settings.view"),
   // Patients use the (later) patient portal, never the staff app.
-  PATIENT: [],
+  PATIENT: [], // portal patients hold NO staff permission: the portal authorises through session -> PatientAccount -> Patient ownership
 };
 
 /** Role defaults ∪ explicit per-user grants (grants outside the grantable set are ignored). */

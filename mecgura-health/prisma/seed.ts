@@ -106,6 +106,11 @@ async function seedScheduling(tenantId: string, key: "A" | "B") {
   await db.followUp.deleteMany({ where: { tenantId } }); // cascades contacts + events
   await db.recall.deleteMany({ where: { tenantId } });
   await db.followUpSettings.deleteMany({ where: { tenantId } });
+  await db.patientInvite.deleteMany({ where: { tenantId } });
+  await db.patientRequest.deleteMany({ where: { tenantId } });
+  await db.patientAccount.deleteMany({ where: { tenantId } });
+  await db.portalSettings.deleteMany({ where: { tenantId } });
+  await db.user.deleteMany({ where: { tenantId, role: { key: "PATIENT" } } });
   await db.patient.deleteMany({ where: { tenantId } });
   await db.familyGroup.deleteMany({ where: { tenantId } });
 
@@ -215,6 +220,18 @@ async function main() {
       ? { key: "A", name: c.name, colour: "#0e7c86", hours: { monday: ["09:00", "17:00"], tuesday: ["09:00", "17:00"], wednesday: ["09:00", "17:00"], thursday: ["09:00", "17:00"], friday: ["09:00", "17:00"], saturday: ["09:00", "13:00"], sunday: null }, whatsapp: "911234567890", services: ["General Consultation (demo)", "Follow-up Consultation (demo)", "Health Check-up (demo)"], faq: [["How do I book an appointment? (demo)", "Demo answer: contact the clinic."], ["What should I bring? (demo)", "Demo answer."]] }
       : { key: "B", name: c.name, colour: "#5b21b6", hours: { monday: ["10:00", "19:00"], tuesday: ["10:00", "19:00"], wednesday: ["10:00", "19:00"], thursday: ["10:00", "19:00"], friday: ["10:00", "19:00"], saturday: ["10:00", "19:00"], sunday: null }, services: ["Specialist Consultation (demo)", "Second Opinion (demo)"], faq: [["Do you take walk-ins? (demo)", "Demo answer for clinic B."]] });
     await seedScheduling(tenant.id, c.slug === "demo-clinic" ? "A" : "B");
+    // Pre-activated portal login for "Demo Patient One" (synthetic). Patient Two stays un-activated so the invite flow can be tried.
+    const demoPatient = await db.patient.findFirst({ where: { tenantId: tenant.id, code: "P-000001" } });
+    if (demoPatient && roleIds.get("PATIENT")) {
+      const loginEmail = `patient@${c.mail}.mecgura.test`;
+      const pUser = await db.user.upsert({
+        where: { email: loginEmail },
+        update: { passwordHash, status: "ACTIVE", failedLoginCount: 0, lockedUntil: null, deletedAt: null },
+        create: { email: loginEmail, name: demoPatient.name, passwordHash, tenantId: tenant.id, roleId: roleIds.get("PATIENT")! },
+      });
+      await db.patientAccount.create({ data: { tenantId: tenant.id, userId: pUser.id, patientId: demoPatient.id, loginEmail, loginPhone: demoPatient.phone, status: "ACTIVE", verifiedAt: new Date() } });
+      all.push({ email: loginEmail, role: "PATIENT", clinic: c.name });
+    }
   }
   await db.user.upsert({
     where: { email: "platform@demo.mecgura.test" },

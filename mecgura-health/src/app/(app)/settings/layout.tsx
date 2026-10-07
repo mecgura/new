@@ -10,6 +10,7 @@ const TABS = [
   { href: "/settings/scheduling", label: "Scheduling & OPD" },
   { href: "/settings/lab", label: "Laboratory" },
   { href: "/settings/followups", label: "Follow-ups" },
+  { href: "/settings/portal", label: "Patient portal" },
   { href: "/settings/integrations", label: "Integrations" },
 ];
 

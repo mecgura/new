@@ -163,24 +163,25 @@ model RolePermission {
 
 /// Staff/platform account. tenantId = null only for SUPER_ADMIN.
 model User {
-  id               String    @id @default(cuid())
+  id               String          @id @default(cuid())
+  patientAccount   PatientAccount?
   tenantId         String?
-  tenant           Tenant?   @relation(fields: [tenantId], references: [id])
+  tenant           Tenant?         @relation(fields: [tenantId], references: [id])
   roleId           String
-  role             Role      @relation(fields: [roleId], references: [id])
-  email            String    @unique
+  role             Role            @relation(fields: [roleId], references: [id])
+  email            String          @unique
   name             String
-  phone            String?   @unique
+  phone            String?         @unique
   avatarUrl        String?
   /// Null until an invited user sets their password
   passwordHash     String?
   /// ACTIVE | INVITED | SUSPENDED | DISABLED
-  status           String    @default("ACTIVE")
+  status           String          @default("ACTIVE")
   lastLoginAt      DateTime?
-  failedLoginCount Int       @default(0)
+  failedLoginCount Int             @default(0)
   lockedUntil      DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
   deletedAt        DateTime?
 
   auditLogs             AuditLog[]
@@ -544,6 +545,7 @@ model Patient {
   recalls                  Recall[]
   invoices                 Invoice[]
   payments                 Payment[]
+  patientAccount           PatientAccount?
 
   @@unique([tenantId, code])
   @@index([tenantId, phone])
@@ -1409,8 +1411,11 @@ model Notification {
   entityType String?
   entityId   String?
   readAt     DateTime?
+  /// lets in-app notifications be created lazily without duplicates (NULL = no dedupe)
+  dedupeKey  String?
   createdAt  DateTime  @default(now())
 
+  @@unique([userId, dedupeKey])
   @@index([tenantId, userId, readAt, createdAt])
 }
 
@@ -2173,4 +2178,103 @@ model StockCountLine {
 
   @@unique([countId, batchId])
   @@index([tenantId, countId])
+}
+
+/// ---------------------------------------------------------------------------------------------------------------
+/// Phase 10 — patient portal. A portal login is  User (role PATIENT) → PatientAccount → Patient (the Phase 4 record).
+/// The Patient record stays the single source of medical identity: an account never creates a second patient.
+/// The portal identifies the patient ONLY through the session → account → patient chain (never an id from the browser).
+/// ---------------------------------------------------------------------------------------------------------------
+
+model PatientAccount {
+  id                String    @id @default(cuid())
+  tenantId          String
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id])
+  /// ONE portal account per patient record
+  patientId         String    @unique
+  patient           Patient   @relation(fields: [patientId], references: [id])
+  /// what the patient types to sign in (normalised); unique inside the clinic
+  loginEmail        String?
+  loginPhone        String?
+  /// ACTIVE | SUSPENDED | DEACTIVATED
+  status            String    @default("ACTIVE")
+  verifiedAt        DateTime?
+  lastLoginAt       DateTime?
+  /// sessions that were signed in before this moment are rejected (log out everywhere / password change)
+  sessionsValidFrom DateTime  @default(now())
+  passwordChangedAt DateTime?
+  /// JSON: { appointments, followUps, billing, reports, general } -> boolean (in-app notification categories)
+  prefs             String    @default("{}")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([tenantId, loginEmail])
+  @@unique([tenantId, loginPhone])
+  @@index([tenantId, status])
+}
+
+/// Clinic-issued, single-use activation / access-reset code. Only a hash is stored; the code is shown once to the staff member.
+model PatientInvite {
+  id          String    @id @default(cuid())
+  tenantId    String
+  patientId   String
+  codeHash    String    @unique
+  /// ACTIVATION | ACCESS_RESET
+  purpose     String    @default("ACTIVATION")
+  expiresAt   DateTime
+  usedAt      DateTime?
+  revokedAt   DateTime?
+  attempts    Int       @default(0)
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId, patientId, createdAt])
+}
+
+/// A patient's request that clinic staff review: profile / medical-information correction, account deactivation, support.
+model PatientRequest {
+  id             String    @id @default(cuid())
+  tenantId       String
+  /// PRQ-2026-000001
+  requestNumber  String
+  patientId      String
+  /// PROFILE_CORRECTION | MEDICAL_CORRECTION | ACCOUNT_DEACTIVATION | SUPPORT
+  kind           String
+  field          String?
+  currentValue   String?
+  requestedValue String?
+  reason         String
+  /// PENDING | UNDER_REVIEW | APPROVED | REJECTED | CANCELLED
+  status         String    @default("PENDING")
+  reviewedById   String?
+  reviewedAt     DateTime?
+  reviewNote     String?
+  /// true when a reviewer applied an approved demographic correction to the patient record
+  applied        Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([tenantId, requestNumber])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, patientId, createdAt])
+}
+
+/// Clinic-level portal policy. Defaults are conservative (diagnoses hidden from the portal until the clinic opts in).
+model PortalSettings {
+  id                String   @id @default(cuid())
+  tenantId          String   @unique
+  enabled           Boolean  @default(true)
+  allowBooking      Boolean  @default(true)
+  allowCancel       Boolean  @default(true)
+  allowReschedule   Boolean  @default(true)
+  /// patients can't cancel / reschedule closer than this to the appointment
+  changeCutoffHours Int      @default(24)
+  showDiagnoses     Boolean  @default(false)
+  /// JSON array of Patient fields the patient may edit directly
+  editableFields    String   @default("[\"preferredName\",\"email\",\"alternatePhone\",\"addressLine\",\"city\",\"state\",\"country\",\"pincode\",\"emergencyContactName\",\"emergencyContactRelation\",\"emergencyContactPhone\"]")
+  supportNote       String?
+  privacyNotice     String?
+  consentVersion    String   @default("v1")
+  updatedAt         DateTime @updatedAt
 }

@@ -9,6 +9,7 @@ import { AppointmentStatusBadge, PriorityBadge, STATUS_LABEL, TYPE_LABEL } from 
 import { apiFetch } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import type { getPatientProfile } from "@/lib/services/patient-crm";
+import { PortalAccessCard } from "@/components/portal/portal-access-card";
 import { PatientPharmacyTab } from "@/components/pharmacy/patient-pharmacy-tab";
 import { PatientBillingTab } from "@/components/billing/patient-billing-tab";
 import { PatientFollowUpsTab } from "@/components/followups/patient-followups-tab";
@@ -169,7 +170,7 @@ export function PatientWorkspace({ profile, doctors, services, today }: Props) {
         </nav>
 
         <div id="patient-panel" role="tabpanel" aria-labelledby={`tab-${tab}`} tabIndex={0} className="min-w-0 space-y-section focus:outline-none">
-          {tab === "overview" && <Overview profile={profile} />}
+          {tab === "overview" && <><Overview profile={profile} /><div className="mt-section"><PortalAccessCard patientId={p.id} patientName={p.name} /></div></>}
           {tab === "timeline" && <Timeline id={p.id} clinical={access.clinical} />}
           {tab === "consultations" && <Consultations id={p.id} />}
           {tab === "visits" && <Visits id={p.id} />}
