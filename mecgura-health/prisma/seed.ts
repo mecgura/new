@@ -86,6 +86,13 @@ async function seedScheduling(tenantId: string, key: "A" | "B") {
   await db.blockedTime.deleteMany({ where: { tenantId } });
   await db.availabilityWindow.deleteMany({ where: { tenantId } });
   await db.tenantCounter.deleteMany({ where: { tenantId } });
+  await db.refund.deleteMany({ where: { tenantId } });
+  await db.payment.deleteMany({ where: { tenantId } });
+  await db.invoice.deleteMany({ where: { tenantId } }); // cascades items + events
+  await db.cashierSession.deleteMany({ where: { tenantId } });
+  await db.billingService.deleteMany({ where: { tenantId } });
+  await db.billingTax.deleteMany({ where: { tenantId } });
+  await db.billingSettings.deleteMany({ where: { tenantId } });
   await db.followUp.deleteMany({ where: { tenantId } }); // cascades contacts + events
   await db.recall.deleteMany({ where: { tenantId } });
   await db.followUpSettings.deleteMany({ where: { tenantId } });
@@ -176,6 +183,7 @@ async function main() {
       { email: `admin@${c.mail}.mecgura.test`, name: `${c.name} Admin`, role: "CLINIC_ADMIN" },
       { email: `doctor@${c.mail}.mecgura.test`, name: `${c.name} Doctor`, role: "DOCTOR" },
       { email: `reception@${c.mail}.mecgura.test`, name: `${c.name} Receptionist`, role: "RECEPTIONIST" },
+      { email: `accountant@${c.mail}.mecgura.test`, name: `${c.name} Accountant`, role: "ACCOUNTANT" },
       { email: `lab@${c.mail}.mecgura.test`, name: `${c.name} Lab Technician`, role: "LAB_STAFF" },
       { email: `labreviewer@${c.mail}.mecgura.test`, name: `${c.name} Lab Reviewer`, role: "LAB_STAFF", grants: ["lab.review"] },
     ];

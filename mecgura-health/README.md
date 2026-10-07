@@ -122,3 +122,6 @@ Doctors order investigations from a consultation; lab staff collect, receive (or
 
 ## Phase 7 — follow-up CRM, recalls & reminders
 Follow-ups from consultations, prescriptions, lab reports, no-shows, recalls or manual tasks; a command center (`/followups`), worklist with server-side filters, contact log (manual), booking through the existing appointment engine, reschedule history, outcomes, bounded recalls, in-app reminders, Patient 360 tab/timeline and clinic-level rules (`/settings/followups`). No automatic patient messaging. Details: [docs/phase7-followups.md](docs/phase7-followups.md).
+
+## Phase 8 — billing, invoices, payments & refunds
+Configurable service master and tax, invoices with tenant-scoped numbers, discounts with role limits, partial/multiple payments, receipts, refunds with approval workflow, outstanding/overdue, daily collection and reports with CSV, optional cashier sessions, Patient 360 Billing tab, tenant-branded private documents. Integer minor-unit money, server is source of truth. No payment gateway yet ("Payment gateway not configured."). See `docs/phase8-billing.md`.

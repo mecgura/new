@@ -90,10 +90,10 @@ check("admin restores", (await api(adminA, "POST", `/api/patients/${tmp.id}/rest
   check("reception sees header, summary and sections", await page.getByRole("heading", { level: 1, name: /Demo Patient One/ }).isVisible() && await page.getByRole("tab", { name: "Timeline" }).isVisible() && await page.getByRole("tab", { name: "Notes" }).isVisible());
   check("reception does NOT see clinical sections", (await page.getByRole("tab", { name: "Allergies" }).count()) === 0 && (await page.getByRole("tab", { name: "Medications" }).count()) === 0 && (await page.getByText("ALLERGY", { exact: true }).count()) === 0);
   await page.getByRole("tab", { name: "Timeline" }).click(); await page.getByText("Patient registered").waitFor({ timeout: 10000 });
-  check("timeline shows real events and soon-filters are disabled", await page.getByRole("button", { name: /Billing/ }).isDisabled());
+  check("timeline shows real events and billing filter is now enabled (Phase 8)", await page.getByRole("button", { name: /Billing/ }).isEnabled());
   await page.getByRole("tab", { name: "Visits" }).click(); await page.getByText(/Visits \(OPD\)/).waitFor();
   await page.getByRole("tab", { name: "Billing" }).click();
-  check("future modules show an honest placeholder", await page.getByText("Coming in a later phase").isVisible());
+  check("billing tab is live (Phase 8), not a placeholder", (await page.getByText("Coming in a later phase").count()) === 0);
   await page.getByRole("tab", { name: "Family" }).click(); await page.getByText(/Demo Patient Two/).first().waitFor({ timeout: 10000 });
   await page.getByRole("tab", { name: "Notes" }).click(); await page.getByRole("button", { name: "Add note" }).click();
   await page.getByRole("dialog").getByLabel("Note").fill("E2E reception note"); await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();

@@ -9,6 +9,7 @@ import { tenantDb } from "@/lib/tenant/db";
 import { parseOrThrow } from "@/lib/validation";
 import { completionBuiltin, contactBuiltin, contactSchema, followUpActionSchema, followUpCreateSchema, followUpEditSchema, followUpSettingsSchema } from "@/lib/validation/followups";
 import { isUniqueViolation, nextCounter, tenantTimezone, type Client } from "./clinic-shared";
+import { autoBill } from "./billing-invoices";
 import { containsCI } from "./shared";
 
 /**
@@ -510,6 +511,7 @@ export async function linkAppointment(ctx: TenantRequestContext, followUpId: str
     await addEvent(tx, ctx.tenantId, f, "APPOINTMENT_BOOKED", ctx.user.id, { toValue: when, note: appointment.id });
   });
   await recordAudit({ action: AUDIT_ACTIONS.FOLLOWUP_APPOINTMENT_BOOKED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "followup", entityId: followUpId, metadata: { appointmentId: appointment.id } });
+  await autoBill(ctx, "followup", followUpId); // draft invoice only if the clinic enabled it
 }
 
 /* ------------------------------------------------ patient views ------------------------------------------------ */

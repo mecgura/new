@@ -1,4 +1,5 @@
 "use client";
+import { BillingStatus } from "@/components/billing/billing-status";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { CalendarPlus, CheckCircle2, Phone, Play } from "lucide-react";
@@ -48,6 +49,7 @@ export function FollowUpWorkspace({ initial, doctors, services, today, initialAc
             <Info label="Assigned to" value={d.assignedTo ? d.assignedTo.name : "Unassigned"} />
             <Info label="Source" value={`${SOURCE_LABEL[d.source] ?? d.source} · created ${when(d.createdAt)}${d.createdBy ? ` by ${d.createdBy}` : ""}`} />
           </dl>
+          <BillingStatus kind="followup" id={d.id} />
           {d.description && <p className="type-body">{d.description}</p>}
           {d.doctorNotes && <p className="type-secondary rounded-md bg-surface-muted p-2"><strong>Doctor note:</strong> {d.doctorNotes}</p>}
           {d.notes && <p className="type-secondary"><strong>Internal notes:</strong> {d.notes}</p>}

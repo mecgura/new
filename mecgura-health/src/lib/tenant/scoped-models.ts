@@ -66,6 +66,15 @@ export const TENANT_SCOPED_MODELS: Record<string, { softDelete?: boolean }> = {
   FollowUpEvent: {},
   Recall: {},
   FollowUpSettings: {},
+  BillingSettings: {},
+  BillingTax: {},
+  BillingService: {},
+  Invoice: {},
+  InvoiceItem: {},
+  Payment: {},
+  Refund: {},
+  InvoiceEvent: {},
+  CashierSession: {},
 };
 
 /** Models that carry a tenantId but are intentionally NOT auto-scoped (explained). */

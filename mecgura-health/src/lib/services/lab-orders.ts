@@ -11,6 +11,7 @@ import { parseOrThrow } from "@/lib/validation";
 import { labActionSchema, labOrderCreateSchema } from "@/lib/validation/lab";
 import { nextCounter, tenantTimezone, type Client } from "./clinic-shared";
 import { containsCI } from "./shared";
+import { autoBill } from "./billing-invoices";
 import { labGuard } from "./lab-master";
 import { snapshotOf } from "./lab-master";
 
@@ -93,6 +94,7 @@ export async function createInvestigationOrder(ctx: TenantRequestContext, consul
     await tx.investigationOrderItem.createMany({ data: snaps.map((s) => ({ tenantId: ctx.tenantId, investigationOrderId: order.id, investigationId: s.t.id, testNameSnapshot: s.snap.name, sampleTypeSnapshot: s.snap.sampleType ?? null, snapshot: JSON.stringify(s.snap), priority: input.priority })) });
     return { id: order.id as string, orderNumber: order.orderNumber as string };
   });
+  await autoBill(ctx, "investigation", out.id); // draft invoice only if the clinic enabled it; never blocks the order
   await recordAudit({ action: AUDIT_ACTIONS.LAB_ORDER_CREATED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "investigation_order", entityId: out.id, metadata: { consultationId, tests: ids.length, priority: input.priority, source: input.source } });
   return out;
 }

@@ -92,7 +92,17 @@ export const PERMISSIONS = {
 
   "billing.view": { module: "billing", description: "View billing" },
   "billing.create": { module: "billing", description: "Create invoices" },
-  "billing.edit": { module: "billing", description: "Edit billing" },
+  "billing.edit": { module: "billing", description: "Edit draft invoices" },
+  "billing.collect": { module: "billing", description: "Record payments and print receipts" },
+  "billing.discount": { module: "billing", description: "Apply discounts (limits are set in billing settings)" },
+  "billing.cancel": { module: "billing", description: "Cancel issued invoices and payments" },
+  "billing.refund_request": { module: "billing", description: "Request refunds" },
+  "billing.refund_approve": { module: "billing", description: "Approve or reject refunds" },
+  "billing.refund_process": { module: "billing", description: "Process approved refunds" },
+  "billing.reports": { module: "billing", description: "View financial reports" },
+  "billing.export": { module: "billing", description: "Export financial data (CSV)" },
+  "billing.configure": { module: "billing", description: "Configure services, taxes, discount rules and billing settings" },
+  "billing.view_own": { module: "billing", description: "View billing status of own consultations" },
 
   "inventory.view": { module: "inventory", description: "View inventory" },
   "inventory.edit": { module: "inventory", description: "Edit inventory" },
@@ -135,6 +145,6 @@ export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
  * the role (admin/platform powers). Everything else may be granted to e.g. a STAFF member.
  */
 export const NON_GRANTABLE_PERMISSIONS: readonly Permission[] = [
-  "platform.manage", "website.publish", "schedule.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view", "patients.archive", "patients.export", "consultation.finalize", "prescription.finalize", "lab.configure", "followups.configure",
+  "platform.manage", "website.publish", "schedule.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view", "patients.archive", "patients.export", "consultation.finalize", "prescription.finalize", "lab.configure", "followups.configure", "billing.configure", "billing.refund_approve",
 ];
 export const GRANTABLE_PERMISSIONS = ALL_PERMISSIONS.filter((p) => !NON_GRANTABLE_PERMISSIONS.includes(p));

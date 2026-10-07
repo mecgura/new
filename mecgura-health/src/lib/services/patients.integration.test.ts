@@ -166,7 +166,7 @@ describe("Phase 3 connections and timeline", () => {
     expect(types.some((t) => /CONSULTATION_CREATED|PRESCRIPTION|TEST_ORDERED|REPORT|BILL|PAYMENT|FOLLOWUP/.test(t))).toBe(false);
     expect((await patientTimeline(T1.recep, P.id, { filter: "opd" })).events.every((e) => e.category === "opd")).toBe(true);
     expect((await patientTimeline(T1.recep, P.id, { filter: "appointments" })).events.every((e) => e.category === "appointments")).toBe(true);
-    const future = await patientTimeline(T1.recep, P.id, { filter: "billing" });
+    const future = await patientTimeline(T1.recep, P.id, { filter: "documents" });
     expect(future.available).toBe(false); expect(future.events).toEqual([]);
     expect((await patientTimeline(T1.recep, P.id, { page: 2 })).events.length).toBeLessThanOrEqual(20);
     expect(await code(patientTimeline(T1.recep, P.id, { filter: "bogus" }))).toBe("VALIDATION_ERROR");

@@ -18,7 +18,7 @@ export const MODULE_STATUS: Record<ModuleKey, "available" | "planned"> = {
   tests: "available",
   documents: "planned",
   tasks: "planned",
-  billing: "planned",
+  billing: "available",
   inventory: "planned",
   followups: "available",
   communications: "planned",
@@ -29,7 +29,7 @@ export const MODULE_STATUS: Record<ModuleKey, "available" | "planned"> = {
 };
 
 /** Always-on foundation modules (every plan includes them). */
-export const CORE_MODULES: readonly ModuleKey[] = ["dashboard", "settings", "team", "website", "appointments", "opd", "patients", "consultations", "tests", "followups"];
+export const CORE_MODULES: readonly ModuleKey[] = ["dashboard", "settings", "team", "website", "appointments", "opd", "patients", "consultations", "tests", "followups", "billing"];
 
 export function parseModules(json: string | null | undefined): ModuleKey[] {
   try {

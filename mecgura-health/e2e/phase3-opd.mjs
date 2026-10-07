@@ -179,6 +179,7 @@ check("display page for a bad key -> shows unavailable, not another clinic", !(a
   check("UI walk-in appears in the queue", await page.getByText("UI Walkin").first().isVisible());
   await page.getByRole("button", { name: "Call next" }).first().click();
   await page.getByText(/Called token/).waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Start" }).first().waitFor({ timeout: 10000 }).catch(() => {});
   check("Call next puts the patient with the doctor (Start is offered)", await page.getByRole("button", { name: "Start" }).first().isVisible());
   check("OPD page: no console errors", errors.length === 0, errors.join(" | "));
 }

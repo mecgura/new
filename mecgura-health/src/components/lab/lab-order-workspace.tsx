@@ -1,4 +1,5 @@
 "use client";
+import { BillingStatus } from "@/components/billing/billing-status";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { FileText, Printer, Tag } from "lucide-react";
@@ -50,6 +51,7 @@ export function LabOrderWorkspace({ initial, rejectionReasons }: { initial: LabO
               <StatusBadge tone={ORDER_STATUS_TONE[o.status]}>{ORDER_STATUS_LABEL[o.status]}</StatusBadge>
             </div>
           </div>
+          <BillingStatus kind="investigation" id={o.id} />
           {o.clinicalNotes && <p className="type-secondary"><strong>Clinical note:</strong> {o.clinicalNotes}</p>}
           {cancelled && <Alert tone="warning" title="This order was cancelled">{o.cancelReason}</Alert>}
           <div className="flex flex-wrap gap-2 print:hidden">

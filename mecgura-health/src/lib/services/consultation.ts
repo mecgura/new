@@ -10,6 +10,7 @@ import { tenantDb } from "@/lib/tenant/db";
 import { parseOrThrow } from "@/lib/validation";
 import { consultationActionSchema, consultationPatchSchema, diagnosisSchema, templateSchema, vitalsSchema } from "@/lib/validation/clinical";
 import { ageLabel, isUniqueViolation, nextCounter, tenantTimezone, type Client } from "./clinic-shared";
+import { autoBill } from "./billing-invoices";
 import { syncConsultationFollowUp } from "./followups";
 import { queueAction } from "./opd";
 import { finalizePrescriptionTx, prescriptionSummary } from "./prescription";
@@ -236,6 +237,7 @@ export async function consultationAction(ctx: TenantRequestContext, id: string, 
       });
       await audit(AUDIT_ACTIONS.CONSULTATION_FINALIZED, { version: out.version, prescription: out.rx?.number ?? null });
       if (out.rx) await recordAudit({ action: AUDIT_ACTIONS.PRESCRIPTION_FINALIZED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "prescription", entityId: out.rx.id, metadata: { number: out.rx.number, version: out.rx.version, consultationId: id } });
+      await autoBill(ctx, "consultation", id); // only when the clinic switched automatic draft invoices on
       await syncConsultationFollowUp(ctx, id); // the doctor's own follow-up plan becomes one follow-up task
       // OPD queue: complete the visit through the normal Phase 3 rules; if the queue has moved on (e.g. already completed) the consultation stays finalized
       let visitCompleted = false;

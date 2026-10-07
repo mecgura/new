@@ -541,6 +541,8 @@ model Patient {
   investigationOrders      InvestigationOrder[]
   followUps                FollowUp[]
   recalls                  Recall[]
+  invoices                 Invoice[]
+  payments                 Payment[]
 
   @@unique([tenantId, code])
   @@index([tenantId, phone])
@@ -1554,4 +1556,277 @@ model FollowUpSettings {
   completionOutcomes    String?
   updatedById           String?
   updatedAt             DateTime @updatedAt
+}
+
+/// ---------------------------------------------------------------------------------------------------------------
+/// Phase 8 — clinic billing. All money is stored as INTEGER minor units (paise/cents) with an explicit currency.
+/// Financial rows hold no clinical data; they link to clinical records only by id.
+/// ---------------------------------------------------------------------------------------------------------------
+model BillingSettings {
+  id                           String   @id @default(cuid())
+  tenantId                     String   @unique
+  currency                     String   @default("INR")
+  invoicePrefix                String   @default("INV")
+  receiptPrefix                String   @default("REC")
+  paymentPrefix                String   @default("PAY")
+  refundPrefix                 String   @default("REF")
+  /// EXCLUSIVE (tax added on top) | INCLUSIVE (prices include tax)
+  taxMode                      String   @default("EXCLUSIVE")
+  /// JSON array of enabled payment methods
+  paymentMethods               String?
+  /// JSON { ROLE: { maxPercentBp, maxFixedMinor } } — nobody may discount until the clinic adds a rule
+  discountRules                String?
+  invoiceFooter                String?
+  receiptFooter                String?
+  paymentTerms                 String?
+  dueDays                      Int?
+  defaultConsultationServiceId String?
+  defaultFollowUpServiceId     String?
+  autoBillConsultation         Boolean  @default(false)
+  autoBillInvestigation        Boolean  @default(false)
+  autoBillFollowUp             Boolean  @default(false)
+  allowOverpayment             Boolean  @default(false)
+  refundSelfApproval           Boolean  @default(false)
+  useCashierSessions           Boolean  @default(false)
+  updatedById                  String?
+  updatedAt                    DateTime @updatedAt
+}
+
+model BillingTax {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  /// basis points: 1800 = 18.00%
+  rateBp    Int
+  /// GST | VAT | SALES | OTHER
+  type      String   @default("OTHER")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, name])
+}
+
+model BillingService {
+  id               String   @id @default(cuid())
+  tenantId         String
+  serviceCode      String
+  serviceName      String
+  description      String?
+  /// CONSULTATION | FOLLOW_UP | PROCEDURE | INVESTIGATION | MEDICINE | DOCUMENT | OTHER
+  type             String   @default("OTHER")
+  category         String?
+  priceMinor       Int
+  taxId            String?
+  discountEligible Boolean  @default(true)
+  /// Phase 6 investigation this price belongs to (optional)
+  investigationId  String?
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([tenantId, serviceCode])
+  @@index([tenantId, type, active])
+}
+
+model Invoice {
+  id                   String         @id @default(cuid())
+  tenantId             String
+  /// INV-2026-000001 (prefix configurable)
+  invoiceNumber        String
+  patientId            String
+  patient              Patient        @relation(fields: [patientId], references: [id])
+  appointmentId        String?
+  opdVisitId           String?
+  consultationId       String?
+  investigationOrderId String?
+  followUpId           String?
+  doctorUserId         String?
+  /// prevents the same clinical event creating two invoices ("consult:<id>")
+  sourceKey            String?
+  /// DRAFT | ISSUED | PARTIALLY_PAID | PAID | CANCELLED | REFUNDED | PARTIALLY_REFUNDED   (OVERDUE is derived from dueDate)
+  status               String         @default("DRAFT")
+  currency             String         @default("INR")
+  taxMode              String         @default("EXCLUSIVE")
+  invoiceDate          String
+  dueDate              String?
+  /// invoice-level discount input (item-level discounts live on the items)
+  discountType         String?
+  discountValue        Int?
+  discountReason       String?
+  discountById         String?
+  subtotalMinor        Int            @default(0)
+  discountMinor        Int            @default(0)
+  taxMinor             Int            @default(0)
+  totalMinor           Int            @default(0)
+  /// successful payments
+  collectedMinor       Int            @default(0)
+  /// processed refunds
+  refundedMinor        Int            @default(0)
+  /// total - collected (what is still owed; never grows because of a refund)
+  dueMinor             Int            @default(0)
+  notes                String?
+  footerSnapshot       String?
+  termsSnapshot        String?
+  issuedAt             DateTime?
+  issuedById           String?
+  createdById          String
+  cancelledAt          DateTime?
+  cancelledById        String?
+  cancelReason         String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  items                InvoiceItem[]
+  payments             Payment[]
+  refunds              Refund[]
+  events               InvoiceEvent[]
+
+  @@unique([tenantId, invoiceNumber])
+  @@unique([tenantId, sourceKey])
+  @@index([tenantId, status, invoiceDate])
+  @@index([tenantId, patientId])
+  @@index([tenantId, consultationId])
+  @@index([tenantId, appointmentId])
+  @@index([tenantId, dueDate])
+}
+
+model InvoiceItem {
+  id                   String  @id @default(cuid())
+  tenantId             String
+  invoiceId            String
+  invoice              Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  position             Int
+  serviceId            String?
+  serviceCodeSnapshot  String?
+  descriptionSnapshot  String
+  serviceTypeSnapshot  String?
+  quantity             Int
+  unitPriceMinor       Int
+  discountType         String?
+  discountValue        Int?
+  /// this line's own discount
+  discountMinor        Int     @default(0)
+  /// share of the invoice-level discount allocated to this line
+  invoiceDiscountMinor Int     @default(0)
+  taxName              String?
+  taxRateBp            Int     @default(0)
+  taxMinor             Int     @default(0)
+  lineSubtotalMinor    Int
+  lineTotalMinor       Int
+  /// CONSULTATION | FOLLOW_UP | INVESTIGATION | PROCEDURE | MEDICINE | DOCUMENT | OTHER
+  sourceType           String?
+  sourceId             String?
+
+  @@index([tenantId, invoiceId])
+  @@index([tenantId, serviceId])
+}
+
+model Payment {
+  id                   String    @id @default(cuid())
+  tenantId             String
+  invoiceId            String
+  invoice              Invoice   @relation(fields: [invoiceId], references: [id])
+  patientId            String
+  patient              Patient   @relation(fields: [patientId], references: [id])
+  /// PAY-2026-000001
+  paymentNumber        String
+  /// REC-2026-000001 (the receipt for this payment)
+  receiptNumber        String?
+  amountMinor          Int
+  /// CASH | UPI | CARD | BANK_TRANSFER | ONLINE | CHEQUE | OTHER
+  method               String
+  /// PENDING | SUCCESS | FAILED | CANCELLED | REFUNDED | PARTIALLY_REFUNDED
+  status               String    @default("SUCCESS")
+  transactionReference String?
+  /// client-generated key: submitting the same payment twice returns the first one
+  idempotencyKey       String?
+  paymentDate          String
+  notes                String?
+  receivedById         String
+  refundedMinor        Int       @default(0)
+  /// future online gateway (not connected): never set by manual payments
+  gatewayProvider      String?
+  gatewayOrderId       String?
+  gatewayTransactionId String?
+  cancelledAt          DateTime?
+  cancelledById        String?
+  cancelReason         String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  refunds              Refund[]
+
+  @@unique([tenantId, paymentNumber])
+  @@unique([tenantId, receiptNumber])
+  @@unique([tenantId, idempotencyKey])
+  @@unique([tenantId, method, transactionReference])
+  @@index([tenantId, paymentDate])
+  @@index([tenantId, invoiceId])
+  @@index([tenantId, patientId])
+}
+
+model Refund {
+  id            String    @id @default(cuid())
+  tenantId      String
+  invoiceId     String
+  invoice       Invoice   @relation(fields: [invoiceId], references: [id])
+  paymentId     String
+  payment       Payment   @relation(fields: [paymentId], references: [id])
+  /// REF-2026-000001
+  refundNumber  String
+  amountMinor   Int
+  reason        String
+  method        String
+  /// REQUESTED | APPROVED | PROCESSED | REJECTED | CANCELLED
+  status        String    @default("REQUESTED")
+  requestedById String
+  approvedById  String?
+  approvedAt    DateTime?
+  processedById String?
+  processedAt   DateTime?
+  rejectedById  String?
+  rejectedAt    DateTime?
+  rejectReason  String?
+  reference     String?
+  createdAt     DateTime  @default(now())
+
+  @@unique([tenantId, refundNumber])
+  @@index([tenantId, status])
+  @@index([tenantId, invoiceId])
+}
+
+/// Append-only financial history per invoice.
+model InvoiceEvent {
+  id          String   @id @default(cuid())
+  tenantId    String
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  patientId   String
+  /// CREATED | EDITED | ISSUED | PAYMENT_RECEIVED | PAYMENT_CANCELLED | CANCELLED | REFUND_REQUESTED | REFUND_APPROVED | REFUND_PROCESSED | REFUND_REJECTED
+  type        String
+  userId      String?
+  amountMinor Int?
+  ref         String?
+  note        String?
+  at          DateTime @default(now())
+
+  @@index([tenantId, invoiceId, at])
+  @@index([tenantId, patientId, at])
+}
+
+model CashierSession {
+  id            String    @id @default(cuid())
+  tenantId      String
+  openedById    String
+  openedAt      DateTime  @default(now())
+  openingMinor  Int
+  closedById    String?
+  closedAt      DateTime?
+  closingMinor  Int?
+  /// cash expected at close: opening + cash collected − cash refunded during the session by this cashier
+  expectedMinor Int?
+  /// OPEN | CLOSED
+  status        String    @default("OPEN")
+  notes         String?
+
+  @@index([tenantId, status])
+  @@index([tenantId, openedById, status])
 }

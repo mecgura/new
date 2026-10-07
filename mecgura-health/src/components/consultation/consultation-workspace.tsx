@@ -1,4 +1,5 @@
 "use client";
+import { BillingStatus } from "@/components/billing/billing-status";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, CheckCircle2, Loader2, Lock, MoreHorizontal, Printer, TriangleAlert } from "lucide-react";
@@ -104,6 +105,7 @@ export function ConsultationWorkspace({ initial, staff, canViewPatient }: { init
             <h1 className="type-page-title break-words">{canViewPatient ? <Link href={`/patients/${p.id}`} className="!text-ink hover:underline">{p.name}</Link> : p.name}</h1>
             <p className="type-secondary mt-0.5"><span className="tabular-nums">{p.code}</span> · {[p.age, p.gender && cap(p.gender)].filter(Boolean).join(" • ") || "Age not recorded"}{p.phone ? <> · <span className="tabular-nums">{p.phone}</span></> : null}</p>
             <p className="type-secondary">Token <strong className="tabular-nums">{c.visit.token}</strong> · {c.visit.type.replace(/_/g, " ").toLowerCase()}{c.visit.priority === "EMERGENCY" && <> · <Badge tone="emergency">Emergency</Badge></>} · {c.doctor.name} · {c.startedLabel}</p>
+            <div className="mt-1"><BillingStatus kind="consultation" id={c.id} /></div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge tone={STATUS_TONE[c.status]}>{STATUS_LABEL[c.status]}{finalized && c.version > 1 ? ` · v${c.version}` : ""}</StatusBadge>
