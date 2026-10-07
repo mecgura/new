@@ -51,15 +51,22 @@ model Tenant {
   updatedAt              DateTime  @updatedAt
   deletedAt              DateTime?
 
-  branding         TenantBranding?
-  subscription     Subscription?
-  users            User[]
-  auditLogs        AuditLog[]
-  assets           TenantAsset[]
-  invitations      Invitation[]
-  doctorProfiles   DoctorProfile[]
-  staffProfiles    StaffProfile[]
-  permissionGrants UserPermissionGrant[]
+  branding             TenantBranding?
+  subscription         Subscription?
+  users                User[]
+  auditLogs            AuditLog[]
+  assets               TenantAsset[]
+  invitations          Invitation[]
+  doctorProfiles       DoctorProfile[]
+  staffProfiles        StaffProfile[]
+  permissionGrants     UserPermissionGrant[]
+  website              Website?
+  websiteServices      WebsiteService[]
+  doctorPublicProfiles DoctorPublicProfile[]
+  testimonials         Testimonial[]
+  faqItems             FaqItem[]
+  articles             Article[]
+  contactEnquiries     ContactEnquiry[]
 
   @@index([status])
   @@index([clinicType])
@@ -81,14 +88,16 @@ model TenantBranding {
 
 /// Commercial plan. `modules` is a JSON array of module keys (src/config/modules.ts).
 model Plan {
-  id            String         @id @default(cuid())
-  key           String         @unique
-  name          String
-  modules       String         @default("[]")
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  subscriptions Subscription[]
+  id                  String         @id @default(cuid())
+  key                 String         @unique
+  name                String
+  modules             String         @default("[]")
+  isActive            Boolean        @default(true)
+  /// Public websites show "Website by MECGURA HEALTH" in the footer when true
+  requiresAttribution Boolean        @default(true)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  subscriptions       Subscription[]
 }
 
 /// Which plan a tenant is on. One current subscription per tenant (Phase 0).
@@ -166,11 +175,12 @@ model User {
   updatedAt        DateTime  @updatedAt
   deletedAt        DateTime?
 
-  auditLogs        AuditLog[]
-  doctorProfile    DoctorProfile?
-  staffProfile     StaffProfile?
-  invitations      Invitation[]
-  permissionGrants UserPermissionGrant[]
+  auditLogs           AuditLog[]
+  doctorProfile       DoctorProfile?
+  staffProfile        StaffProfile?
+  invitations         Invitation[]
+  permissionGrants    UserPermissionGrant[]
+  doctorPublicProfile DoctorPublicProfile?
 
   @@index([tenantId, status])
   @@index([tenantId, roleId])
@@ -286,4 +296,174 @@ model TenantAsset {
   updatedAt DateTime @updatedAt
 
   @@unique([tenantId, kind, ownerId])
+}
+
+/// One public website per clinic. Site-wide content (home/about/clinic/hours/navigation/SEO/legal) is a validated
+/// JSON document with a DRAFT copy (edited in the CMS) and a PUBLISHED snapshot (what visitors see).
+model Website {
+  id                String    @id @default(cuid())
+  tenantId          String    @unique
+  tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Template key, see src/website/templates
+  template          String    @default("MODERN_MEDICAL")
+  /// DRAFT | PUBLISHED — whether the public site is live at all
+  status            String    @default("DRAFT")
+  draftContent      String    @default("{}")
+  publishedContent  String?
+  publishedAt       DateTime?
+  publishedById     String?
+  /// Custom domain a clinic admin asked for; a Super Admin applies + verifies it (Phase 1 domain flow)
+  requestedDomain   String?
+  domainRequestedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model WebsiteService {
+  id               String    @id @default(cuid())
+  tenantId         String
+  tenant           Tenant    @relation(fields: [tenantId], references: [id])
+  slug             String
+  title            String
+  shortDescription String?
+  description      String?
+  category         String?
+  durationMinutes  Int?
+  fee              Int?
+  showFee          Boolean   @default(false)
+  imageUrl         String?
+  imageAlt         String?
+  icon             String?
+  sortOrder        Int       @default(0)
+  /// DRAFT | PUBLISHED | ARCHIVED
+  status           String    @default("DRAFT")
+  seoTitle         String?
+  seoDescription   String?
+  publishedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, status, sortOrder])
+}
+
+/// Public-facing profile of a doctor. Qualification/specialization/experience/registration/fee stay on DoctorProfile.
+model DoctorPublicProfile {
+  id               String    @id @default(cuid())
+  tenantId         String
+  tenant           Tenant    @relation(fields: [tenantId], references: [id])
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slug             String
+  photoUrl         String?
+  photoAlt         String?
+  shortBio         String?
+  bio              String?
+  education        String?
+  /// JSON string arrays
+  certifications   String    @default("[]")
+  memberships      String    @default("[]")
+  languages        String    @default("[]")
+  philosophy       String?
+  showRegistration Boolean   @default(false)
+  showFee          Boolean   @default(false)
+  sortOrder        Int       @default(0)
+  /// DRAFT | PUBLISHED | ARCHIVED
+  status           String    @default("DRAFT")
+  seoTitle         String?
+  seoDescription   String?
+  publishedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, status, sortOrder])
+}
+
+model Testimonial {
+  id           String    @id @default(cuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  /// null/empty => shown as "Anonymous Patient"
+  displayName  String?
+  text         String
+  rating       Int?
+  givenOn      DateTime?
+  doctorUserId String?
+  serviceId    String?
+  sortOrder    Int       @default(0)
+  /// DRAFT | PUBLISHED | ARCHIVED
+  status       String    @default("DRAFT")
+  publishedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([tenantId, status, sortOrder])
+}
+
+model FaqItem {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  question    String
+  answer      String
+  category    String?
+  sortOrder   Int       @default(0)
+  /// DRAFT | PUBLISHED | ARCHIVED
+  status      String    @default("DRAFT")
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([tenantId, status, sortOrder])
+}
+
+model Article {
+  id               String    @id @default(cuid())
+  tenantId         String
+  tenant           Tenant    @relation(fields: [tenantId], references: [id])
+  slug             String
+  title            String
+  excerpt          String?
+  content          String    @default("")
+  featuredImageUrl String?
+  featuredImageAlt String?
+  authorUserId     String?
+  category         String?
+  /// JSON string array
+  tags             String    @default("[]")
+  /// DRAFT | PUBLISHED | ARCHIVED
+  status           String    @default("DRAFT")
+  publishedAt      DateTime?
+  seoTitle         String?
+  seoDescription   String?
+  canonicalUrl     String?
+  ogImageUrl       String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, status, publishedAt])
+  @@index([authorUserId])
+}
+
+/// Message from the public contact form. Never exposed publicly; visible to the owning clinic only.
+model ContactEnquiry {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  name      String
+  phone     String?
+  email     String?
+  message   String
+  consent   Boolean  @default(false)
+  /// NEW | READ | ARCHIVED
+  status    String   @default("NEW")
+  /// salted hash of the sender IP (abuse analysis without storing the address)
+  ipHash    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, status, createdAt])
 }

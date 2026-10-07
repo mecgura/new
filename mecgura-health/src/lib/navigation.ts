@@ -12,7 +12,7 @@ import type { Permission } from "@/lib/permissions";
  */
 export function getVisibleNav(opts: { permissions: ReadonlySet<Permission>; enabledModules: readonly ModuleKey[]; showPlanned: boolean }): NavItemView[] {
   const enabled = new Set(opts.enabledModules);
-  return NAV_ITEMS.filter((item) => enabled.has(item.module) && opts.permissions.has(item.permission))
+  return NAV_ITEMS.filter((item) => enabled.has(item.module) && opts.permissions.has(item.permission) && !(item.hideIfHas && opts.permissions.has(item.hideIfHas)))
     .map((item) => ({ ...item, planned: MODULE_STATUS[item.module] === "planned" }))
     .filter((item) => !item.planned || opts.showPlanned);
 }

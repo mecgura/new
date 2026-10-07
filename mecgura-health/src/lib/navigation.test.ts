@@ -9,7 +9,15 @@ const clinicModules = MODULE_KEYS.filter((m) => m !== "platform");
 describe("getVisibleNav", () => {
   it("hides unbuilt modules in production-like mode", () => {
     const nav = getVisibleNav({ permissions: effectivePermissions("DOCTOR"), enabledModules: clinicModules, showPlanned: false });
-    expect(labels(nav)).toEqual(["Dashboard", "Settings"]);
+    expect(labels(nav)).toEqual(["Dashboard", "Website", "Settings"]);
+  });
+  it("receptionist reaches enquiries through their own entry, admin through Website", () => {
+    const r = getVisibleNav({ permissions: effectivePermissions("RECEPTIONIST"), enabledModules: clinicModules, showPlanned: false });
+    expect(labels(r)).toContain("Enquiries");
+    expect(labels(r)).not.toContain("Website");
+    const a = getVisibleNav({ permissions: effectivePermissions("CLINIC_ADMIN"), enabledModules: clinicModules, showPlanned: false });
+    expect(labels(a)).toContain("Website");
+    expect(labels(a)).not.toContain("Enquiries");
   });
   it("shows Team only to roles with users.view", () => {
     const admin = getVisibleNav({ permissions: effectivePermissions("CLINIC_ADMIN"), enabledModules: clinicModules, showPlanned: false });

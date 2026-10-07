@@ -6,6 +6,8 @@ export const IMAGE_LIMITS = {
   LOGO: 512 * 1024,
   FAVICON: 128 * 1024,
   AVATAR: 512 * 1024,
+  /** website images (before optimisation) */
+  SITE_IMAGE: 4 * 1024 * 1024,
 } as const;
 export type ImageKind = keyof typeof IMAGE_LIMITS;
 

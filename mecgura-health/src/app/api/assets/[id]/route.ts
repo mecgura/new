@@ -4,7 +4,7 @@ import { getContext } from "@/lib/auth/context";
 export const dynamic = "force-dynamic";
 
 /**
- * Serves stored images. LOGO and FAVICON are public branding (needed on the login page).
+ * Serves stored images. LOGO, FAVICON and SITE_IMAGE are public marketing assets (login page / public website).
  * AVATAR images require a signed-in user of the SAME clinic (or a Super Admin). Anything else is a 404,
  * so the existence of another clinic's asset is never revealed.
  */
@@ -23,7 +23,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       "Content-Type": asset.mimeType,
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'; sandbox",
-      "Cache-Control": asset.kind === "AVATAR" ? "private, max-age=300" : "public, max-age=300",
+      "Cache-Control": asset.kind === "AVATAR" ? "private, max-age=300" : asset.kind === "SITE_IMAGE" ? "public, max-age=86400" : "public, max-age=300",
     },
   });
 }

@@ -14,6 +14,8 @@ export interface NavItemConfig {
   icon: NavIcon;
   /** Permission required to see it (role gate) */
   permission: Permission;
+  /** Hide this entry when the user already holds this permission (it is reachable through another entry) */
+  hideIfHas?: Permission;
 }
 
 /** Single source of truth for sidebar order. Visibility = role permission ∧ plan module ∧ implemented. */
@@ -35,6 +37,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
   { module: "communications", label: "Communications", href: "/communications", icon: "communications", permission: "communications.view" },
   { module: "analytics", label: "Analytics", href: "/analytics", icon: "analytics", permission: "analytics.view" },
   { module: "website", label: "Website", href: "/website", icon: "website", permission: "website.view" },
+  { module: "website", label: "Enquiries", href: "/website/enquiries", icon: "communications", permission: "enquiries.view", hideIfHas: "website.view" },
   { module: "settings", label: "Settings", href: "/settings", icon: "settings", permission: "settings.view" },
 ];
 

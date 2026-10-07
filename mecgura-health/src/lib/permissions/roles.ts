@@ -19,12 +19,14 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
     "prescription.view", "prescription.create", "prescription.edit",
     "tests.view", "tests.order", "reports.view", "reports.review", "documents.view",
     "followups.view", "followups.manage", "tasks.view", "tasks.manage",
+    "website.view", "website.profile", "website.articles",
   ),
   RECEPTIONIST: P(
     "dashboard.view", "clinic.view", "settings.view",
     "patients.view", "patients.create", "patients.edit", "opd.view", "opd.manage",
     "appointments.view", "appointments.create", "appointments.edit",
     "billing.view", "billing.create", "followups.view", "followups.manage", "communications.view",
+    "enquiries.view", "enquiries.manage",
   ),
   COMPOUNDER: P(
     "dashboard.view", "clinic.view", "settings.view",

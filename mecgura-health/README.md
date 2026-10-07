@@ -93,3 +93,16 @@ storage is configured (`/api/assets/:id`; logo/favicon public, avatars same-clin
 SQLite (dev): `prisma/migrations/`. PostgreSQL: `prisma/migrations-postgres/` (generated with `prisma migrate diff`; **not yet
 executed against a real PostgreSQL server** — run `PRISMA_SCHEMA=prisma/schema.postgres.prisma npx prisma migrate deploy`
 on staging first).
+
+
+---
+## Phase 2 — public website + CMS
+See [`docs/phase2-website.md`](docs/phase2-website.md). Quick start with the two demo clinics:
+```bash
+npm run db:seed
+NEXT_DIST_DIR=.next-prod npm run build && NEXT_DIST_DIR=.next-prod npx next start -p 3101
+# in .env: TENANT_ROOT_DOMAIN="mecgura.test"; map demo.mecgura.test / demo-b.mecgura.test to 127.0.0.1 (hosts file)
+# open http://demo.mecgura.test:3101  and  http://demo-b.mecgura.test:3101
+# CMS: sign in as admin@demo.mecgura.test → Website
+node e2e/phase2-website.mjs     # live checks (needs playwright-core)
+```

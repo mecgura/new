@@ -12,3 +12,4 @@ prisma/*.db*
 coverage/
 .DS_Store
 .test-db/
+.next-prod/

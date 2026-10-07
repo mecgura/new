@@ -16,6 +16,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Lets CI / local checks build into a separate folder while `next dev` is running.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
   // Dev only: lets the e2e suite open clinic subdomains such as demo-b.mecgura.test against `next dev`.
   allowedDevOrigins: ["*.mecgura.test"],

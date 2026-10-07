@@ -34,6 +34,8 @@ describe("security helpers", () => {
     expect(csp).toContain("'nonce-abc'");
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).not.toContain("unsafe-eval");
+    expect(csp).not.toContain("upgrade-insecure-requests");
+    expect(buildCsp("abc", { isDev: false, upgrade: true })).toContain("upgrade-insecure-requests");
   });
   it("theme only accepts valid hex colours (no CSS injection)", () => {
     const b = resolveBrandColors({ primaryColor: "red;} body{display:none", secondaryColor: "#ABCDEF" });

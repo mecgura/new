@@ -83,7 +83,12 @@ export const PERMISSIONS = {
 
   "analytics.view": { module: "analytics", description: "View analytics" },
   "website.view": { module: "website", description: "View the clinic website settings" },
-  "website.edit": { module: "website", description: "Edit the clinic website" },
+  "website.edit": { module: "website", description: "Edit the clinic website content" },
+  "website.publish": { module: "website", description: "Publish or unpublish the clinic website and its content" },
+  "website.profile": { module: "website", description: "Edit your own public doctor profile" },
+  "website.articles": { module: "website", description: "Write article drafts" },
+  "enquiries.view": { module: "website", description: "View website contact enquiries" },
+  "enquiries.manage": { module: "website", description: "Mark website enquiries as read or archived" },
 
   "settings.view": { module: "settings", description: "View settings" },
   "settings.edit": { module: "settings", description: "Change settings" },
@@ -104,6 +109,6 @@ export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
  * the role (admin/platform powers). Everything else may be granted to e.g. a STAFF member.
  */
 export const NON_GRANTABLE_PERMISSIONS: readonly Permission[] = [
-  "platform.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view",
+  "platform.manage", "website.publish", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view",
 ];
 export const GRANTABLE_PERMISSIONS = ALL_PERMISSIONS.filter((p) => !NON_GRANTABLE_PERMISSIONS.includes(p));

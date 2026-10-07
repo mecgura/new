@@ -1,9 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { buildCsp } from "@/lib/security/csp";
+import { isPublicSitePath } from "@/lib/website/paths";
+import { parseTenantHost } from "@/lib/tenant/host";
 
 // Paths reachable without a session.
-const PUBLIC_PATHS = ["/login", "/invite"];
+const PUBLIC_PATHS = ["/login", "/invite", "/robots.txt"];
 
 /**
  * Runs before every page request (API routes and static assets are excluded in `config`).
@@ -14,9 +16,25 @@ const PUBLIC_PATHS = ["/login", "/invite"];
  */
 export async function proxy(req: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-  const csp = buildCsp(nonce, { isDev: process.env.NODE_ENV === "development" });
+  const csp = buildCsp(nonce, { isDev: process.env.NODE_ENV === "development", upgrade: (process.env.APP_URL ?? "").startsWith("https://") });
 
   const { pathname } = req.nextUrl;
+
+  // Public clinic website: on a clinic's own host (subdomain / custom domain) the public paths are served by the
+  // site renderer. The tenant itself is resolved from the HOST on the server — the path never names a tenant.
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  if (parseTenantHost(host, process.env.TENANT_ROOT_DOMAIN) && isPublicSitePath(pathname)) {
+    const url = req.nextUrl.clone();
+    url.pathname = `/site${pathname === "/" ? "" : pathname.replace(/\/$/, "")}`;
+    const headers = new Headers(req.headers);
+    headers.set("x-nonce", nonce);
+    headers.set("Content-Security-Policy", csp);
+    headers.set("x-mh-site", "1");
+    const res = NextResponse.rewrite(url, { request: { headers } });
+    res.headers.set("Content-Security-Policy", csp);
+    return res;
+  }
+
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   if (!isPublic) {
