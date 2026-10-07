@@ -28,6 +28,6 @@ services:
       DATABASE_URL: postgresql://mecgura:${POSTGRES_PASSWORD}@db:5432/mecgura
       PRISMA_SCHEMA: prisma/schema.postgres.prisma
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${APP_PORT:-3100}:3000"
 volumes:
   dbdata:

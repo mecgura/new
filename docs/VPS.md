@@ -7,7 +7,7 @@ You need: an Ubuntu 22.04/24.04 VPS, a domain (or subdomain) whose **A record po
 sudo apt update && sudo apt install -y docker.io docker-compose-v2 nginx certbot python3-certbot-nginx git
 sudo systemctl enable --now docker
 ```
-> If the VPS already runs nginx for another site, keep it — the platform only listens on `127.0.0.1:3000` and gets its own nginx `server` block (step 4). Nothing else is touched.
+> If the VPS already runs nginx for another site, keep it — the platform only listens on `127.0.0.1:3100` and gets its own nginx `server` block (step 4). Nothing else is touched.
 
 ## 2. Get the code
 ```bash
@@ -30,7 +30,7 @@ Fill `.env` (generate secrets with `openssl rand -base64 32`):
 ```bash
 docker compose up -d --build
 docker compose logs -f app      # wait for "Ready"; Ctrl+C to leave the logs
-curl http://127.0.0.1:3000/api/health     # → {"status":"ok",...}
+curl http://127.0.0.1:3100/api/health     # → {"status":"ok",...}
 ```
 The container applies the database schema and creates the admin + plans on every start. Prisma **refuses destructive schema changes**, so data is never dropped silently.
 
