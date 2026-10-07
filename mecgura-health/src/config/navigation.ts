@@ -33,7 +33,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
   { module: "documents", label: "Documents", href: "/documents", icon: "documents", permission: "documents.view" },
   { module: "tasks", label: "Tasks / Orders", href: "/tasks", icon: "tasks", permission: "tasks.view" },
   { module: "billing", label: "Billing", href: "/billing", icon: "billing", permission: "billing.view" },
-  { module: "inventory", label: "Inventory", href: "/inventory", icon: "inventory", permission: "inventory.view" },
+  { module: "inventory", label: "Pharmacy", href: "/pharmacy", icon: "inventory", permission: "pharmacy.view" },
   { module: "followups", label: "Follow-ups", href: "/followups", icon: "followups", permission: "followups.view" },
   { module: "communications", label: "Communications", href: "/communications", icon: "communications", permission: "communications.view" },
   { module: "analytics", label: "Analytics", href: "/analytics", icon: "analytics", permission: "analytics.view" },

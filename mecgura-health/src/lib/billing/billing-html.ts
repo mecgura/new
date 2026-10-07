@@ -2,14 +2,14 @@ import type { InvoiceDoc, ReceiptDoc, RefundReceiptDoc, StatementDoc } from "@/l
 import { formatMoney } from "./money";
 
 /** Clinic-branded financial documents. Pure; every value is escaped; branding comes from the tenant, never MECGURA. */
-const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-const safeColor = (c: string) => (/^#[0-9a-f]{6}$/i.test(c) ? c : "#14529e");
+export const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+export const safeColor = (c: string) => (/^#[0-9a-f]{6}$/i.test(c) ? c : "#14529e");
 const safeUrl = (u: string | null | undefined) => (u && /^(\/|https:\/\/)/.test(u) ? u : null);
 const METHOD: Record<string, string> = { CASH: "Cash", UPI: "UPI", CARD: "Card", BANK_TRANSFER: "Bank transfer", ONLINE: "Online", CHEQUE: "Cheque", OTHER: "Other" };
-type Clinic = { name: string; logoUrl?: string | null; address?: string; phone?: string | null; email?: string | null; color: string; generatedAt: string };
+export type Clinic = { name: string; logoUrl?: string | null; address?: string; phone?: string | null; email?: string | null; color: string; generatedAt: string };
 
-const head = (c: Clinic) => { const logo = safeUrl(c.logoUrl); return `<header>${logo ? `<img src="${esc(logo)}" alt="">` : ""}<div><h1>${esc(c.name)}</h1><small>${[c.address, c.phone && `Tel: ${c.phone}`, c.email].filter(Boolean).map(esc).join(" · ")}</small></div></header>`; };
-const style = (id: string, color: string) => `
+export const head = (c: Clinic) => { const logo = safeUrl(c.logoUrl); return `<header>${logo ? `<img src="${esc(logo)}" alt="">` : ""}<div><h1>${esc(c.name)}</h1><small>${[c.address, c.phone && `Tel: ${c.phone}`, c.email].filter(Boolean).map(esc).join(" · ")}</small></div></header>`; };
+export const style = (id: string, color: string) => `
 #${id}{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1f2933;background:#fff;max-width:820px;margin:0 auto;padding:28px;border:1px solid #d5dde5;border-radius:8px;line-height:1.45;position:relative}
 #${id} header{display:flex;gap:16px;align-items:center;border-bottom:3px solid ${color};padding-bottom:12px;margin-bottom:12px}
 #${id} header img{height:56px;width:56px;object-fit:contain}
@@ -21,8 +21,8 @@ const style = (id: string, color: string) => `
 #${id} footer{margin-top:22px;display:flex;justify-content:space-between;gap:16px;font-size:12px;color:#52606d;border-top:1px solid #d5dde5;padding-top:10px}
 @media (max-width:640px){#${id}{padding:14px}#${id} .meta{grid-template-columns:1fr}#${id} footer{flex-direction:column}}
 @media print{body *{visibility:hidden}#${id},#${id} *{visibility:visible}#${id}{position:absolute;left:0;top:0;width:100%;max-width:none;border:0;border-radius:0}#${id} .tw{overflow:visible}@page{margin:12mm}}`;
-const foot = (c: Clinic, extra?: string | null) => `${extra ? `<p><small>${esc(extra).replace(/\n/g, "<br>")}</small></p>` : ""}<footer><span>${esc(c.name)} · generated ${esc(c.generatedAt)}</span><span>This document contains confidential information.</span></footer>`;
-const patientBlock = (p: { code: string; name: string; phone: string | null }) => `<div><strong>Patient:</strong> ${esc(p.name)}</div><div><strong>ID:</strong> ${esc(p.code)}</div>`;
+export const foot = (c: Clinic, extra?: string | null) => `${extra ? `<p><small>${esc(extra).replace(/\n/g, "<br>")}</small></p>` : ""}<footer><span>${esc(c.name)} · generated ${esc(c.generatedAt)}</span><span>This document contains confidential information.</span></footer>`;
+export const patientBlock = (p: { code: string; name: string; phone: string | null }) => `<div><strong>Patient:</strong> ${esc(p.name)}</div><div><strong>ID:</strong> ${esc(p.code)}</div>`;
 
 export function renderInvoice(d: InvoiceDoc): { style: string; body: string } {
   const c = d.clinic; const m = (x: number) => esc(formatMoney(x, d.currency)); const id = "bill-doc";

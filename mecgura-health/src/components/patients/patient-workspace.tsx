@@ -9,6 +9,7 @@ import { AppointmentStatusBadge, PriorityBadge, STATUS_LABEL, TYPE_LABEL } from 
 import { apiFetch } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import type { getPatientProfile } from "@/lib/services/patient-crm";
+import { PatientPharmacyTab } from "@/components/pharmacy/patient-pharmacy-tab";
 import { PatientBillingTab } from "@/components/billing/patient-billing-tab";
 import { PatientFollowUpsTab } from "@/components/followups/patient-followups-tab";
 import { LabReportsTab } from "@/components/lab/lab-reports-tab";
@@ -76,7 +77,7 @@ const NOTES: RecordConfig = {
 
 /* ------------------------------------ workspace ------------------------------------ */
 interface Props { profile: ProfileFull; doctors: DoctorOpt[]; services: ServiceOpt[]; today: string }
-type SectionKey = "overview" | "consultations" | "timeline" | "visits" | "appointments" | "medical" | "allergies" | "medications" | "documents" | "reports" | "notes" | "family" | "billing" | "followup";
+type SectionKey = "overview" | "consultations" | "timeline" | "visits" | "appointments" | "medical" | "allergies" | "medications" | "documents" | "reports" | "notes" | "family" | "billing" | "pharmacy" | "followup";
 
 export function PatientWorkspace({ profile, doctors, services, today }: Props) {
   const router = useRouter();
@@ -96,7 +97,7 @@ export function PatientWorkspace({ profile, doctors, services, today }: Props) {
     { key: "consultations", label: "Consultations", show: access.consultations },
     { key: "medical", label: "Medical information", show: access.clinical }, { key: "allergies", label: "Allergies", show: access.clinical }, { key: "medications", label: "Medications", show: access.clinical },
     { key: "documents", label: "Documents", show: true }, { key: "reports", label: "Reports", show: true }, { key: "notes", label: "Notes", show: true }, { key: "family", label: "Family", show: true },
-    { key: "billing", label: "Billing", show: true }, { key: "followup", label: "Follow-up", show: true },
+    { key: "billing", label: "Billing", show: true }, { key: "pharmacy", label: "Pharmacy", show: access.clinical }, { key: "followup", label: "Follow-up", show: true },
   ];
 
   async function run(url: string, body: unknown, ok: string) {
@@ -181,6 +182,7 @@ export function PatientWorkspace({ profile, doctors, services, today }: Props) {
           {tab === "documents" && <Soon title="Documents" text="Identity, medical, insurance and referral documents will be stored here in a later phase (Phase 7). Nothing is uploaded yet." />}
           {tab === "reports" && <LabReportsTab patientId={p.id} />}
           {tab === "billing" && <PatientBillingTab patientId={p.id} />}
+          {tab === "pharmacy" && <PatientPharmacyTab patientId={p.id} />}
           {tab === "followup" && <PatientFollowUpsTab patientId={p.id} patientLabel={`${p.name} (${p.code})`} />}
         </div>
 
@@ -272,7 +274,7 @@ function Overview({ profile }: { profile: ProfileFull }) {
 /* -------------------------------------- timeline -------------------------------------- */
 interface Ev { id: string; type: string; category: string; at: string; title: string; detail?: string; href?: string }
 interface TL { filter: string; available: boolean; restricted: boolean; page: number; pageSize: number; total: number; events: Ev[] }
-const FILTERS: [string, string, boolean][] = [["all", "All", true], ["appointments", "Appointments", true], ["opd", "OPD visits", true], ["clinical", "Clinical", true], ["documents", "Documents", false], ["reports", "Reports", true], ["billing", "Billing", true], ["followup", "Follow-up", true]];
+const FILTERS: [string, string, boolean][] = [["all", "All", true], ["appointments", "Appointments", true], ["opd", "OPD visits", true], ["clinical", "Clinical", true], ["documents", "Documents", false], ["reports", "Reports", true], ["billing", "Billing", true], ["pharmacy", "Pharmacy", true], ["followup", "Follow-up", true]];
 function Timeline({ id, clinical }: { id: string; clinical: boolean }) {
   const [filter, setFilter] = useState("all");
   const [page, setPage] = useState(1);
@@ -301,7 +303,7 @@ function Timeline({ id, clinical }: { id: string; clinical: boolean }) {
           <ol className="relative space-y-4 border-l-2 border-line pl-5">
             {events.map((e) => (
               <li key={e.id} className="relative">
-                <span aria-hidden className={cn("absolute -left-[1.6rem] top-1.5 size-3 rounded-full border-2 border-surface", e.category === "opd" ? "bg-primary" : e.category === "appointments" ? "bg-info" : e.category === "billing" ? "bg-info" : e.category === "followup" ? "bg-primary" : e.category === "reports" ? "bg-success" : e.category === "clinical" ? "bg-warning" : "bg-muted")} />
+                <span aria-hidden className={cn("absolute -left-[1.6rem] top-1.5 size-3 rounded-full border-2 border-surface", e.category === "opd" ? "bg-primary" : e.category === "appointments" ? "bg-info" : e.category === "billing" ? "bg-info" : e.category === "pharmacy" ? "bg-success" : e.category === "followup" ? "bg-primary" : e.category === "reports" ? "bg-success" : e.category === "clinical" ? "bg-warning" : "bg-muted")} />
                 <p className="type-label">{e.href ? <Link href={e.href}>{e.title}</Link> : e.title}</p>
                 {e.detail && <p className="type-secondary">{e.detail}</p>}
                 <p className="type-caption"><time dateTime={e.at}>{e.at.replace("T", " ").slice(0, 16)} UTC</time></p>

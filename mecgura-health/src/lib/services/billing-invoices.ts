@@ -324,3 +324,26 @@ export async function recomputeInvoice(tx: Client, tenantId: string, invoiceId: 
   await tx.invoice.updateMany({ where: { id: invoiceId, tenantId }, data: { collectedMinor, refundedMinor, dueMinor: Math.max(0, inv.totalMinor - collectedMinor), status } });
   return { collectedMinor, refundedMinor, status };
 }
+
+/**
+ * Pharmacy hook: an ISSUED invoice built from the dispensing snapshot, created inside the caller's transaction so a bill can't exist
+ * without the stock movement (or the other way round). Idempotent through `sourceKey`. Payment is collected in Billing like any invoice.
+ */
+export interface PharmacyBillLine { description: string; code: string; quantity: number; unitPriceMinor: number; taxRateBp: number; sourceId: string }
+export async function createPharmacyInvoice(tx: Client, ctx: TenantRequestContext, a: { patientId: string; consultationId?: string | null; doctorUserId?: string | null; sourceKey: string; lines: PharmacyBillLine[] }) {
+  const settings = await loadBillingSettings(tx, ctx.tenantId);
+  const existing = await tx.invoice.findFirst({ where: { tenantId: ctx.tenantId, sourceKey: a.sourceKey }, select: { id: true, invoiceNumber: true, totalMinor: true } });
+  if (existing) return { ...existing, lines: null as null, existing: true as const };
+  let res: ReturnType<typeof computeInvoice>;
+  try { res = computeInvoice(a.lines.map((l) => ({ quantity: l.quantity, unitPriceMinor: l.unitPriceMinor, taxRateBp: l.taxRateBp, discountEligible: true })), null, settings.taxMode); }
+  catch (e) { if (e instanceof MoneyError) throw new AppError("VALIDATION_ERROR", { message: e.message }); throw e; }
+  if (res.totalMinor <= 0) throw new AppError("VALIDATION_ERROR", { message: "The bill total must be above zero. Set a selling price for the medicine." });
+  const today = await tzToday(ctx.tenantId); const yr = today.slice(0, 4);
+  const n = await nextCounter(tx, ctx.tenantId, `inv:${yr}`);
+  const inv = await tx.invoice.create({ data: { tenantId: ctx.tenantId, invoiceNumber: `${settings.invoicePrefix}-${yr}-${pad(n)}`, patientId: a.patientId, consultationId: a.consultationId ?? null, doctorUserId: a.doctorUserId ?? null, sourceKey: a.sourceKey, status: "ISSUED", currency: settings.currency, taxMode: settings.taxMode, invoiceDate: today, dueDate: settings.dueDays != null ? addDays(today, settings.dueDays) : null, subtotalMinor: res.subtotalMinor, discountMinor: 0, taxMinor: res.taxMinor, totalMinor: res.totalMinor, dueMinor: res.totalMinor, notes: "Pharmacy bill", footerSnapshot: settings.invoiceFooter, termsSnapshot: settings.paymentTerms, issuedAt: new Date(), issuedById: ctx.user.id, createdById: ctx.user.id }, select: { id: true, invoiceNumber: true, patientId: true } });
+  const lines = a.lines.map((l) => ({ serviceId: null, code: l.code, description: l.description, type: "MEDICINE", taxName: l.taxRateBp ? "Tax" : null, taxRateBp: l.taxRateBp, quantity: l.quantity, unitPriceMinor: l.unitPriceMinor, discount: null, discountInput: null, discountEligible: true, sourceType: "MEDICINE", sourceId: l.sourceId } as ResolvedLine));
+  await persistItems(tx, ctx.tenantId, inv.id, lines, res);
+  await addInvoiceEvent(tx, ctx.tenantId, inv, "CREATED", ctx.user.id, { amountMinor: res.totalMinor, note: "Pharmacy dispensing" });
+  await addInvoiceEvent(tx, ctx.tenantId, inv, "ISSUED", ctx.user.id, { amountMinor: res.totalMinor });
+  return { id: inv.id as string, invoiceNumber: inv.invoiceNumber as string, totalMinor: res.totalMinor, lines: res.lines, existing: false as const };
+}

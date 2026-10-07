@@ -484,6 +484,7 @@ model ContactEnquiry {
 /// MINIMAL patient registry (identity only — name, mobile, age/DOB, a clinic-unique code). No medical data:
 /// the full patient record (history, documents, timeline) is Phase 4 and extends this model.
 model Patient {
+  dispensings              Dispensing[]
   id                       String                 @id @default(cuid())
   tenantId                 String
   tenant                   Tenant                 @relation(fields: [tenantId], references: [id])
@@ -998,6 +999,7 @@ model ConsultationDiagnosis {
 
 /// One prescription per consultation; its history lives in PrescriptionVersion. Items are the editable working copy.
 model Prescription {
+  dispensings    Dispensing[]
   id             String                @id @default(cuid())
   tenantId       String
   consultationId String                @unique
@@ -1830,4 +1832,346 @@ model CashierSession {
 
   @@index([tenantId, status])
   @@index([tenantId, openedById, status])
+}
+
+/// ---------------------------------------------------------------------------------------------------------------
+/// Phase 9 — pharmacy & medicine inventory. Tenant-scoped. Stock quantities are whole base units (tablet, ml, vial …).
+/// Money is integer minor units (Phase 8 convention). Stock only ever changes through StockTransaction rows (the ledger),
+/// written in the same database transaction as the batch update. Ledger rows are never updated or deleted.
+/// ---------------------------------------------------------------------------------------------------------------
+
+model PharmacySettings {
+  id                  String   @id @default(cuid())
+  tenantId            String   @unique
+  /// days before expiry that count as "near expiry" (configurable, e.g. 30 / 60 / 90)
+  nearExpiryDays      Int      @default(90)
+  /// explicit override: allow dispensing more than the prescribed quantity
+  allowOverDispense   Boolean  @default(false)
+  /// clinic policy: are medicines returned by patients accepted at all?
+  allowPatientReturns Boolean  @default(false)
+  returnWindowDays    Int      @default(7)
+  billFooter          String?
+  updatedAt           DateTime @updatedAt
+}
+
+/// Configurable lists: DOSAGE_FORM | CATEGORY | UNIT (nothing is hardcoded as the only choice).
+model PharmacyConfigItem {
+  id        String   @id @default(cuid())
+  tenantId  String
+  kind      String
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, kind, name])
+  @@index([tenantId, kind])
+}
+
+model Medicine {
+  id                   String             @id @default(cuid())
+  tenantId             String
+  /// MED-000001, immutable, per clinic
+  medicineCode         String
+  genericName          String
+  brandName            String?
+  strength             String?
+  dosageForm           String?
+  route                String?
+  manufacturer         String?
+  category             String?
+  unit                 String             @default("unit")
+  packSize             Int?
+  barcode              String?
+  reorderLevel         Int                @default(0)
+  minimumStock         Int                @default(0)
+  maximumStock         Int?
+  purchasePriceMinor   Int                @default(0)
+  sellingPriceMinor    Int                @default(0)
+  taxRateBp            Int                @default(0)
+  prescriptionRequired Boolean            @default(true)
+  active               Boolean            @default(true)
+  notes                String?
+  createdById          String
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  batches              MedicineBatch[]
+  purchaseItems        PurchaseItem[]
+  transactions         StockTransaction[]
+
+  @@unique([tenantId, medicineCode])
+  @@index([tenantId, genericName])
+  @@index([tenantId, brandName])
+  @@index([tenantId, barcode])
+  @@index([tenantId, category])
+}
+
+model Supplier {
+  id            String     @id @default(cuid())
+  tenantId      String
+  /// SUP-000001
+  supplierCode  String
+  supplierName  String
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  taxId         String?
+  paymentTerms  String?
+  active        Boolean    @default(true)
+  notes         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  purchases     Purchase[]
+
+  @@unique([tenantId, supplierCode])
+  @@index([tenantId, supplierName])
+}
+
+model Purchase {
+  id                    String         @id @default(cuid())
+  tenantId              String
+  supplierId            String
+  supplier              Supplier       @relation(fields: [supplierId], references: [id])
+  /// PUR-2026-000001, assigned at creation, immutable
+  purchaseNumber        String
+  supplierInvoiceNumber String?
+  purchaseDate          String
+  subtotalMinor         Int            @default(0)
+  discountMinor         Int            @default(0)
+  taxMinor              Int            @default(0)
+  totalMinor            Int            @default(0)
+  /// DRAFT | RECEIVED | COMPLETED | CANCELLED
+  status                String         @default("DRAFT")
+  notes                 String?
+  createdById           String
+  receivedAt            DateTime?
+  receivedById          String?
+  completedAt           DateTime?
+  completedById         String?
+  cancelledAt           DateTime?
+  cancelledById         String?
+  cancelReason          String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  items                 PurchaseItem[]
+
+  @@unique([tenantId, purchaseNumber])
+  @@unique([tenantId, supplierId, supplierInvoiceNumber])
+  @@index([tenantId, status, purchaseDate])
+  @@index([tenantId, supplierId])
+}
+
+model PurchaseItem {
+  id                     String   @id @default(cuid())
+  tenantId               String
+  purchaseId             String
+  purchase               Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  position               Int
+  medicineId             String
+  medicine               Medicine @relation(fields: [medicineId], references: [id])
+  batchNumber            String
+  expiryDate             String
+  manufacturingDate      String?
+  quantity               Int
+  freeQuantity           Int      @default(0)
+  unitPurchasePriceMinor Int
+  sellingPriceMinor      Int
+  taxRateBp              Int      @default(0)
+  discountMinor          Int      @default(0)
+  taxMinor               Int      @default(0)
+  lineTotalMinor         Int
+  /// set when the purchase is received
+  batchId                String?
+  createdAt              DateTime @default(now())
+
+  @@index([tenantId, purchaseId])
+  @@index([tenantId, medicineId])
+}
+
+model MedicineBatch {
+  id                 String             @id @default(cuid())
+  tenantId           String
+  medicineId         String
+  medicine           Medicine           @relation(fields: [medicineId], references: [id])
+  /// supplied by the manufacturer / supplier; never replaced by an internal id
+  batchNumber        String
+  /// YYYY-MM-DD, last valid day
+  expiryDate         String
+  manufacturingDate  String?
+  purchasePriceMinor Int                @default(0)
+  sellingPriceMinor  Int                @default(0)
+  quantityReceived   Int                @default(0)
+  quantityAvailable  Int                @default(0)
+  reservedQuantity   Int                @default(0)
+  dispensedQuantity  Int                @default(0)
+  returnedQuantity   Int                @default(0)
+  damagedQuantity    Int                @default(0)
+  expiredQuantity    Int                @default(0)
+  /// ACTIVE | BLOCKED stored; LOW_STOCK / EXPIRED / DEPLETED are derived from quantity and dates
+  status             String             @default("ACTIVE")
+  blockedReason      String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  transactions       StockTransaction[]
+
+  @@unique([tenantId, medicineId, batchNumber])
+  @@index([tenantId, medicineId, expiryDate])
+  @@index([tenantId, expiryDate])
+}
+
+/// Immutable stock ledger. quantity is signed (+ in, - out); balanceAfter is the batch balance after this row.
+model StockTransaction {
+  id            String        @id @default(cuid())
+  tenantId      String
+  medicineId    String
+  medicine      Medicine      @relation(fields: [medicineId], references: [id])
+  batchId       String
+  batch         MedicineBatch @relation(fields: [batchId], references: [id])
+  /// OPENING | PURCHASE | DISPENSE | RETURN | SALE_RETURN | PURCHASE_RETURN | ADJUSTMENT_IN | ADJUSTMENT_OUT | DAMAGE | EXPIRY | TRANSFER_IN | TRANSFER_OUT | REVERSAL
+  type          String
+  quantity      Int
+  balanceAfter  Int
+  referenceType String?
+  referenceId   String?
+  reason        String?
+  notes         String?
+  createdById   String
+  createdAt     DateTime      @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, medicineId, createdAt])
+  @@index([tenantId, batchId, createdAt])
+  @@index([tenantId, referenceType, referenceId])
+}
+
+model Dispensing {
+  id                  String           @id @default(cuid())
+  tenantId            String
+  patientId           String
+  patient             Patient          @relation(fields: [patientId], references: [id])
+  prescriptionId      String
+  prescription        Prescription     @relation(fields: [prescriptionId], references: [id])
+  prescriptionVersion Int              @default(0)
+  invoiceId           String?
+  /// DSP-2026-000001
+  dispensingNumber    String
+  dispensedById       String
+  /// PARTIALLY_DISPENSED | DISPENSED | CANCELLED   (the prescription's own PENDING state is derived: no dispensing yet)
+  status              String
+  totalMinor          Int              @default(0)
+  dispensedAt         DateTime         @default(now())
+  notes               String?
+  idempotencyKey      String
+  cancelledAt         DateTime?
+  cancelledById       String?
+  cancelReason        String?
+  items               DispensingItem[]
+
+  @@unique([tenantId, dispensingNumber])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, patientId, dispensedAt])
+  @@index([tenantId, prescriptionId])
+  @@index([tenantId, dispensedAt])
+}
+
+model DispensingItem {
+  id                   String     @id @default(cuid())
+  tenantId             String
+  dispensingId         String
+  dispensing           Dispensing @relation(fields: [dispensingId], references: [id], onDelete: Cascade)
+  prescriptionItemId   String
+  /// stable across prescription amendments: normalised name|strength#n
+  itemKey              String
+  medicineId           String
+  batchId              String
+  medicineNameSnapshot String
+  batchNumberSnapshot  String
+  expirySnapshot       String
+  prescribedQuantity   Int
+  dispensedQuantity    Int
+  unitPriceMinor       Int
+  taxName              String?
+  taxRateBp            Int        @default(0)
+  taxMinor             Int        @default(0)
+  discountMinor        Int        @default(0)
+  totalMinor           Int
+  returnedQuantity     Int        @default(0)
+  /// DISPENSED | CANCELLED
+  status               String     @default("DISPENSED")
+  /// why a batch other than the first-expiry one was used / why a different medicine than prescribed was given
+  batchOverrideReason  String?
+  notes                String?
+
+  @@index([tenantId, dispensingId])
+  @@index([tenantId, prescriptionItemId])
+  @@index([tenantId, medicineId])
+  @@index([tenantId, batchId])
+}
+
+model MedicineReturn {
+  id               String   @id @default(cuid())
+  tenantId         String
+  /// RET-2026-000001
+  returnNumber     String
+  /// PATIENT_RETURN | PURCHASE_RETURN | OTHER
+  type             String
+  /// REQUESTED | APPROVED | RECEIVED | RESTOCKED | DISPOSED | REJECTED
+  status           String
+  medicineId       String
+  batchId          String
+  quantity         Int
+  reason           String
+  /// SEALED | OPENED | DAMAGED | EXPIRED (recorded when received)
+  condition        String?
+  patientId        String?
+  dispensingItemId String?
+  supplierId       String?
+  reference        String?
+  notes            String?
+  requestedById    String
+  approvedById     String?
+  receivedById     String?
+  resolvedById     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([tenantId, returnNumber])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, dispensingItemId])
+  @@index([tenantId, batchId])
+}
+
+model StockCount {
+  id          String           @id @default(cuid())
+  tenantId    String
+  /// CNT-2026-000001
+  countNumber String
+  /// OPEN | APPLIED | CANCELLED
+  status      String           @default("OPEN")
+  notes       String?
+  createdById String
+  appliedById String?
+  appliedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  lines       StockCountLine[]
+
+  @@unique([tenantId, countNumber])
+  @@index([tenantId, status])
+}
+
+model StockCountLine {
+  id               String     @id @default(cuid())
+  tenantId         String
+  countId          String
+  count            StockCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+  batchId          String
+  medicineId       String
+  systemQuantity   Int
+  physicalQuantity Int?
+  /// physical - system, set when the count is applied
+  difference       Int?
+  reason           String?
+
+  @@unique([countId, batchId])
+  @@index([tenantId, countId])
 }

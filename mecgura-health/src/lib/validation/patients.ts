@@ -58,7 +58,7 @@ export const patientListSchema = z.object({
   page: z.coerce.number().int().min(1).max(10_000).default(1),
 });
 
-export const TIMELINE_FILTERS = ["all", "appointments", "opd", "clinical", "documents", "reports", "billing", "followup"] as const;
+export const TIMELINE_FILTERS = ["all", "appointments", "opd", "clinical", "documents", "reports", "billing", "pharmacy", "followup"] as const;
 export const timelineQuerySchema = z.object({ filter: z.enum(TIMELINE_FILTERS).default("all"), page: z.coerce.number().int().min(1).max(500).default(1) });
 
 export const archiveSchema = z.object({ reason: txt("Reason", 200) });

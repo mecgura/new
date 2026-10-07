@@ -78,6 +78,16 @@ async function seedScheduling(tenantId: string, key: "A" | "B") {
   await db.investigation.deleteMany({ where: { tenantId } }); // cascades parameters
   await db.labConfigItem.deleteMany({ where: { tenantId } });
   await db.labPartner.deleteMany({ where: { tenantId } });
+  await db.stockTransaction.deleteMany({ where: { tenantId } }); // pharmacy: ledger first (references batches + medicines)
+  await db.dispensing.deleteMany({ where: { tenantId } }); // cascades dispensing items
+  await db.medicineReturn.deleteMany({ where: { tenantId } });
+  await db.stockCount.deleteMany({ where: { tenantId } }); // cascades count lines
+  await db.purchase.deleteMany({ where: { tenantId } }); // cascades purchase items
+  await db.medicineBatch.deleteMany({ where: { tenantId } });
+  await db.medicine.deleteMany({ where: { tenantId } });
+  await db.supplier.deleteMany({ where: { tenantId } });
+  await db.pharmacyConfigItem.deleteMany({ where: { tenantId } });
+  await db.pharmacySettings.deleteMany({ where: { tenantId } });
   await db.consultation.deleteMany({ where: { tenantId } }); // cascades vitals, diagnoses, prescriptions, versions, orders
   await db.consultationTemplate.deleteMany({ where: { tenantId } });
   await db.medicineReference.deleteMany({ where: { tenantId } });
@@ -184,6 +194,8 @@ async function main() {
       { email: `doctor@${c.mail}.mecgura.test`, name: `${c.name} Doctor`, role: "DOCTOR" },
       { email: `reception@${c.mail}.mecgura.test`, name: `${c.name} Receptionist`, role: "RECEPTIONIST" },
       { email: `accountant@${c.mail}.mecgura.test`, name: `${c.name} Accountant`, role: "ACCOUNTANT" },
+      { email: `pharmacy@${c.mail}.mecgura.test`, name: `${c.name} Pharmacist`, role: "PHARMACY_STAFF" },
+      { email: `pharmacymgr@${c.mail}.mecgura.test`, name: `${c.name} Pharmacy Manager`, role: "PHARMACY_MANAGER" },
       { email: `lab@${c.mail}.mecgura.test`, name: `${c.name} Lab Technician`, role: "LAB_STAFF" },
       { email: `labreviewer@${c.mail}.mecgura.test`, name: `${c.name} Lab Reviewer`, role: "LAB_STAFF", grants: ["lab.review"] },
     ];

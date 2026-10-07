@@ -1,4 +1,5 @@
 import { billingTimeline } from "./billing-docs";
+import { pharmacyTimeline } from "./pharmacy-dispensing";
 import { followUpTimeline } from "./followups";
 import { isLabStaffView } from "./lab-orders";
 import "server-only";
@@ -245,7 +246,7 @@ export async function listPatientAppointments(ctx: TenantRequestContext, id: str
 }
 
 /* ---------------------------------- timeline ---------------------------------- */
-export interface TimelineEvent { id: string; type: string; category: "patient" | "appointments" | "opd" | "clinical" | "reports" | "followup" | "billing"; at: string; title: string; detail?: string; href?: string }
+export interface TimelineEvent { id: string; type: string; category: "patient" | "appointments" | "opd" | "clinical" | "reports" | "followup" | "billing" | "pharmacy"; at: string; title: string; detail?: string; href?: string }
 const T_PAGE = 20;
 
 /**
@@ -327,6 +328,7 @@ export async function patientTimeline(ctx: TenantRequestContext, id: string, raw
     }
   }
   if (want("billing")) for (const e of await billingTimeline(ctx, id)) ev.push({ ...e, category: "billing" });
+  if (want("pharmacy")) for (const e of await pharmacyTimeline(ctx, id)) ev.push({ ...e, category: "pharmacy" });
   if (want("followup")) for (const e of await followUpTimeline(ctx, id)) ev.push({ ...e, category: "followup" });
   if (q.filter === "all") {
     const logs = await (await import("@/lib/db")).db.auditLog.findMany({ where: { tenantId: ctx.tenantId, entityType: "patient", entityId: id, action: { in: [AUDIT_ACTIONS.PATIENT_UPDATED, AUDIT_ACTIONS.PATIENT_ARCHIVED, AUDIT_ACTIONS.PATIENT_RESTORED, AUDIT_ACTIONS.PATIENT_CONSENT_RECORDED] } }, orderBy: { createdAt: "desc" }, take: 50, select: { id: true, action: true, createdAt: true } });
@@ -334,7 +336,7 @@ export async function patientTimeline(ctx: TenantRequestContext, id: string, raw
     for (const l of logs) ev.push({ id: `l-${l.id}`, type: label[l.action][0], category: "patient", at: l.createdAt.toISOString(), title: label[l.action][1] });
   }
   ev.sort((a, b) => b.at.localeCompare(a.at) || a.id.localeCompare(b.id));
-  const available = q.filter === "all" || q.filter === "appointments" || q.filter === "opd" || q.filter === "clinical" || q.filter === "reports" || q.filter === "followup" || q.filter === "billing";
+  const available = q.filter === "all" || q.filter === "appointments" || q.filter === "opd" || q.filter === "clinical" || q.filter === "reports" || q.filter === "followup" || q.filter === "billing" || q.filter === "pharmacy";
   return { filter: q.filter, available, restricted: q.filter === "clinical" && !clinical, page: q.page, pageSize: T_PAGE, total: ev.length, events: ev.slice((q.page - 1) * T_PAGE, q.page * T_PAGE) };
 }
 

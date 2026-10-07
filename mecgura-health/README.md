@@ -125,3 +125,6 @@ Follow-ups from consultations, prescriptions, lab reports, no-shows, recalls or 
 
 ## Phase 8 — billing, invoices, payments & refunds
 Configurable service master and tax, invoices with tenant-scoped numbers, discounts with role limits, partial/multiple payments, receipts, refunds with approval workflow, outstanding/overdue, daily collection and reports with CSV, optional cashier sessions, Patient 360 Billing tab, tenant-branded private documents. Integer minor-unit money, server is source of truth. No payment gateway yet ("Payment gateway not configured."). See `docs/phase8-billing.md`.
+
+## Phase 9 — pharmacy, inventory & dispensing
+Medicine master, suppliers, purchases with batch + expiry, an immutable stock ledger, FEFO dispensing of finalized prescriptions (partial dispensing, no substitution), returns, low-stock/expiry alerts, pharmacy billing through the Phase 8 invoice engine, reports and branded private documents. Stock only changes through ledger transactions; two staff can't dispense the same stock. See `docs/phase9-pharmacy.md`.

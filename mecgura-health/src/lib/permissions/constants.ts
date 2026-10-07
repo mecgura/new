@@ -8,6 +8,8 @@ export const ROLES = [
   "NURSE",
   "LAB_STAFF",
   "ACCOUNTANT",
+  "PHARMACY_STAFF",
+  "PHARMACY_MANAGER",
   "STAFF",
   "PATIENT",
 ] as const;
@@ -22,6 +24,8 @@ export const ROLE_LABELS: Record<RoleKey, string> = {
   NURSE: "Nurse",
   LAB_STAFF: "Lab Staff",
   ACCOUNTANT: "Accountant",
+  PHARMACY_STAFF: "Pharmacy Staff",
+  PHARMACY_MANAGER: "Pharmacy Manager",
   STAFF: "Staff",
   PATIENT: "Patient",
 };
@@ -106,6 +110,18 @@ export const PERMISSIONS = {
 
   "inventory.view": { module: "inventory", description: "View inventory" },
   "inventory.edit": { module: "inventory", description: "Edit inventory" },
+  "pharmacy.view": { module: "inventory", description: "View medicines, stock, batches and suppliers" },
+  "pharmacy.dispense": { module: "inventory", description: "Dispense finalized prescriptions" },
+  "pharmacy.receive": { module: "inventory", description: "Receive a purchase into stock" },
+  "pharmacy.purchase": { module: "inventory", description: "Create, edit, complete and cancel purchases; return stock to suppliers" },
+  "pharmacy.medicines": { module: "inventory", description: "Add and edit medicines (price changes are audited)" },
+  "pharmacy.suppliers": { module: "inventory", description: "Manage suppliers" },
+  "pharmacy.adjust": { module: "inventory", description: "Stock adjustments, physical counts, damage, expiry write-off and blocking batches" },
+  "pharmacy.return_request": { module: "inventory", description: "Request medicine returns" },
+  "pharmacy.return_approve": { module: "inventory", description: "Approve, receive and resolve medicine returns; cancel dispensing" },
+  "pharmacy.reports": { module: "inventory", description: "View and export pharmacy reports" },
+  "pharmacy.configure": { module: "inventory", description: "Pharmacy settings, categories, forms, units and opening stock" },
+  "pharmacy.availability": { module: "inventory", description: "See whether a medicine is in stock (doctors)" },
 
   "followups.view": { module: "followups", description: "View follow-ups" },
   "followups.manage": { module: "followups", description: "Reassign, reschedule, complete and cancel follow-ups" },
@@ -145,6 +161,6 @@ export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
  * the role (admin/platform powers). Everything else may be granted to e.g. a STAFF member.
  */
 export const NON_GRANTABLE_PERMISSIONS: readonly Permission[] = [
-  "platform.manage", "website.publish", "schedule.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view", "patients.archive", "patients.export", "consultation.finalize", "prescription.finalize", "lab.configure", "followups.configure", "billing.configure", "billing.refund_approve",
+  "platform.manage", "website.publish", "schedule.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view", "patients.archive", "patients.export", "consultation.finalize", "prescription.finalize", "lab.configure", "followups.configure", "pharmacy.configure", "pharmacy.adjust", "pharmacy.return_approve", "pharmacy.purchase", "pharmacy.medicines", "pharmacy.suppliers", "billing.configure", "billing.refund_approve",
 ];
 export const GRANTABLE_PERMISSIONS = ALL_PERMISSIONS.filter((p) => !NON_GRANTABLE_PERMISSIONS.includes(p));

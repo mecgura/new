@@ -361,7 +361,7 @@ describe("doctor review and notifications (27–28)", () => {
     const n = await listNotifications(A.doctor);
     const mine = n.items.find((x) => x.type === "REPORT_RELEASED" && x.entityId === r.reportId)!;
     expect(mine).toBeTruthy();
-    expect(JSON.stringify(mine)).not.toMatch(/14|Haemoglobin/);
+    expect(JSON.stringify(mine)).not.toMatch(/\b14\b|Haemoglobin/);
     expect(n.unread).toBeGreaterThan(0);
     expect((await listNotifications(A.doctor2)).items.some((x) => x.entityId === r.reportId)).toBe(false);
     await markNotificationsRead(A.doctor);

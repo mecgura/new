@@ -17,7 +17,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
     "consultation.view", "consultation.create", "consultation.edit", "consultation.finalize", "vitals.record", "orders.view", "orders.create", "orders.update",
     "prescription.view", "prescription.create", "prescription.edit", "prescription.finalize", "prescription.print",
     "tests.view", "tests.order", "tests.print", "reports.view", "reports.review", "documents.view",
-    "followups.view", "followups.manage", "followups.create", "followups.contact", "recalls.manage", "billing.view_own", "tasks.view", "tasks.manage",
+    "followups.view", "followups.manage", "followups.create", "followups.contact", "recalls.manage", "billing.view_own", "pharmacy.availability", "tasks.view", "tasks.manage",
     "website.view", "website.profile", "website.articles",
   ),
   RECEPTIONIST: P(
@@ -37,6 +37,8 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
   ),
   LAB_STAFF: P("dashboard.view", "clinic.view", "settings.view", "patients.identity", "tests.view", "tests.print", "lab.collect", "lab.result", "reports.view", "reports.upload", "tasks.view", "tasks.manage"),
   ACCOUNTANT: P("dashboard.view", "clinic.view", "settings.view", "patients.identity", "billing.view", "billing.create", "billing.edit", "billing.collect", "billing.discount", "billing.cancel", "billing.refund_request", "billing.refund_process", "billing.reports", "billing.export", "analytics.view"),
+  PHARMACY_STAFF: P("dashboard.view", "clinic.view", "settings.view", "patients.identity", "pharmacy.view", "pharmacy.dispense", "pharmacy.return_request", "inventory.view"),
+  PHARMACY_MANAGER: P("dashboard.view", "clinic.view", "settings.view", "patients.identity", "pharmacy.view", "pharmacy.dispense", "pharmacy.receive", "pharmacy.purchase", "pharmacy.medicines", "pharmacy.suppliers", "pharmacy.adjust", "pharmacy.return_request", "pharmacy.return_approve", "pharmacy.reports", "inventory.view", "inventory.edit"),
   // STAFF holds only the basics; anything more must be granted explicitly per user.
   STAFF: P("dashboard.view", "clinic.view", "settings.view"),
   // Patients use the (later) patient portal, never the staff app.
@@ -56,7 +58,7 @@ export function permissionsForRole(role: RoleKey): ReadonlySet<Permission> {
 
 /** Roles allowed to sign in to the staff application. */
 export const STAFF_APP_ROLES: readonly RoleKey[] = [
-  "SUPER_ADMIN", "CLINIC_ADMIN", "DOCTOR", "RECEPTIONIST", "COMPOUNDER", "NURSE", "LAB_STAFF", "ACCOUNTANT", "STAFF",
+  "SUPER_ADMIN", "CLINIC_ADMIN", "DOCTOR", "RECEPTIONIST", "COMPOUNDER", "NURSE", "LAB_STAFF", "ACCOUNTANT", "PHARMACY_STAFF", "PHARMACY_MANAGER", "STAFF",
 ];
 
 /** Roles a tenant (clinic) can create. SUPER_ADMIN and PATIENT are never created from clinic screens. */
