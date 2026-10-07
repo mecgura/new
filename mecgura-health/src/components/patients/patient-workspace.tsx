@@ -9,6 +9,7 @@ import { AppointmentStatusBadge, PriorityBadge, STATUS_LABEL, TYPE_LABEL } from 
 import { apiFetch } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import type { getPatientProfile } from "@/lib/services/patient-crm";
+import { LabReportsTab } from "@/components/lab/lab-reports-tab";
 import { RecordSection, type RecordConfig } from "./record-section";
 import { useApi } from "./use-api";
 
@@ -176,7 +177,7 @@ export function PatientWorkspace({ profile, doctors, services, today }: Props) {
           {tab === "notes" && <RecordSection patientId={p.id} cfg={NOTES} readOnly={archived} />}
           {tab === "family" && <Family id={p.id} readOnly={archived} />}
           {tab === "documents" && <Soon title="Documents" text="Identity, medical, insurance and referral documents will be stored here in a later phase (Phase 7). Nothing is uploaded yet." />}
-          {tab === "reports" && <Soon title="Reports" text="Test and lab reports will appear here when the tests and reports modules are added." />}
+          {tab === "reports" && <LabReportsTab patientId={p.id} />}
           {tab === "billing" && <Soon title="Billing" text="Bills and payments will appear here when billing is added. Nothing is billed from this screen yet." />}
           {tab === "followup" && <Soon title="Follow-up" text="Follow-up plans will appear here when the follow-up module is added." />}
         </div>
@@ -269,7 +270,7 @@ function Overview({ profile }: { profile: ProfileFull }) {
 /* -------------------------------------- timeline -------------------------------------- */
 interface Ev { id: string; type: string; category: string; at: string; title: string; detail?: string; href?: string }
 interface TL { filter: string; available: boolean; restricted: boolean; page: number; pageSize: number; total: number; events: Ev[] }
-const FILTERS: [string, string, boolean][] = [["all", "All", true], ["appointments", "Appointments", true], ["opd", "OPD visits", true], ["clinical", "Clinical", true], ["documents", "Documents", false], ["reports", "Reports", false], ["billing", "Billing", false], ["followup", "Follow-up", false]];
+const FILTERS: [string, string, boolean][] = [["all", "All", true], ["appointments", "Appointments", true], ["opd", "OPD visits", true], ["clinical", "Clinical", true], ["documents", "Documents", false], ["reports", "Reports", true], ["billing", "Billing", false], ["followup", "Follow-up", false]];
 function Timeline({ id, clinical }: { id: string; clinical: boolean }) {
   const [filter, setFilter] = useState("all");
   const [page, setPage] = useState(1);
@@ -298,7 +299,7 @@ function Timeline({ id, clinical }: { id: string; clinical: boolean }) {
           <ol className="relative space-y-4 border-l-2 border-line pl-5">
             {events.map((e) => (
               <li key={e.id} className="relative">
-                <span aria-hidden className={cn("absolute -left-[1.6rem] top-1.5 size-3 rounded-full border-2 border-surface", e.category === "opd" ? "bg-primary" : e.category === "appointments" ? "bg-info" : e.category === "clinical" ? "bg-warning" : "bg-muted")} />
+                <span aria-hidden className={cn("absolute -left-[1.6rem] top-1.5 size-3 rounded-full border-2 border-surface", e.category === "opd" ? "bg-primary" : e.category === "appointments" ? "bg-info" : e.category === "reports" ? "bg-success" : e.category === "clinical" ? "bg-warning" : "bg-muted")} />
                 <p className="type-label">{e.href ? <Link href={e.href}>{e.title}</Link> : e.title}</p>
                 {e.detail && <p className="type-secondary">{e.detail}</p>}
                 <p className="type-caption"><time dateTime={e.at}>{e.at.replace("T", " ").slice(0, 16)} UTC</time></p>

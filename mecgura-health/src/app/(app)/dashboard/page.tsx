@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Building2, CalendarClock, CalendarDays, CheckCircle2, Hourglass, Layers, MailPlus, ShieldCheck, Stethoscope, UserRound, UsersRound } from "lucide-react";
+import { Building2, CalendarClock, CalendarDays, CheckCircle2, FlaskConical, Hourglass, Layers, MailPlus, ShieldCheck, Stethoscope, UserRound, UsersRound } from "lucide-react";
+import { NotificationsCard } from "@/components/lab/notifications-card";
 import { SetupChecklist } from "@/components/clinic/setup-checklist";
 import { TenantStatusBadge, clinicTypeLabel } from "@/components/domain/badges";
 import { Alert, ButtonLink, Card, CardBody, CardHeader } from "@/components/ui";
@@ -8,6 +9,7 @@ import { requirePagePermission, type TenantRequestContext } from "@/lib/auth/con
 import { ROLE_LABELS } from "@/lib/permissions";
 import { clinicOverview } from "@/lib/services/overview";
 import { opdStats } from "@/lib/services/opd";
+import { labStats } from "@/lib/services/lab-orders";
 import { formatInTz } from "@/lib/scheduling/time";
 import { platformStats } from "@/lib/services/clinics";
 
@@ -49,6 +51,8 @@ export default async function DashboardPage() {
   const t = ctx.tenant;
   const showSched = ctx.permissions.has("appointments.view") || ctx.permissions.has("opd.view");
   const sched = showSched ? await opdStats(tctx) : null;
+  const lab = ctx.permissions.has("tests.view") ? await labStats(tctx).catch(() => null) : null;
+  const isDoctor = ctx.user.role === "DOCTOR";
   return (
     <div className="space-y-section">
       <div>
@@ -87,6 +91,17 @@ export default async function DashboardPage() {
         </section>
       )}
 
+      {lab && (
+        <section aria-label="Laboratory" className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="type-section">Laboratory</h2><Link href="/lab" className="type-label">Open laboratory →</Link></div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 md:gap-4">
+            {isDoctor
+              ? <><Stat icon={FlaskConical} label="Reports to review" value={lab.awaitingDoctorReview} /><Stat icon={Hourglass} label="Samples & processing" value={lab.collected + lab.processing} /><Stat icon={MailPlus} label="New orders" value={lab.newOrders} /><Stat icon={CheckCircle2} label="Reviewed today" value={lab.completedToday} /></>
+              : <><Stat icon={FlaskConical} label="New lab orders" value={lab.newOrders} /><Stat icon={Hourglass} label="Samples" value={lab.collected} /><Stat icon={Stethoscope} label="Processing" value={lab.processing} /><Stat icon={CheckCircle2} label="Results ready" value={lab.resultsReady} /></>}
+          </div>
+        </section>
+      )}
+
       <div className="grid gap-section lg:grid-cols-3">
         <div className="lg:col-span-2"><SetupChecklist items={o.checklist} later={o.later} /></div>
         <Card>
@@ -98,6 +113,7 @@ export default async function DashboardPage() {
             {ctx.permissions.has("users.view") && <Link href="/team" className="type-label">Manage team →</Link>}
           </CardBody>
         </Card>
+        {lab && <div className="lg:col-span-3"><NotificationsCard /></div>}
       </div>
     </div>
   );

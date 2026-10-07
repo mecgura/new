@@ -56,6 +56,7 @@ export async function updateOrderStatus(ctx: TenantRequestContext, orderId: stri
   const { status: to } = parseOrThrow(orderUpdateSchema, raw);
   const o = await db(ctx).doctorOrder.findFirst({ where: { id: orderId } });
   if (!o) throw new AppError("NOT_FOUND", { message: "Order not found." });
+  if (await db(ctx).investigationOrder.findFirst({ where: { doctorOrderId: orderId }, select: { id: true } })) throw new AppError("CONFLICT", { message: "This order is managed by the laboratory. Its status follows the lab order." });
   const doctorOwner = ctx.user.role === "DOCTOR" && o.doctorUserId === ctx.user.id && ctx.permissions.has("orders.create");
   if (!doctorOwner) {
     const allowedTypes = OPERATIONAL_ORDER_TYPES[ctx.user.role] ?? [];

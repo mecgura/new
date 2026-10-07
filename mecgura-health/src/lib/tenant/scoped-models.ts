@@ -48,6 +48,19 @@ export const TENANT_SCOPED_MODELS: Record<string, { softDelete?: boolean }> = {
   DoctorOrder: {},
   ConsultationTemplate: {},
   MedicineReference: {},
+  LabConfigItem: {},
+  Investigation: {},
+  InvestigationParameter: {},
+  LabPartner: {},
+  InvestigationOrder: {},
+  InvestigationOrderItem: {},
+  Sample: {},
+  SampleEvent: {},
+  LabResultEntry: {},
+  LabReport: {},
+  LabReportVersion: {},
+  LabReportReview: {},
+  Notification: {},
 };
 
 /** Models that carry a tenantId but are intentionally NOT auto-scoped (explained). */

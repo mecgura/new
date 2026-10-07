@@ -16,7 +16,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
     "patients.view", "patients.identity", "patients.clinical", "patients.clinical_edit", "opd.view", "opd.call", "opd.priority", "schedule.own", "appointments.view",
     "consultation.view", "consultation.create", "consultation.edit", "consultation.finalize", "vitals.record", "orders.view", "orders.create", "orders.update",
     "prescription.view", "prescription.create", "prescription.edit", "prescription.finalize", "prescription.print",
-    "tests.view", "tests.order", "reports.view", "reports.review", "documents.view",
+    "tests.view", "tests.order", "tests.print", "reports.view", "reports.review", "documents.view",
     "followups.view", "followups.manage", "tasks.view", "tasks.manage",
     "website.view", "website.profile", "website.articles",
   ),
@@ -25,7 +25,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
     "patients.view", "patients.identity", "patients.create", "patients.edit", "opd.view", "opd.manage", "opd.priority",
     "appointments.view", "appointments.create", "appointments.edit",
     "billing.view", "billing.create", "followups.view", "followups.manage", "communications.view",
-    "enquiries.view", "enquiries.manage",
+    "enquiries.view", "enquiries.manage", "tests.view", "tests.print",
   ),
   COMPOUNDER: P(
     "dashboard.view", "clinic.view", "settings.view",
@@ -33,9 +33,9 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
   ),
   NURSE: P(
     "dashboard.view", "clinic.view", "settings.view",
-    "patients.view", "patients.identity", "patients.clinical", "patients.clinical_edit", "opd.view", "appointments.view", "consultation.view", "vitals.record", "orders.view", "orders.update", "prescription.view", "tests.view", "reports.view", "reports.upload", "tasks.view", "tasks.manage",
+    "patients.view", "patients.identity", "patients.clinical", "patients.clinical_edit", "opd.view", "appointments.view", "consultation.view", "vitals.record", "orders.view", "orders.update", "prescription.view", "tests.view", "lab.collect", "reports.view", "reports.upload", "tasks.view", "tasks.manage",
   ),
-  LAB_STAFF: P("dashboard.view", "clinic.view", "settings.view", "patients.identity", "tests.view", "reports.view", "reports.upload", "tasks.view", "tasks.manage"),
+  LAB_STAFF: P("dashboard.view", "clinic.view", "settings.view", "patients.identity", "tests.view", "tests.print", "lab.collect", "lab.result", "reports.view", "reports.upload", "tasks.view", "tasks.manage"),
   ACCOUNTANT: P("dashboard.view", "clinic.view", "settings.view", "patients.identity", "billing.view", "billing.create", "billing.edit", "analytics.view"),
   // STAFF holds only the basics; anything more must be granted explicitly per user.
   STAFF: P("dashboard.view", "clinic.view", "settings.view"),

@@ -1,3 +1,4 @@
+import { isLabStaffView } from "./lab-orders";
 import "server-only";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import type { TenantRequestContext } from "@/lib/auth/context";
@@ -240,7 +241,7 @@ export async function listPatientAppointments(ctx: TenantRequestContext, id: str
 }
 
 /* ---------------------------------- timeline ---------------------------------- */
-export interface TimelineEvent { id: string; type: string; category: "patient" | "appointments" | "opd" | "clinical"; at: string; title: string; detail?: string; href?: string }
+export interface TimelineEvent { id: string; type: string; category: "patient" | "appointments" | "opd" | "clinical" | "reports"; at: string; title: string; detail?: string; href?: string }
 const T_PAGE = 20;
 
 /**
@@ -308,13 +309,26 @@ export async function patientTimeline(ctx: TenantRequestContext, id: string, raw
     const orders = await tdb.doctorOrder.findMany({ where: { patientId: id }, orderBy: { createdAt: "desc" }, take: 40, select: { id: true, consultationId: true, title: true, createdAt: true } });
     for (const o of orders) ev.push({ id: `or-${o.id}`, type: "ORDER_CREATED", category: "clinical", at: o.createdAt.toISOString(), title: "Doctor order created", detail: o.title, href: link(o.consultationId) });
   }
+  if (want("reports") && ctx.permissions.has("tests.view") && (ctx.user.role === "DOCTOR" || isLabStaffView(ctx)) && ctx.user.role !== "SUPER_ADMIN") {
+    // lab events only: no results, no values
+    const labs = await tdb.investigationOrder.findMany({ where: { patientId: id, ...(ctx.user.role === "DOCTOR" ? { doctorUserId: ctx.user.id } : {}) }, orderBy: { orderedAt: "desc" }, take: 40, include: { items: { select: { testNameSnapshot: true } }, samples: { select: { id: true, sampleNumber: true, collectedAt: true, rejectedAt: true, status: true } }, report: { select: { id: true, reportNumber: true, releasedAt: true, currentVersion: true } } } });
+    for (const o of labs) {
+      const names = o.items.map((i: { testNameSnapshot: string }) => i.testNameSnapshot).slice(0, 3).join(", ");
+      ev.push({ id: `lo-${o.id}`, type: "LAB_ORDERED", category: "reports", at: o.orderedAt.toISOString(), title: `Investigation ordered (${o.orderNumber})`, detail: names, href: `/lab/orders/${o.id}` });
+      for (const sm of o.samples as { id: string; sampleNumber: string; collectedAt: Date; rejectedAt: Date | null }[]) {
+        ev.push({ id: `ls-${sm.id}`, type: "SAMPLE_COLLECTED", category: "reports", at: sm.collectedAt.toISOString(), title: "Sample collected", detail: sm.sampleNumber, href: `/lab/orders/${o.id}` });
+        if (sm.rejectedAt) ev.push({ id: `lr-${sm.id}`, type: "SAMPLE_REJECTED", category: "reports", at: sm.rejectedAt.toISOString(), title: "Sample rejected — recollection needed", detail: sm.sampleNumber, href: `/lab/orders/${o.id}` });
+      }
+      if (o.report?.releasedAt && o.report.currentVersion > 0) ev.push({ id: `lp-${o.report.id}`, type: "REPORT_RELEASED", category: "reports", at: o.report.releasedAt.toISOString(), title: o.report.currentVersion > 1 ? `Report amended (version ${o.report.currentVersion})` : "Report released", detail: o.report.reportNumber, href: `/lab/reports/${o.report.id}` });
+    }
+  }
   if (q.filter === "all") {
     const logs = await (await import("@/lib/db")).db.auditLog.findMany({ where: { tenantId: ctx.tenantId, entityType: "patient", entityId: id, action: { in: [AUDIT_ACTIONS.PATIENT_UPDATED, AUDIT_ACTIONS.PATIENT_ARCHIVED, AUDIT_ACTIONS.PATIENT_RESTORED, AUDIT_ACTIONS.PATIENT_CONSENT_RECORDED] } }, orderBy: { createdAt: "desc" }, take: 50, select: { id: true, action: true, createdAt: true } });
     const label: Record<string, [string, string]> = { [AUDIT_ACTIONS.PATIENT_UPDATED]: ["PATIENT_UPDATED", "Patient details updated"], [AUDIT_ACTIONS.PATIENT_ARCHIVED]: ["PATIENT_ARCHIVED", "Patient archived"], [AUDIT_ACTIONS.PATIENT_RESTORED]: ["PATIENT_RESTORED", "Patient restored"], [AUDIT_ACTIONS.PATIENT_CONSENT_RECORDED]: ["CONSENT_RECORDED", "Consent recorded"] };
     for (const l of logs) ev.push({ id: `l-${l.id}`, type: label[l.action][0], category: "patient", at: l.createdAt.toISOString(), title: label[l.action][1] });
   }
   ev.sort((a, b) => b.at.localeCompare(a.at) || a.id.localeCompare(b.id));
-  const available = q.filter === "all" || q.filter === "appointments" || q.filter === "opd" || q.filter === "clinical";
+  const available = q.filter === "all" || q.filter === "appointments" || q.filter === "opd" || q.filter === "clinical" || q.filter === "reports";
   return { filter: q.filter, available, restricted: q.filter === "clinical" && !clinical, page: q.page, pageSize: T_PAGE, total: ev.length, events: ev.slice((q.page - 1) * T_PAGE, q.page * T_PAGE) };
 }
 

@@ -73,6 +73,11 @@ async function seedScheduling(tenantId: string, key: "A" | "B") {
   if (!doctor) return;
   const tz = "Asia/Kolkata";
   const today = todayIn(tz);
+  await db.notification.deleteMany({ where: { tenantId } });
+  await db.investigationOrder.deleteMany({ where: { tenantId } }); // cascades items, samples + custody events, results, reports, versions, reviews
+  await db.investigation.deleteMany({ where: { tenantId } }); // cascades parameters
+  await db.labConfigItem.deleteMany({ where: { tenantId } });
+  await db.labPartner.deleteMany({ where: { tenantId } });
   await db.consultation.deleteMany({ where: { tenantId } }); // cascades vitals, diagnoses, prescriptions, versions, orders
   await db.consultationTemplate.deleteMany({ where: { tenantId } });
   await db.medicineReference.deleteMany({ where: { tenantId } });
@@ -164,10 +169,12 @@ async function main() {
     });
     await db.tenantBranding.upsert({ where: { tenantId: tenant.id }, update: {}, create: { tenantId: tenant.id, primaryColor: c.primary, secondaryColor: c.secondary, accentColor: c.accent } });
     await db.subscription.upsert({ where: { tenantId: tenant.id }, update: { planId: demoPlan.id }, create: { tenantId: tenant.id, planId: demoPlan.id, status: "ACTIVE" } });
-    const users = [
+    const users: { email: string; name: string; role: string; grants?: string[] }[] = [
       { email: `admin@${c.mail}.mecgura.test`, name: `${c.name} Admin`, role: "CLINIC_ADMIN" },
       { email: `doctor@${c.mail}.mecgura.test`, name: `${c.name} Doctor`, role: "DOCTOR" },
       { email: `reception@${c.mail}.mecgura.test`, name: `${c.name} Receptionist`, role: "RECEPTIONIST" },
+      { email: `lab@${c.mail}.mecgura.test`, name: `${c.name} Lab Technician`, role: "LAB_STAFF" },
+      { email: `labreviewer@${c.mail}.mecgura.test`, name: `${c.name} Lab Reviewer`, role: "LAB_STAFF", grants: ["lab.review"] },
     ];
     for (const u of users) {
       const user = await db.user.upsert({
@@ -177,6 +184,8 @@ async function main() {
       });
       if (u.role === "DOCTOR") await db.doctorProfile.upsert({ where: { userId: user.id }, update: {}, create: { tenantId: tenant.id, userId: user.id, specialization: "General practice (demo)" } });
       else await db.staffProfile.upsert({ where: { userId: user.id }, update: {}, create: { tenantId: tenant.id, userId: user.id } });
+      // a lab reviewer is an ordinary lab technician who was granted verification/release rights
+      for (const permission of u.grants ?? []) await db.userPermissionGrant.upsert({ where: { userId_permission: { userId: user.id, permission } }, update: {}, create: { tenantId: tenant.id, userId: user.id, permission } });
       all.push({ email: u.email, role: u.role, clinic: c.name });
     }
     await seedWebsite(tenant.id, c.slug === "demo-clinic"

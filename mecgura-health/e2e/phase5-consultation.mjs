@@ -75,7 +75,7 @@ await api(docA, "POST", `/api/opd/${v1.id}`, { action: "hold" }); // park the fi
   await page.getByText("No allergies recorded.").waitFor({ timeout: 10000 }).catch(() => {});
   const body = await page.locator("body").innerText();
   if (process.env.DEBUG_E2E) console.log(body.slice(0, 600));
-  check("consultation header: patient, ID, token, doctor, status", /P-\d{6}/.test(body) && body.includes(`Token ${v2.token}`) && /In progress/.test(body) && body.includes("Demo Doctor"));
+  check("consultation header: patient, ID, token, doctor, status", /P-\d{6}/.test(body) && body.includes(`Token ${v2.token}`) && /In progress/.test(body) && /Demo (Clinic )?Doctor/.test(body));
   check("side panel shows context with honest empties", await page.getByText("No allergies recorded.").isVisible() && (await page.getByText(/No reports or documents yet/).count()) === 1);
 
   await page.getByRole("button", { name: "Record vitals" }).click();

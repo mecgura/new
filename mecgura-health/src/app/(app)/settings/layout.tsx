@@ -8,6 +8,7 @@ const TABS = [
   { href: "/settings/clinic", label: "Clinic profile" },
   { href: "/settings/branding", label: "Theme & branding" },
   { href: "/settings/scheduling", label: "Scheduling & OPD" },
+  { href: "/settings/lab", label: "Laboratory" },
   { href: "/settings/integrations", label: "Integrations" },
 ];
 

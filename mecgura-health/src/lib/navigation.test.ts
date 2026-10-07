@@ -9,7 +9,7 @@ const clinicModules = MODULE_KEYS.filter((m) => m !== "platform");
 describe("getVisibleNav", () => {
   it("hides unbuilt modules in production-like mode", () => {
     const nav = getVisibleNav({ permissions: effectivePermissions("DOCTOR"), enabledModules: clinicModules, showPlanned: false });
-    expect(labels(nav)).toEqual(["Dashboard", "Patients", "Live OPD", "Appointments", "Consultations", "Orders", "Website", "Settings"]);
+    expect(labels(nav)).toEqual(["Dashboard", "Patients", "Live OPD", "Appointments", "Consultations", "Orders", "Laboratory", "Website", "Settings"]);
   });
   it("receptionist reaches enquiries through their own entry, admin through Website", () => {
     const r = getVisibleNav({ permissions: effectivePermissions("RECEPTIONIST"), enabledModules: clinicModules, showPlanned: false });
@@ -38,7 +38,8 @@ describe("getVisibleNav", () => {
     const reception = getVisibleNav({ permissions: effectivePermissions("RECEPTIONIST"), enabledModules: clinicModules, showPlanned: true });
     expect(labels(reception)).toContain("Billing");
     expect(labels(reception)).not.toContain("Prescriptions");
-    expect(doctor.find((i) => i.label === "Tests & Reports")?.planned).toBe(true);
+    expect(doctor.find((i) => i.label === "Laboratory")?.planned).toBeFalsy();
+    expect(doctor.find((i) => i.label === "Documents")?.planned).toBe(true);
   });
   it("respects the plan's enabled modules", () => {
     const nav = getVisibleNav({ permissions: effectivePermissions("CLINIC_ADMIN"), enabledModules: ["dashboard", "settings"], showPlanned: true });

@@ -29,7 +29,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
   { module: "consultations", label: "Consultations", href: "/consultations", icon: "consultations", permission: "consultation.view" },
   { module: "consultations", label: "Orders", href: "/orders", icon: "tasks", permission: "orders.view" },
   { module: "prescriptions", label: "Prescriptions", href: "/prescriptions", icon: "prescriptions", permission: "prescription.view" },
-  { module: "tests", label: "Tests & Reports", href: "/tests", icon: "tests", permission: "tests.view" },
+  { module: "tests", label: "Laboratory", href: "/lab", icon: "tests", permission: "tests.view" },
   { module: "documents", label: "Documents", href: "/documents", icon: "documents", permission: "documents.view" },
   { module: "tasks", label: "Tasks / Orders", href: "/tasks", icon: "tasks", permission: "tasks.view" },
   { module: "billing", label: "Billing", href: "/billing", icon: "billing", permission: "billing.view" },

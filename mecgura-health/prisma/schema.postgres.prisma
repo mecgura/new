@@ -539,6 +539,7 @@ model Patient {
   notes                    PatientNote[]
   consents                 PatientConsent[]
   consultations            Consultation[]
+  investigationOrders      InvestigationOrder[]
 
   @@unique([tenantId, code])
   @@index([tenantId, phone])
@@ -868,56 +869,57 @@ model OpdSettings {
 /// immutable and only changes through versioned amendments.
 /// ---------------------------------------------------------------------------------------------------------------
 model Consultation {
-  id                String                  @id @default(cuid())
-  tenantId          String
+  id                  String                  @id @default(cuid())
+  tenantId            String
   /// CONS-2026-000145 — clinic-scoped, separate from patient id, token and prescription number
-  number            String
-  patientId         String
-  patient           Patient                 @relation(fields: [patientId], references: [id])
-  doctorUserId      String
-  doctor            User                    @relation("ConsultationDoctor", fields: [doctorUserId], references: [id])
+  number              String
+  patientId           String
+  patient             Patient                 @relation(fields: [patientId], references: [id])
+  doctorUserId        String
+  doctor              User                    @relation("ConsultationDoctor", fields: [doctorUserId], references: [id])
   /// at most ONE consultation per OPD visit
-  opdVisitId        String                  @unique
-  opdVisit          OpdVisit                @relation(fields: [opdVisitId], references: [id])
-  appointmentId     String?                 @unique
-  appointment       Appointment?            @relation(fields: [appointmentId], references: [id])
+  opdVisitId          String                  @unique
+  opdVisit            OpdVisit                @relation(fields: [opdVisitId], references: [id])
+  appointmentId       String?                 @unique
+  appointment         Appointment?            @relation(fields: [appointmentId], references: [id])
   /// DRAFT | IN_PROGRESS | READY_FOR_REVIEW | FINALIZED | CANCELLED
-  status            String                  @default("IN_PROGRESS")
+  status              String                  @default("IN_PROGRESS")
   /// optimistic-concurrency counter for autosave
-  rev               Int                     @default(0)
+  rev                 Int                     @default(0)
   /// JSON arrays: [{ text, duration, severity, notes }] and [{ name, duration, severity, onset, notes }]
-  chiefComplaints   String                  @default("[]")
-  symptoms          String                  @default("[]")
+  chiefComplaints     String                  @default("[]")
+  symptoms            String                  @default("[]")
   /// JSON object of free-text sections: hpi, pastMedical, surgical, family, medication, allergy, social, other
-  history           String                  @default("{}")
+  history             String                  @default("{}")
   /// JSON object of free-text sections: general, respiratory, cardiovascular, abdomen, neurological, other, custom[]
-  examination       String                  @default("{}")
-  assessment        String?
-  impression        String?
-  differential      String?
-  assessmentNotes   String?
-  clinicalNotes     String?
-  advice            String?
-  followUpRequired  Boolean                 @default(false)
-  followUpAfterDays Int?
-  followUpDate      String?
-  followUpNotes     String?
-  startedAt         DateTime                @default(now())
-  readyAt           DateTime?
-  finalizedAt       DateTime?
-  finalizedById     String?
+  examination         String                  @default("{}")
+  assessment          String?
+  impression          String?
+  differential        String?
+  assessmentNotes     String?
+  clinicalNotes       String?
+  advice              String?
+  followUpRequired    Boolean                 @default(false)
+  followUpAfterDays   Int?
+  followUpDate        String?
+  followUpNotes       String?
+  startedAt           DateTime                @default(now())
+  readyAt             DateTime?
+  finalizedAt         DateTime?
+  finalizedById       String?
   /// bumps each time a finalized consultation is amended and finalized again
-  version           Int                     @default(0)
-  amendReason       String?
-  cancelledAt       DateTime?
-  cancelReason      String?
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
-  vitals            ConsultationVitals[]
-  diagnoses         ConsultationDiagnosis[]
-  prescription      Prescription?
-  orders            DoctorOrder[]
-  versions          ConsultationVersion[]
+  version             Int                     @default(0)
+  amendReason         String?
+  cancelledAt         DateTime?
+  cancelReason        String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  vitals              ConsultationVitals[]
+  diagnoses           ConsultationDiagnosis[]
+  prescription        Prescription?
+  orders              DoctorOrder[]
+  versions            ConsultationVersion[]
+  investigationOrders InvestigationOrder[]
 
   @@unique([tenantId, number])
   @@index([tenantId, patientId, startedAt])
@@ -1120,4 +1122,289 @@ model MedicineReference {
 
   @@index([tenantId, name])
   @@index([tenantId, genericName])
+}
+
+/// ---------------------------------------------------------------------------------------------------------------
+/// Phase 6 — investigations & laboratory. Tenant-scoped; linked to the Phase 4/5 patient, consultation and doctor order.
+/// Test details are SNAPSHOTTED onto each order item, so later changes to the test master never alter old orders/reports.
+/// ---------------------------------------------------------------------------------------------------------------
+
+/// Configurable lists: CATEGORY | SAMPLE_TYPE | DEPARTMENT | REJECTION_REASON (nothing is hardcoded as the only choice).
+model LabConfigItem {
+  id        String   @id @default(cuid())
+  tenantId  String
+  kind      String
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, kind, name])
+  @@index([tenantId, kind])
+}
+
+model Investigation {
+  id              String                   @id @default(cuid())
+  tenantId        String
+  testCode        String
+  testName        String
+  shortName       String?
+  category        String
+  description     String?
+  sampleType      String?
+  department      String?
+  preparation     String?
+  turnaroundHours Int?
+  active          Boolean                  @default(true)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  parameters      InvestigationParameter[]
+
+  @@unique([tenantId, testCode])
+  @@index([tenantId, active, category])
+  @@index([tenantId, testName])
+}
+
+/// One reportable value of a test (CBC has several). A test with a single value has one parameter.
+model InvestigationParameter {
+  id              String        @id @default(cuid())
+  tenantId        String
+  investigationId String
+  investigation   Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  position        Int
+  name            String
+  /// NUMERIC | TEXT | QUALITATIVE
+  resultType      String        @default("NUMERIC")
+  unit            String?
+  /// JSON [{ value, flag? }] for QUALITATIVE (flag only if the lab configured one)
+  options         String?
+  /// JSON [{ gender?, minAgeYears?, maxAgeYears?, low?, high?, criticalLow?, criticalHigh?, text? }] — lab-configured only
+  ranges          String?
+
+  @@index([investigationId, position])
+}
+
+model LabPartner {
+  id              String   @id @default(cuid())
+  tenantId        String
+  name            String
+  code            String
+  contact         String?
+  address         String?
+  /// MANUAL = tracked by hand. No API integration is available yet.
+  integrationType String   @default("MANUAL")
+  /// name of a secret held in the environment/secret store — never the secret itself
+  configRef       String?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@unique([tenantId, code])
+}
+
+model InvestigationOrder {
+  id             String                   @id @default(cuid())
+  tenantId       String
+  /// LAB-2026-000001
+  orderNumber    String
+  patientId      String
+  patient        Patient                  @relation(fields: [patientId], references: [id])
+  consultationId String?
+  consultation   Consultation?            @relation(fields: [consultationId], references: [id])
+  doctorUserId   String
+  /// the Phase 5 DoctorOrder this belongs to (no duplicate orders)
+  doctorOrderId  String?                  @unique
+  /// INTERNAL | EXTERNAL
+  source         String                   @default("INTERNAL")
+  labPartnerId   String?
+  externalRef    String?
+  /// NORMAL | HIGH | URGENT | STAT — always chosen by the doctor
+  priority       String                   @default("NORMAL")
+  /// 0 STAT .. 3 NORMAL, so the worklist can sort by urgency in the database
+  priorityRank   Int                      @default(3)
+  /// ORDERED | CONFIRMED | SAMPLE_PENDING | SAMPLE_COLLECTED | SAMPLE_RECEIVED | PROCESSING | RESULT_READY | REPORT_GENERATED | DOCTOR_REVIEWED | CANCELLED
+  status         String                   @default("ORDERED")
+  clinicalNotes  String?
+  orderedAt      DateTime                 @default(now())
+  scheduledAt    DateTime?
+  completedAt    DateTime?
+  cancelledAt    DateTime?
+  cancelReason   String?
+  createdById    String
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  items          InvestigationOrderItem[]
+  samples        Sample[]
+  report         LabReport?
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId, status, priorityRank, orderedAt])
+  @@index([tenantId, patientId])
+  @@index([tenantId, doctorUserId])
+}
+
+model InvestigationOrderItem {
+  id                   String             @id @default(cuid())
+  tenantId             String
+  investigationOrderId String
+  order                InvestigationOrder @relation(fields: [investigationOrderId], references: [id], onDelete: Cascade)
+  investigationId      String?
+  testNameSnapshot     String
+  sampleTypeSnapshot   String?
+  /// full snapshot of the test (code, category, preparation, parameters with ranges) at order time
+  snapshot             String
+  priority             String             @default("NORMAL")
+  /// ORDERED | SAMPLE_COLLECTED | SAMPLE_RECEIVED | PROCESSING | RESULT_READY | RECOLLECTION_REQUIRED | CANCELLED
+  status               String             @default("ORDERED")
+  /// NONE | DRAFT | SUBMITTED | VERIFIED | RELEASED
+  resultStatus         String             @default("NONE")
+  notes                String?
+  /// the current (non-rejected) sample
+  sampleId             String?
+  results              LabResultEntry[]
+
+  @@index([tenantId, investigationOrderId])
+  @@index([sampleId])
+}
+
+model Sample {
+  id                   String             @id @default(cuid())
+  tenantId             String
+  /// SMP-2026-000001
+  sampleNumber         String
+  /// opaque identifier for barcode/QR (never contains patient data)
+  barcodeToken         String             @unique
+  investigationOrderId String
+  order                InvestigationOrder @relation(fields: [investigationOrderId], references: [id], onDelete: Cascade)
+  sampleType           String
+  /// 1 for the first collection, +1 per recollection
+  attempt              Int                @default(1)
+  previousSampleId     String?
+  /// COLLECTED | RECEIVED | REJECTED | PROCESSING | COMPLETED
+  status               String             @default("COLLECTED")
+  collectedById        String
+  collectedAt          DateTime           @default(now())
+  receivedById         String?
+  receivedAt           DateTime?
+  rejectedById         String?
+  rejectedAt           DateTime?
+  rejectionReason      String?
+  notes                String?
+  events               SampleEvent[]
+
+  @@unique([tenantId, sampleNumber])
+  @@index([tenantId, status])
+  @@index([investigationOrderId])
+}
+
+/// Chain of custody: append-only.
+model SampleEvent {
+  id         String   @id @default(cuid())
+  tenantId   String
+  sampleId   String
+  sample     Sample   @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  /// CREATED | COLLECTED | RECEIVED | REJECTED | RECOLLECTION_REQUESTED | PROCESSING_STARTED | PROCESSING_COMPLETED
+  action     String
+  userId     String
+  department String?
+  notes      String?
+  at         DateTime @default(now())
+
+  @@index([sampleId, at])
+}
+
+model LabResultEntry {
+  id            String                 @id @default(cuid())
+  tenantId      String
+  orderItemId   String
+  orderItem     InvestigationOrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  position      Int
+  parameterName String
+  value         String
+  numericValue  Float?
+  unit          String?
+  /// the reference range that applied (text), or null when none is configured
+  refText       String?
+  /// LOW | HIGH | NORMAL | CRITICAL | POSITIVE | NEGATIVE | ABNORMAL — only from configured data
+  flag          String?
+  remarks       String?
+  enteredById   String
+  updatedAt     DateTime               @updatedAt
+
+  @@unique([orderItemId, position])
+}
+
+model LabReport {
+  id                   String             @id @default(cuid())
+  tenantId             String
+  /// RPT-2026-000001
+  reportNumber         String
+  investigationOrderId String             @unique
+  order                InvestigationOrder @relation(fields: [investigationOrderId], references: [id], onDelete: Cascade)
+  patientId            String
+  doctorUserId         String
+  /// DRAFT | UNDER_REVIEW | VERIFIED | RELEASED | AMENDED | CANCELLED
+  status               String             @default("UNDER_REVIEW")
+  /// 0 until first release
+  currentVersion       Int                @default(0)
+  amendReason          String?
+  generatedById        String
+  generatedAt          DateTime           @default(now())
+  verifiedById         String?
+  verifiedAt           DateTime?
+  releasedById         String?
+  releasedAt           DateTime?
+  updatedAt            DateTime           @updatedAt
+  versions             LabReportVersion[]
+  reviews              LabReportReview[]
+
+  @@unique([tenantId, reportNumber])
+  @@index([tenantId, patientId])
+  @@index([tenantId, status])
+}
+
+/// Immutable snapshot of a released report. Never updated or deleted.
+model LabReportVersion {
+  id          String    @id @default(cuid())
+  tenantId    String
+  reportId    String
+  report      LabReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  version     Int
+  snapshot    String
+  contentHash String
+  reason      String?
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@unique([reportId, version])
+}
+
+/// A doctor's acknowledgement/review of a specific released version.
+model LabReportReview {
+  id           String    @id @default(cuid())
+  tenantId     String
+  reportId     String
+  report       LabReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  version      Int
+  doctorUserId String
+  /// ACKNOWLEDGED | REVIEWED
+  status       String
+  note         String?
+  at           DateTime  @default(now())
+
+  @@unique([reportId, version, doctorUserId])
+}
+
+/// Internal notifications (in-app only; no SMS/WhatsApp/email). `body` never carries results.
+model Notification {
+  id         String    @id @default(cuid())
+  tenantId   String
+  userId     String
+  type       String
+  title      String
+  body       String?
+  entityType String?
+  entityId   String?
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([tenantId, userId, readAt, createdAt])
 }
