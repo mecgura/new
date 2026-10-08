@@ -931,6 +931,7 @@ model Consultation {
   @@unique([tenantId, number])
   @@index([tenantId, patientId, startedAt])
   @@index([tenantId, doctorUserId, status])
+  @@index([tenantId, startedAt])
 }
 
 /// Immutable snapshot written every time a consultation is finalized (v1, v2 …). contentHash proves it wasn't altered.
@@ -1247,6 +1248,7 @@ model InvestigationOrder {
   @@index([tenantId, status, priorityRank, orderedAt])
   @@index([tenantId, patientId])
   @@index([tenantId, doctorUserId])
+  @@index([tenantId, orderedAt])
 }
 
 model InvestigationOrderItem {
@@ -2483,6 +2485,7 @@ model CommunicationMessage {
   @@index([tenantId, status, scheduledAt])
   @@index([tenantId, patientId, createdAt])
   @@index([tenantId, channel, eventType, createdAt])
+  @@index([tenantId, createdAt])
   @@index([entityType, entityId])
   @@index([provider, providerMessageId])
   @@index([status, nextAttemptAt])
@@ -2515,4 +2518,34 @@ model CommunicationWebhookEvent {
   receivedAt DateTime @default(now())
 
   @@index([provider, receivedAt])
+}
+
+/// Phase 13: per-clinic analytics thresholds (rule-based insights). Defaults apply when no row exists.
+model AnalyticsSettings {
+  id        String   @id @default(cuid())
+  tenantId  String   @unique
+  /// JSON: { noShowRatePct, cancellationRatePct, waitingMinutes, overdueFollowUps, labTurnaroundHours, outstandingOverdueCount, expiryDays }
+  thresholds String  @default("{}")
+  updatedById String?
+  updatedAt DateTime @updatedAt
+}
+
+/// Phase 13: scheduled-report FOUNDATION. Definitions only; nothing is generated or sent externally yet.
+model ScheduledReport {
+  id          String    @id @default(cuid())
+  tenantId    String
+  name        String
+  reportKey   String
+  /// JSON of validated filters (range preset etc.)
+  filters     String    @default("{}")
+  /// DAILY | WEEKLY | MONTHLY
+  frequency   String
+  format      String    @default("CSV")
+  enabled     Boolean   @default(true)
+  createdById String
+  lastRunAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([tenantId, enabled])
 }

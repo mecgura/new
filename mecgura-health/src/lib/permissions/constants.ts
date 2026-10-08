@@ -139,7 +139,18 @@ export const PERMISSIONS = {
   "notifications.configure": { module: "dashboard", description: "Configure notification rules, escalation and retention" },
   "communications.configure": { module: "communications", description: "Configure clinic communication channels, reminders and rules" },
 
-  "analytics.view": { module: "analytics", description: "View analytics" },
+  "analytics.view": { module: "analytics", description: "Open the analytics area (the Command Center shows only the sections you are allowed)" },
+  "analytics.patients": { module: "analytics", description: "View patient analytics (demographics, new vs returning, retention)" },
+  "analytics.operations": { module: "analytics", description: "View appointment, live OPD and follow-up analytics" },
+  "analytics.clinical": { module: "analytics", description: "View consultation, diagnosis and prescription analytics (descriptive, structured data only)" },
+  "analytics.financial": { module: "analytics", description: "View billing, payment, refund and discount analytics" },
+  "analytics.lab": { module: "analytics", description: "View laboratory analytics" },
+  "analytics.pharmacy": { module: "analytics", description: "View pharmacy and stock analytics" },
+  "analytics.communication": { module: "analytics", description: "View communication delivery analytics (never message contents)" },
+  "analytics.configure": { module: "analytics", description: "Change insight thresholds and manage scheduled-report definitions" },
+  "reports.export": { module: "analytics", description: "Export reports the user is allowed to view (patient identity columns reduced to codes)" },
+  "reports.export_patient": { module: "analytics", description: "Include patient names and contact details in exported reports" },
+  "reports.export_financial": { module: "analytics", description: "Export financial reports" },
   "website.view": { module: "website", description: "View the clinic website settings" },
   "website.edit": { module: "website", description: "Edit the clinic website content" },
   "website.publish": { module: "website", description: "Publish or unpublish the clinic website and its content" },
@@ -167,6 +178,6 @@ export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
  * the role (admin/platform powers). Everything else may be granted to e.g. a STAFF member.
  */
 export const NON_GRANTABLE_PERMISSIONS: readonly Permission[] = [
-  "platform.manage", "website.publish", "schedule.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view", "patients.archive", "patients.export", "consultation.finalize", "prescription.finalize", "lab.configure", "followups.configure", "portal.configure", "communications.templates", "communications.configure", "notifications.configure", "pharmacy.configure", "pharmacy.adjust", "pharmacy.return_approve", "pharmacy.purchase", "pharmacy.medicines", "pharmacy.suppliers", "billing.configure", "billing.refund_approve",
+  "platform.manage", "website.publish", "schedule.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view", "patients.archive", "patients.export", "consultation.finalize", "prescription.finalize", "lab.configure", "followups.configure", "portal.configure", "communications.templates", "communications.configure", "notifications.configure", "pharmacy.configure", "pharmacy.adjust", "pharmacy.return_approve", "pharmacy.purchase", "pharmacy.medicines", "pharmacy.suppliers", "billing.configure", "billing.refund_approve", "analytics.configure", "reports.export_patient",
 ];
 export const GRANTABLE_PERMISSIONS = ALL_PERMISSIONS.filter((p) => !NON_GRANTABLE_PERMISSIONS.includes(p));

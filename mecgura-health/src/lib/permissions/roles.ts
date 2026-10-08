@@ -19,6 +19,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
     "tests.view", "tests.order", "tests.print", "reports.view", "reports.review", "documents.view",
     "followups.view", "followups.manage", "followups.create", "followups.contact", "recalls.manage", "communications.view", "billing.view_own", "pharmacy.availability", "tasks.view", "tasks.manage",
     "website.view", "website.profile", "website.articles",
+    "analytics.view", "analytics.patients", "analytics.operations", "analytics.clinical", "analytics.lab", "reports.export",
   ),
   RECEPTIONIST: P(
     "dashboard.view", "clinic.view", "settings.view",
@@ -26,6 +27,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
     "appointments.view", "appointments.create", "appointments.edit",
     "billing.view", "billing.create", "billing.edit", "billing.collect", "billing.discount", "billing.refund_request", "followups.view", "followups.manage", "followups.create", "followups.contact", "recalls.manage", "communications.view", "communications.resend",
     "enquiries.view", "enquiries.manage", "tests.view", "tests.print",
+    "analytics.view", "analytics.patients", "analytics.operations",
   ),
   COMPOUNDER: P(
     "dashboard.view", "clinic.view", "settings.view",
@@ -34,11 +36,12 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = {
   NURSE: P(
     "dashboard.view", "clinic.view", "settings.view",
     "patients.view", "patients.identity", "patients.clinical", "patients.clinical_edit", "opd.view", "appointments.view", "consultation.view", "vitals.record", "orders.view", "orders.update", "prescription.view", "tests.view", "lab.collect", "reports.view", "reports.upload", "tasks.view", "tasks.manage", "followups.view", "followups.contact",
+    "analytics.view", "analytics.operations",
   ),
-  LAB_STAFF: P("dashboard.view", "clinic.view", "settings.view", "patients.identity", "communications.view", "tests.view", "tests.print", "lab.collect", "lab.result", "reports.view", "reports.upload", "tasks.view", "tasks.manage"),
-  ACCOUNTANT: P("dashboard.view", "clinic.view", "settings.view", "patients.identity", "communications.view", "billing.view", "billing.create", "billing.edit", "billing.collect", "billing.discount", "billing.cancel", "billing.refund_request", "billing.refund_process", "billing.reports", "billing.export", "analytics.view"),
+  LAB_STAFF: P("dashboard.view", "clinic.view", "settings.view", "patients.identity", "communications.view", "tests.view", "tests.print", "lab.collect", "lab.result", "reports.view", "reports.upload", "tasks.view", "tasks.manage", "analytics.view", "analytics.lab"),
+  ACCOUNTANT: P("dashboard.view", "clinic.view", "settings.view", "patients.identity", "communications.view", "billing.view", "billing.create", "billing.edit", "billing.collect", "billing.discount", "billing.cancel", "billing.refund_request", "billing.refund_process", "billing.reports", "billing.export", "analytics.view", "analytics.financial", "reports.export", "reports.export_financial"),
   PHARMACY_STAFF: P("dashboard.view", "clinic.view", "settings.view", "patients.identity", "pharmacy.view", "pharmacy.dispense", "pharmacy.return_request", "inventory.view"),
-  PHARMACY_MANAGER: P("dashboard.view", "clinic.view", "settings.view", "patients.identity", "pharmacy.view", "pharmacy.dispense", "pharmacy.receive", "pharmacy.purchase", "pharmacy.medicines", "pharmacy.suppliers", "pharmacy.adjust", "pharmacy.return_request", "pharmacy.return_approve", "pharmacy.reports", "inventory.view", "inventory.edit"),
+  PHARMACY_MANAGER: P("dashboard.view", "clinic.view", "settings.view", "patients.identity", "pharmacy.view", "pharmacy.dispense", "pharmacy.receive", "pharmacy.purchase", "pharmacy.medicines", "pharmacy.suppliers", "pharmacy.adjust", "pharmacy.return_request", "pharmacy.return_approve", "pharmacy.reports", "inventory.view", "inventory.edit", "analytics.view", "analytics.pharmacy", "reports.export"),
   // STAFF holds only the basics; anything more must be granted explicitly per user.
   STAFF: P("dashboard.view", "clinic.view", "settings.view"),
   // Patients use the (later) patient portal, never the staff app.

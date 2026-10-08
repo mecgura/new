@@ -84,6 +84,8 @@ export const TENANT_SCOPED_MODELS: Record<string, { softDelete?: boolean }> = {
   NotificationPreference: {},
   NotificationUserSettings: {},
   NotificationSettings: {},
+  AnalyticsSettings: {},
+  ScheduledReport: {},
   CommunicationTemplate: {},
   CommunicationMessage: {},
   CommunicationAttempt: {},
