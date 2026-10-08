@@ -67,6 +67,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 lockedUntil: failures >= MAX_FAILED_LOGINS ? new Date(now.getTime() + LOCK_MINUTES * 60_000) : undefined,
               },
             });
+            if (failures === MAX_FAILED_LOGINS && user.tenantId) void import("@/lib/notifications/events").then((m) => m.notifyStaffSecurity(user.tenantId, "locked", user.id, { who: user.name })).catch(() => undefined);
           }
           const reason = !user ? "unknown_account" : locked ? "locked" : !passwordOk || !user.passwordHash ? "bad_password" : user.status !== "ACTIVE" ? `status_${user.status.toLowerCase()}` : !tenantOk ? "tenant_unavailable" : !hostOk ? "wrong_clinic_host" : "not_allowed";
           await recordAudit({ action: AUDIT_ACTIONS.LOGIN_FAILED, tenantId: user?.tenantId ?? null, actorId: user?.id, metadata: { reason } });

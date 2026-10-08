@@ -1,4 +1,5 @@
 import { assertLinkable, linkAppointment, onAppointmentClosed } from "./followups";
+import { notifyNoShow } from "@/lib/notifications/events";
 import "server-only";
 import { db } from "@/lib/db";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
@@ -86,7 +87,7 @@ export async function createStaffAppointment(ctx: TenantRequestContext, raw: unk
     patientId: patient?.id ?? null, contactName: patient ? null : input.contactName ?? null, contactPhone: patient ? null : input.contactPhone ?? null, createdById: ctx.user.id,
   });
   await recordAudit({ action: AUDIT_ACTIONS.APPOINTMENT_CREATED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "appointment", entityId: a.id, metadata: { publicId: a.publicId, type: a.type, source: a.source, doctorUserId: a.doctorUserId, startsAt: a.startsAt.toISOString() } });
-  await emitAppointmentEvent("appointment.created", ctx.tenantId, a.id);
+  await emitAppointmentEvent("appointment.created", ctx.tenantId, a.id, ctx.user.id);
   if (input.followUpId) await linkAppointment(ctx, input.followUpId, { id: a.id, startsAt: a.startsAt });
   return { id: a.id, publicId: a.publicId };
 }
@@ -109,7 +110,7 @@ export async function appointmentAction(ctx: TenantRequestContext, id: string, r
       if (!ctx.permissions.has("appointments.edit")) throw new AppError("FORBIDDEN");
       await setAppointmentStatus(tdb, ctx.tenantId, id, status, "CONFIRMED", { confirmedAt: new Date() });
       await audit(AUDIT_ACTIONS.APPOINTMENT_STATUS_CHANGED, { from: status, to: "CONFIRMED" });
-      await emitAppointmentEvent("appointment.confirmed", ctx.tenantId, id);
+      await emitAppointmentEvent("appointment.confirmed", ctx.tenantId, id, ctx.user.id);
       return { status: "CONFIRMED" };
     }
     case "cancel": {
@@ -120,7 +121,7 @@ export async function appointmentAction(ctx: TenantRequestContext, id: string, r
       });
       await audit(AUDIT_ACTIONS.APPOINTMENT_CANCELLED, { from: status, reasonKind: input.reasonKind });
       await onAppointmentClosed(ctx, a, "CANCELLED");
-      await emitAppointmentEvent("appointment.cancelled", ctx.tenantId, id);
+      await emitAppointmentEvent("appointment.cancelled", ctx.tenantId, id, ctx.user.id);
       return { status: "CANCELLED" };
     }
     case "reschedule": {
@@ -139,7 +140,7 @@ export async function appointmentAction(ctx: TenantRequestContext, id: string, r
         throw e;
       }
       await audit(AUDIT_ACTIONS.APPOINTMENT_RESCHEDULED, { oldStartsAt: a.startsAt.toISOString(), newStartsAt: input.startsAt.toISOString(), oldDoctor: a.doctorUserId, newDoctor: doctorUserId });
-      await emitAppointmentEvent("appointment.rescheduled", ctx.tenantId, id);
+      await emitAppointmentEvent("appointment.rescheduled", ctx.tenantId, id, ctx.user.id);
       return { startsAt: input.startsAt.toISOString() };
     }
     case "check-in": {
@@ -151,6 +152,7 @@ export async function appointmentAction(ctx: TenantRequestContext, id: string, r
       await setAppointmentStatus(tdb, ctx.tenantId, id, status, "NO_SHOW", { noShowAt: new Date(), noShowById: ctx.user.id, noShowReason: input.reason ?? null });
       await audit(AUDIT_ACTIONS.APPOINTMENT_NO_SHOW, { from: status });
       await onAppointmentClosed(ctx, a, "NO_SHOW");
+      await notifyNoShow(ctx.tenantId, id, ctx.user.id);
       return { status: "NO_SHOW" };
     }
     case "update": {

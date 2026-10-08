@@ -1,5 +1,5 @@
 import "server-only";
-import { notifyReportReleased } from "@/lib/communications/triggers";
+import { notifyReportReleased } from "@/lib/notifications/events";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import type { TenantRequestContext } from "@/lib/auth/context";
 import { parseJson, sha256 } from "@/lib/clinical/snapshot";

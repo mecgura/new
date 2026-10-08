@@ -532,7 +532,7 @@ describe("reminders, Patient 360, audit and isolation (22–24, 28–29)", () =>
     expect(await db.notification.count({ where: { tenantId: A.id, userId: A.nurseId, type: "FOLLOW_UP_OVERDUE" } })).toBe(1);
     expect((await listNotifications(B.nurse)).items.filter((n) => n.type.startsWith("FOLLOW_UP"))).toHaveLength(0);
     expect((await listNotifications(A.accountant)).items.filter((n) => n.type.startsWith("FOLLOW_UP"))).toHaveLength(0);
-    expect(JSON.stringify((await listNotifications(A.nurse)).items)).not.toMatch(/Nurse overdue|Patient/);
+    expect(JSON.stringify((await listNotifications(A.nurse)).items.filter((n) => /^(FOLLOW_UP|RECALL|REPORT_REVIEW)/.test(n.type)))).not.toMatch(/Nurse overdue|Patient/);
   });
   it("Patient 360 lists the patient's follow-ups in groups and adds timeline events (safe summaries)", async () => {
     const pid = await patient(A, "Timeline Patient");

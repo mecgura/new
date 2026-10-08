@@ -83,7 +83,7 @@ const u2 = await doCollect(labA, "Urine");
 check("recollection is a new sample (attempt 2)", u2.status === 200 && u2.json.data.attempt === 2);
 det = (await api(labA, "GET", `/api/lab/orders/${OID}`)).json.data;
 check("old sample and custody chain are kept", det.samples.length === 3 && det.samples.find((s) => s.id === urineSample.id).status === "REJECTED" && det.samples.find((s) => s.id === urineSample.id).events.length === 3);
-check("doctor is notified of the rejection", (await api(docA, "GET", "/api/notifications")).json.data.items.some((n) => n.type === "SAMPLE_REJECTED" && n.entityId === OID));
+check("doctor is notified of the rejection", (await api(docA, "GET", "/api/notifications?pageSize=50")).json.data.rows.some((n) => n.type === "LAB_SAMPLE_REJECTED" && n.entityId === OID));
 for (const s of det.samples.filter((x) => x.status === "COLLECTED")) await api(labA, "POST", `/api/lab/orders/${OID}/action`, { action: "receive", sampleId: s.id });
 check("start processing", (await api(labA, "POST", `/api/lab/orders/${OID}/action`, { action: "startProcessing" })).status === 200);
 det = (await api(labA, "GET", `/api/lab/orders/${OID}`)).json.data;
@@ -114,7 +114,7 @@ check("double release is refused", (await act(revA, "release")).status === 409);
 det = (await api(docA, "GET", `/api/lab/orders/${OID}`)).json.data;
 const RID = det.report.id;
 check("doctor sees results and order status after release", det.items.some((i) => i.results.length) && det.report.currentVersion === 1 && det.status === "REPORT_GENERATED");
-check("doctor is notified without any result values", await (async () => { const n = (await api(docA, "GET", "/api/notifications")).json.data.items.find((x) => x.type === "REPORT_RELEASED" && x.entityId === RID); return !!n && !/250|Haemoglobin|10/.test(`${n.title} ${n.body}`.replace(/LAB-\d{4}-\d{6}/, "")); })());
+check("doctor is notified without any result values", await (async () => { const n = (await api(docA, "GET", "/api/notifications?pageSize=50")).json.data.rows.find((x) => x.type === "LAB_REPORT_RELEASED" && x.entityId === RID); return !!n && !/250|Haemoglobin|10/.test(`${n.title} ${n.body}`.replace(/LAB-\d{4}-\d{6}/, "")); })());
 check("linked doctor order completed", (await api(docA, "GET", `/api/orders?status=COMPLETED`)).json.data.orders.some((o) => o.type === "INVESTIGATION" && o.consultationId === c1.id));
 
 /* ---------- documents ---------- */
@@ -193,8 +193,8 @@ let uiOrderId;
 {
   const { page, errors } = docA;
   await page.goto(`http://${LOCAL}/dashboard`, { waitUntil: "networkidle" });
-  check("doctor gets an in-app notification for the report", await page.getByLabel("Notifications", { exact: true }).getByText(/Report ready/).first().isVisible());
-  await page.getByLabel("Notifications", { exact: true }).getByRole("link", { name: /Report ready/ }).first().click();
+  check("doctor gets an in-app notification for the report", await page.getByLabel("Notifications", { exact: true }).getByText(/Lab report ready/).first().isVisible());
+  await page.getByLabel("Notifications", { exact: true }).getByRole("link", { name: /Lab report ready/ }).first().click();
   await page.waitForURL(/\/lab\/reports\//);
   await page.getByText(/Laboratory report RPT-/).first().waitFor({ timeout: 15000 });
   const body = await page.locator("body").innerText();

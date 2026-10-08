@@ -1,4 +1,5 @@
 import "server-only";
+import { externalChannelsFor } from "@/lib/notifications/policy";
 import { db } from "@/lib/db";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
@@ -87,7 +88,10 @@ export function baseVars(t: TenantProfile, f: PatientFacts | null, extra: Partia
 export async function emitCommunication(i: EmitInput): Promise<EmitResult> {
   const ev = EVENTS[i.event];
   const s = await loadSettings(i.tenantId);
-  const enabled = s.channelOrder.filter((c) => channelEnabled(s, c) && (!i.only || i.only.includes(c)));
+  // Phase 12 notification rules may narrow which external channels this kind of message may use
+  const policy = await externalChannelsFor(i.tenantId, i.event).catch(() => null);
+  const enabled = s.channelOrder.filter((c) => channelEnabled(s, c) && (!i.only || i.only.includes(c)) && (policy === null || policy.includes(c)));
+  if (policy && !policy.length) return { queued: [], skipped: "EVENT_DISABLED", duplicate: false };
   if (!enabled.length) return { queued: [], skipped: "NO_CHANNEL_ENABLED", duplicate: false };
   if (!i.ignoreToggle && !eventEnabled(s, i.event)) return { queued: [], skipped: "EVENT_DISABLED", duplicate: false };
   const t = await loadTenantProfile(i.tenantId); if (!t || !["ACTIVE", "TRIAL"].includes(t.status)) return { queued: [], skipped: "PATIENT_UNAVAILABLE", duplicate: false };

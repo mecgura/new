@@ -134,3 +134,6 @@ Clinic-branded `/portal` for patients: clinic-issued one-time activation, separa
 
 ## Phase 11 — WhatsApp, SMS & email automation
 Event-driven communication engine with replaceable providers (WhatsApp Cloud API, Twilio SMS, Resend email adapters), clinic templates, consent-aware channel choice, queue + retries + idempotency, signed delivery webhooks, reminder scheduler, Communication Center and Super Admin monitoring. Nothing is sent without a configured provider and nothing is reported as delivered without a verified webhook. See [docs/phase11-communications.md](docs/phase11-communications.md).
+
+## Phase 12 — Notification Center
+Role-based in-app notifications for staff, patients and Super Admin: header bell, `/notifications` centre (filters, search, priority, read/archive, acknowledgement, grouping), personal preferences and quiet hours, clinic notification rules with escalation and retention, real-data digests, platform alerts, and Phase 11 delivery status. Patient WhatsApp/SMS/email still goes through the Phase 11 engine. Polling, not real-time. See [docs/phase12-notifications.md](docs/phase12-notifications.md).

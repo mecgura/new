@@ -1403,21 +1403,118 @@ model LabReportReview {
 
 /// Internal notifications (in-app only; no SMS/WhatsApp/email). `body` never carries results.
 model Notification {
-  id         String    @id @default(cuid())
-  tenantId   String
-  userId     String
-  type       String
-  title      String
-  body       String?
-  entityType String?
-  entityId   String?
-  readAt     DateTime?
+  id               String    @id @default(cuid())
+  /// null = a platform-level alert for a Super Admin
+  tenantId         String?
+  /// the RECIPIENT (staff user, or the patient's portal login)
+  userId           String
+  type             String
+  /// APPOINTMENT | OPD | PATIENT | CLINICAL | LAB | FOLLOWUP | BILLING | PHARMACY | SECURITY | SYSTEM | GENERAL
+  category         String    @default("GENERAL")
+  /// LOW | NORMAL | HIGH | URGENT | CRITICAL
+  priority         String    @default("NORMAL")
+  title            String
+  body             String?
+  /// an in-app path only ("/lab/..."); re-checked against the recipient's access when opened
+  actionUrl        String?
+  entityType       String?
+  entityId         String?
+  /// the patient the notification is about (staff search / filters) — never a place for medical content
+  patientId        String?
+  readAt           DateTime?
+  archivedAt       DateTime?
+  expiresAt        DateTime?
+  /// quiet hours: not shown (and not counted) before this moment
+  visibleAt        DateTime  @default(now())
+  ackRequired      Boolean   @default(false)
+  acknowledgedAt   DateTime?
+  acknowledgedById String?
+  /// set once when an unacknowledged important notification was escalated
+  escalatedAt      DateTime?
+  sourceEventId    String?
+  /// notifications with the same groupKey fold into one row with a count
+  groupKey         String?
+  groupCount       Int       @default(1)
+  /// small JSON of non-sensitive display hints
+  metadata         String?
   /// lets in-app notifications be created lazily without duplicates (NULL = no dedupe)
-  dedupeKey  String?
-  createdAt  DateTime  @default(now())
+  dedupeKey        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now()) @updatedAt
 
   @@unique([userId, dedupeKey])
   @@index([tenantId, userId, readAt, createdAt])
+  @@index([userId, archivedAt, createdAt])
+  @@index([userId, category, createdAt])
+  @@index([tenantId, entityType, entityId])
+  @@index([priority, createdAt])
+  @@index([userId, groupKey])
+}
+
+/// Phase 12 — idempotency ledger: the same business event can never notify the same person twice, even when the row was grouped or archived.
+model NotificationEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  eventKey  String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, eventKey])
+  @@index([createdAt])
+}
+
+/// Clinic policy for one notification type: who gets it, how important, whether it needs acknowledging, whether it escalates, which external channels Phase 11 may use.
+model NotificationRule {
+  id               String   @id @default(cuid())
+  tenantId         String
+  type             String
+  enabled          Boolean  @default(true)
+  inApp            Boolean  @default(true)
+  /// JSON array of role keys that receive it (staff). Empty = the built-in default audience.
+  roles            String   @default("[]")
+  priority         String?
+  ackRequired      Boolean?
+  /// minutes without acknowledgement before the clinic admin is told (null = never)
+  escalateAfterMin Int?
+  /// JSON array of external channels Phase 11 may use for the patient (WHATSAPP | SMS | EMAIL); null = whatever the clinic enabled there
+  externalChannels String?
+  updatedAt        DateTime @updatedAt
+
+  @@unique([tenantId, type])
+}
+
+/// A user's own switches per category (in-app). Security and critical notifications cannot be switched off.
+model NotificationPreference {
+  id        String   @id @default(cuid())
+  tenantId  String?
+  userId    String
+  category  String
+  inApp     Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, category])
+}
+
+model NotificationUserSettings {
+  id            String   @id @default(cuid())
+  tenantId      String?
+  userId        String   @unique
+  quietEnabled  Boolean  @default(false)
+  quietStartMin Int      @default(1320)
+  quietEndMin   Int      @default(480)
+  digestEnabled Boolean  @default(false)
+  updatedAt     DateTime @updatedAt
+}
+
+model NotificationSettings {
+  id                   String   @id @default(cuid())
+  tenantId             String   @unique
+  /// retention is OFF unless the clinic switches it on; security / critical / unacknowledged items are never auto-archived
+  retentionEnabled     Boolean  @default(false)
+  archiveReadAfterDays Int      @default(30)
+  expireAfterDays      Int      @default(180)
+  /// default clinic quiet hours for staff who haven't set their own (null = none)
+  lowStockCheck        Boolean  @default(true)
+  updatedAt            DateTime @updatedAt
 }
 
 /// Clinic follow-up CRM (Phase 7). A follow-up is an operational task about a patient; it never contains medical decisions.

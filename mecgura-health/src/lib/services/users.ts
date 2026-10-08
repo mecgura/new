@@ -1,4 +1,5 @@
 import "server-only";
+import { notifyStaffSecurity } from "@/lib/notifications/events";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
@@ -140,6 +141,7 @@ export async function updateUser(ctx: TenantRequestContext, id: string, input: U
     tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "user", entityId: id,
     metadata: roleChanged ? { from: current.role.key, to: newRole } : undefined,
   });
+  if (roleChanged) await notifyStaffSecurity(ctx.tenantId, "role_changed", id, { who: input.name ?? "A team member", role: newRole });
   return { id };
 }
 

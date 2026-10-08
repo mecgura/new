@@ -1,5 +1,5 @@
 import "server-only";
-import { notifyAccount } from "@/lib/communications/triggers";
+import { notifyAccount } from "@/lib/notifications/events";
 import { createHmac } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { TenantRequestContext } from "@/lib/auth/context";

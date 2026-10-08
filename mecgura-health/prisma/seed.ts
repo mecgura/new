@@ -74,6 +74,10 @@ async function seedScheduling(tenantId: string, key: "A" | "B") {
   const tz = "Asia/Kolkata";
   const today = todayIn(tz);
   await db.notification.deleteMany({ where: { tenantId } });
+  await db.notificationRule.deleteMany({ where: { tenantId } });
+  await db.notificationSettings.deleteMany({ where: { tenantId } });
+  await db.notificationPreference.deleteMany({ where: { tenantId } });
+  await db.notificationUserSettings.deleteMany({ where: { tenantId } });
   await db.investigationOrder.deleteMany({ where: { tenantId } }); // cascades items, samples + custody events, results, reports, versions, reviews
   await db.investigation.deleteMany({ where: { tenantId } }); // cascades parameters
   await db.labConfigItem.deleteMany({ where: { tenantId } });

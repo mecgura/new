@@ -1,4 +1,5 @@
 import { billingTimeline } from "./billing-docs";
+import { notifyPatientRegistered } from "@/lib/notifications/events";
 import { pharmacyTimeline } from "./pharmacy-dispensing";
 import { followUpTimeline } from "./followups";
 import { isLabStaffView } from "./lab-orders";
@@ -155,6 +156,7 @@ export async function registerPatient(ctx: TenantRequestContext, raw: unknown) {
       });
       await recordAudit({ action: AUDIT_ACTIONS.PATIENT_REGISTERED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "patient", entityId: p.id, metadata: { code: p.code, duplicateConfirmed: dupes.length > 0, privacyAcknowledged: input.privacyAcknowledged } });
       if (input.privacyAcknowledged) await recordAudit({ action: AUDIT_ACTIONS.PATIENT_CONSENT_RECORDED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "patient", entityId: p.id, metadata: { type: "PRIVACY", status: "GRANTED" } });
+      await notifyPatientRegistered(ctx.tenantId, p.id, ctx.user.id);
       return { id: p.id, code: p.code as string };
     } catch (e) {
       if (!isUniqueViolation(e) || attempt === 4) throw e;

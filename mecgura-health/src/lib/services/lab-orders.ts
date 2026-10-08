@@ -1,4 +1,5 @@
 import "server-only";
+import { notifyLabOrdered, notifyLabSample } from "@/lib/notifications/events";
 import { randomBytes } from "node:crypto";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import type { TenantRequestContext } from "@/lib/auth/context";
@@ -49,7 +50,8 @@ export interface LabOrderDetail {
 
 /* ---------------------------------------------- notifications ---------------------------------------------- */
 export async function notify(tx: Client, tenantId: string, userId: string, n: { type: string; title: string; body?: string; entityType?: string; entityId?: string }) {
-  await tx.notification.create({ data: { tenantId, userId, type: n.type, title: n.title, body: n.body ?? null, entityType: n.entityType ?? null, entityId: n.entityId ?? null } });
+  // Superseded by the Phase 12 notification hub (src/lib/notifications/events.ts), which raises these with rules, priority and de-duplication.
+  void tx; void tenantId; void userId; void n;
 }
 
 /* ------------------------------------- status derivation (used by results too) ------------------------------------- */
@@ -94,6 +96,7 @@ export async function createInvestigationOrder(ctx: TenantRequestContext, consul
     await tx.investigationOrderItem.createMany({ data: snaps.map((s) => ({ tenantId: ctx.tenantId, investigationOrderId: order.id, investigationId: s.t.id, testNameSnapshot: s.snap.name, sampleTypeSnapshot: s.snap.sampleType ?? null, snapshot: JSON.stringify(s.snap), priority: input.priority })) });
     return { id: order.id as string, orderNumber: order.orderNumber as string };
   });
+  await notifyLabOrdered(ctx.tenantId, out.id);
   await autoBill(ctx, "investigation", out.id); // draft invoice only if the clinic enabled it; never blocks the order
   await recordAudit({ action: AUDIT_ACTIONS.LAB_ORDER_CREATED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "investigation_order", entityId: out.id, metadata: { consultationId, tests: ids.length, priority: input.priority, source: input.source } });
   return out;
@@ -268,6 +271,7 @@ export async function labOrderAction(ctx: TenantRequestContext, orderId: string,
         return { id: sample.id as string, sampleNumber: sample.sampleNumber as string, attempt: sample.attempt as number, tests: eligible.length };
       });
       await recordAudit({ action: AUDIT_ACTIONS.SAMPLE_COLLECTED, tenantId, actorId: uid, entityType: "sample", entityId: out.id, metadata: { orderId, attempt: out.attempt, tests: out.tests } });
+      await notifyLabSample(tenantId, orderId, "collected", out.id);
       return out;
     }
     case "receive": {
@@ -304,6 +308,7 @@ export async function labOrderAction(ctx: TenantRequestContext, orderId: string,
       });
       await recordAudit({ action: AUDIT_ACTIONS.SAMPLE_REJECTED, tenantId, actorId: uid, entityType: "sample", entityId: a.sampleId, metadata: { orderId, reason: a.reason } });
       await recordAudit({ action: AUDIT_ACTIONS.SAMPLE_RECOLLECTION, tenantId, actorId: uid, entityType: "investigation_order", entityId: orderId, metadata: { sampleId: a.sampleId } });
+      await notifyLabSample(tenantId, orderId, "rejected", a.sampleId!);
       return { ok: true };
     }
     case "startProcessing": {

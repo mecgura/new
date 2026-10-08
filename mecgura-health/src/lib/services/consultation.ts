@@ -14,7 +14,7 @@ import { autoBill } from "./billing-invoices";
 import { syncConsultationFollowUp } from "./followups";
 import { queueAction } from "./opd";
 import { finalizePrescriptionTx, prescriptionSummary } from "./prescription";
-import { notifyPrescription } from "@/lib/communications/triggers";
+import { notifyPrescription } from "@/lib/notifications/events";
 
 /**
  * Doctor consultation. Rules enforced here (never in the browser):

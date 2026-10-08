@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { runNotificationJobs } from "@/lib/notifications/jobs";
 import { safeEqual } from "@/lib/communications/providers/verify";
 import { processDue } from "@/lib/communications/worker";
 import { runScheduler } from "@/lib/communications/triggers";
@@ -18,7 +19,8 @@ async function run(req: Request) {
   if (!safeEqual(given, secret)) return NextResponse.json({ ok: false }, { status: 401 });
   const lim = await rateLimit("comm:cron", { limit: 30, windowMs: 60_000 }); if (!lim.allowed) return NextResponse.json({ ok: false }, { status: 429 });
   const scheduled = await runScheduler(); const delivery = await processDue({ limit: 200 });
-  return NextResponse.json({ ok: true, scheduled, delivery }, { headers: { "Cache-Control": "no-store" } });
+  const notifications = await runNotificationJobs(); // the notification centre rides the same tick (reminders, stock, escalation, retention, digests)
+  return NextResponse.json({ ok: true, scheduled, delivery, notifications }, { headers: { "Cache-Control": "no-store" } });
 }
 export const POST = run;
 export const GET = run;

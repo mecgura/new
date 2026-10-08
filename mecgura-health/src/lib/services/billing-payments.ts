@@ -1,5 +1,5 @@
 import "server-only";
-import { notifyPayment } from "@/lib/communications/triggers";
+import { notifyPayment, notifyRefundRequested } from "@/lib/notifications/events";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import type { TenantRequestContext } from "@/lib/auth/context";
 import { COLLECTIBLE, dueOf } from "@/lib/billing/money";
@@ -61,7 +61,7 @@ export async function recordPayment(ctx: TenantRequestContext, invoiceId: string
       });
       await recordAudit({ action: AUDIT_ACTIONS.PAYMENT_RECORDED, tenantId, actorId: ctx.user.id, entityType: "payment", entityId: out.id, metadata: { number: out.paymentNumber, invoiceId, amountMinor: v.amountMinor, method: v.method } });
       await recordAudit({ action: AUDIT_ACTIONS.RECEIPT_GENERATED, tenantId, actorId: ctx.user.id, entityType: "payment", entityId: out.id, metadata: { receipt: out.receiptNumber } });
-      await notifyPayment(tenantId, out.id);
+      await notifyPayment(tenantId, out.id, ctx.user.id);
       return out;
     } catch (e) {
       if (isUniqueViolation(e)) {
@@ -129,6 +129,7 @@ export async function requestRefund(ctx: TenantRequestContext, raw: unknown) {
     await addInvoiceEvent(tx, ctx.tenantId, { id: p.invoiceId, patientId: p.patientId }, "REFUND_REQUESTED", ctx.user.id, { amountMinor: v.amountMinor, ref: r.refundNumber, note: v.reason });
     return { id: r.id as string, refundNumber: r.refundNumber as string };
   });
+  await notifyRefundRequested(ctx.tenantId, out.id, ctx.user.id);
   await recordAudit({ action: AUDIT_ACTIONS.REFUND_REQUESTED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "refund", entityId: out.id, metadata: { number: out.refundNumber, paymentId: p.id, invoiceId: p.invoiceId, amountMinor: v.amountMinor } });
   return out;
 }

@@ -1,4 +1,5 @@
 import "server-only";
+import { notifyPurchaseReceived } from "@/lib/notifications/events";
 import type { TenantRequestContext } from "@/lib/auth/context";
 import { AppError } from "@/lib/errors";
 import { computePurchase, expiryState, LEDGER_TYPES } from "@/lib/pharmacy/stock";
@@ -90,6 +91,7 @@ export async function receivePurchase(ctx: TenantRequestContext, id: string) {
     }
   });
   await audit(ctx, AUDIT_ACTIONS.PURCHASE_RECEIVED, "purchase", id, { number: cur.purchaseNumber, lines: cur.items.length });
+  await notifyPurchaseReceived(ctx.tenantId, id, ctx.user.id);
   for (const b of created) await audit(ctx, AUDIT_ACTIONS.BATCH_CREATED, "medicine_batch", b, { source: "purchase" });
   return { status: "RECEIVED" };
 }

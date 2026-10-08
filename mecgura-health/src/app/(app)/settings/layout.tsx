@@ -12,6 +12,7 @@ const TABS = [
   { href: "/settings/followups", label: "Follow-ups" },
   { href: "/settings/portal", label: "Patient portal" },
   { href: "/settings/communications", label: "Communications" },
+  { href: "/settings/notifications", label: "Notifications" },
   { href: "/settings/integrations", label: "Integrations" },
 ];
 

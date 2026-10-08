@@ -227,7 +227,7 @@ describe("sample collection, custody and recollection (11–17)", () => {
     expect(d.samples[0].events.map((e) => e.action)).toEqual(["COLLECTED", "REJECTED", "RECOLLECTION_REQUESTED"]);
     expect(d.samples[0].rejectionReason).toBe("Insufficient sample");
     const n = await listNotifications(A.doctor);
-    expect(n.items.some((x) => x.type === "SAMPLE_REJECTED" && x.entityId === o.id)).toBe(true);
+    expect(n.items.some((x) => x.type === "LAB_SAMPLE_REJECTED" && x.entityId === o.id)).toBe(true);
   });
   it("rejection needs a configured reason; received samples can be rejected, completed results block it", async () => {
     const c = await consult(A); const o = await order(A, c.id);
@@ -359,7 +359,7 @@ describe("doctor review and notifications (27–28)", () => {
   it("doctor is notified on release, reviews once per version, and an amended version needs a new review", async () => {
     const r = await released(A);
     const n = await listNotifications(A.doctor);
-    const mine = n.items.find((x) => x.type === "REPORT_RELEASED" && x.entityId === r.reportId)!;
+    const mine = n.items.find((x) => x.type === "LAB_REPORT_RELEASED" && x.entityId === r.reportId)!;
     expect(mine).toBeTruthy();
     expect(JSON.stringify(mine)).not.toMatch(/\b14\b|Haemoglobin/);
     expect(n.unread).toBeGreaterThan(0);

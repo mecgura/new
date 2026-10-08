@@ -20,7 +20,7 @@ export async function syncReminders(ctx: TenantRequestContext) {
   const make = async (type: string, count: number, title: string, entityType: string) => {
     if (count < 1) return;
     if (await tdb.notification.findFirst({ where: { userId: ctx.user.id, type, entityId: today }, select: { id: true } })) return;
-    await tdb.notification.create({ data: { tenantId: ctx.tenantId, userId: ctx.user.id, type, title, body: null, entityType, entityId: today } });
+    await tdb.notification.create({ data: { tenantId: ctx.tenantId, userId: ctx.user.id, type, category: type === "REPORT_REVIEW" ? "LAB" : "FOLLOWUP", priority: "NORMAL", title, body: null, entityType, entityId: today, actionUrl: type === "REPORT_REVIEW" ? "/lab/reports" : type === "RECALL_DUE" ? "/followups" : "/followups" } });
   };
   const open = { status: { in: [...OPEN_STATUSES] } };
   if (ctx.permissions.has("followups.view")) {

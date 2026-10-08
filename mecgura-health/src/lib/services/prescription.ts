@@ -1,5 +1,5 @@
 import "server-only";
-import { notifyPrescription } from "@/lib/communications/triggers";
+import { notifyPrescription } from "@/lib/notifications/events";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import type { TenantRequestContext } from "@/lib/auth/context";
 import { parseJson, sha256, type PrescriptionSnapshot } from "@/lib/clinical/snapshot";

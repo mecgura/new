@@ -2,10 +2,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
-import { Bell, Building2, Menu, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import { Building2, Menu, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import type { NavItemView } from "@/config/navigation";
 import { Logo } from "@/components/brand/logo";
-import { Badge, Drawer, Tooltip } from "@/components/ui";
+import { NotificationBell } from "@/components/notifications/notification-bell";
+import { Badge, Drawer } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { NAV_ICONS } from "./nav-icons";
 import { NavList, isActive } from "./nav-list";
@@ -94,9 +95,7 @@ export function AppShell({ nav, user, workspace, children }: ShellProps) {
                 {workspace.isDemo && <Badge tone="warning">Demo</Badge>}
               </span>
             )}
-            <Tooltip text="Notifications — not available yet">
-              <button type="button" disabled aria-label="Notifications (not available yet)" className="flex size-control cursor-not-allowed items-center justify-center rounded-lg text-muted opacity-60"><Bell aria-hidden className="size-5" /></button>
-            </Tooltip>
+            <NotificationBell />
             <UserMenu {...user} />
           </div>
         </header>

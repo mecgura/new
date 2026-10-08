@@ -1,4 +1,5 @@
 import "server-only";
+import { notifyPatientRequest } from "@/lib/notifications/events";
 import { AppError } from "@/lib/errors";
 import { otpConfigured } from "@/lib/integrations/otp";
 import type { PatientContext } from "@/lib/portal/ctx";
@@ -59,6 +60,7 @@ export async function createRequest(ctx: PatientContext, raw: unknown) {
   const yr = todayIn(ctx.tenant.timezone).slice(0, 4);
   const row = await tdb.$transaction(async (tx: Client) => { const n = await nextCounter(tx, ctx.tenantId, `prq:${yr}`); return tx.patientRequest.create({ data: { tenantId: ctx.tenantId, requestNumber: `PRQ-${yr}-${pad(n)}`, patientId: ctx.patientId, kind: v.kind, field: v.field ?? null, currentValue: current, requestedValue: v.requestedValue ?? null, reason: v.reason }, select: { id: true, requestNumber: true } }); });
   await paudit(ctx, AUDIT_ACTIONS.PORTAL_REQUEST_CREATED, "patient_request", row.id, { number: row.requestNumber, kind: v.kind, field: v.field ?? null });
+  await notifyPatientRequest(ctx.tenantId, ctx.patientId, row.id, v.kind);
   return { id: row.id as string, requestNumber: row.requestNumber as string };
 }
 export async function requestDeactivation(ctx: PatientContext, raw: unknown) {
