@@ -10,6 +10,8 @@ import { TENANT_ACCESS_STATUSES } from "@/lib/domain/constants";
 import { effectivePermissions, ROLES, type Permission, type RoleKey } from "@/lib/permissions";
 import { resolveBrandColors, type BrandColors } from "@/theme/tokens";
 import { WORKSPACE_COOKIE, verifyWorkspaceToken } from "./workspace-cookie";
+import { applyFeatureGates, disabledModules } from "@/lib/platform/features";
+import { SUPER_ADMIN_SESSION_MS, disabledFeaturesOf, maintenanceFor, openSupportAccess } from "@/lib/platform/runtime";
 
 export interface TenantInfo {
   id: string;
@@ -48,12 +50,16 @@ export interface RequestContext {
   enabledModules: readonly ModuleKey[];
   /** true when a SUPER_ADMIN is inside a clinic workspace ("Viewing as Super Admin") */
   viewingAs: boolean;
+  /** the open, reasoned, time-limited support-access record behind `viewingAs` (Phase 14) */
+  support?: { reason: string; expiresAt: Date } | null;
+  /** feature switches turned OFF for this clinic; their permissions are already removed from `permissions` */
+  disabledFeatures?: readonly string[];
 }
 
 /** Context with a guaranteed tenant — pass to `tenantDb(ctx)`. */
 export type TenantRequestContext = RequestContext & { tenant: TenantInfo; tenantId: string };
 
-export type BlockReason = "tenant_unavailable" | "user_unavailable";
+export type BlockReason = "tenant_unavailable" | "user_unavailable" | "maintenance" | "session_expired";
 interface Access { ctx: RequestContext | null; blocked: BlockReason | null }
 
 const tenantInclude = { branding: true, subscription: { include: { plan: true } } } as const;
@@ -71,6 +77,8 @@ function toTenantInfo(t: TenantRow): TenantInfo {
     planName: t.subscription?.plan.name ?? null, subscriptionStatus: t.subscription?.status ?? null,
   };
 }
+
+const disabledModulesSet = (d: readonly string[]) => disabledModules(d);
 
 function modulesFor(t: TenantRow | null, role: RoleKey): ModuleKey[] {
   const isSuper = role === "SUPER_ADMIN";
@@ -98,15 +106,19 @@ export const getAccess = cache(async (): Promise<Access> => {
   if (!row || row.status !== "ACTIVE") return { ctx: null, blocked: "user_unavailable" };
   const role = row.role.key as RoleKey;
   if (!(ROLES as readonly string[]).includes(role)) return { ctx: null, blocked: "user_unavailable" };
+  // Platform admins have a shorter absolute session than clinic staff (sign-in time is stamped on the token at login).
+  if (role === "SUPER_ADMIN" && typeof session.signedInAt === "number" && Date.now() - session.signedInAt > SUPER_ADMIN_SESSION_MS) return { ctx: null, blocked: "session_expired" };
 
   let tenantRow: TenantRow | null = null;
   let viewingAs = false;
+  let support: { reason: string; expiresAt: Date } | null = null;
   if (role === "SUPER_ADMIN") {
     // Optional, signed "enter workspace" cookie. Only honoured for a Super Admin session.
     const target = verifyWorkspaceToken(process.env.AUTH_SECRET ?? "", row.id, (await cookies()).get(WORKSPACE_COOKIE)?.value);
     if (target) {
-      tenantRow = await loadTenant(target);
-      viewingAs = !!tenantRow;
+      // The cookie alone is never enough: a Super Admin may only be inside a clinic while an explicit, reasoned, unexpired support-access record exists.
+      const open = await openSupportAccess(row.id, target);
+      if (open) { tenantRow = await loadTenant(target); viewingAs = !!tenantRow; support = tenantRow ? { reason: open.reason, expiresAt: open.expiresAt } : null; }
     }
   } else {
     if (!row.tenantId) return { ctx: null, blocked: "user_unavailable" }; // tenant users MUST belong to a clinic
@@ -114,15 +126,20 @@ export const getAccess = cache(async (): Promise<Access> => {
     if (!tenantRow || !TENANT_ACCESS_STATUSES.includes(tenantRow.status)) return { ctx: null, blocked: "tenant_unavailable" };
   }
 
+  // Maintenance mode (platform-wide or per clinic) locks everyone EXCEPT Super Admins out, so the platform owner can never be locked out.
+  if (role !== "SUPER_ADMIN") { const m = await maintenanceFor(tenantRow?.id ?? null); if (m.on) return { ctx: null, blocked: "maintenance" }; }
+
   const grants = row.permissionGrants.map((g) => g.permission);
+  const disabledFeatures = tenantRow ? await disabledFeaturesOf(tenantRow.id) : [];
   return {
     blocked: null,
     ctx: {
       user: { id: row.id, name: row.name, email: row.email, role, tenantId: row.tenantId, avatarUrl: row.avatarUrl },
       tenant: tenantRow ? toTenantInfo(tenantRow) : null,
-      permissions: effectivePermissions(role, grants),
-      enabledModules: modulesFor(tenantRow, role),
-      viewingAs,
+      // A switched-off feature loses its permissions HERE, so every page, API and service guard denies it server-side.
+      permissions: applyFeatureGates(effectivePermissions(role, grants), disabledFeatures),
+      enabledModules: modulesFor(tenantRow, role).filter((m) => !disabledModulesSet(disabledFeatures).has(m)),
+      viewingAs, support, disabledFeatures,
     },
   };
 });

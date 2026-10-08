@@ -94,7 +94,7 @@ export const clinicCreateSchema = z.object({
   slug: label,
   branding: brandingSchema,
   admin: z.object({ name: requiredText("Name", { max: 120 }), email, phone: optionalPhone, role: z.enum(["CLINIC_ADMIN", "DOCTOR"], { error: "Choose a role." }) }),
-  status: z.enum(["TRIAL", "ACTIVE", "SUSPENDED", "INACTIVE"]).default("TRIAL"),
+  status: z.enum(["PENDING", "TRIAL", "ACTIVE", "SUSPENDED", "INACTIVE"]).default("TRIAL"),
 });
 export type ClinicCreateInput = z.infer<typeof clinicCreateSchema>;
 

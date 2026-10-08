@@ -89,10 +89,12 @@ check("…and lands in their own clinic workspace", (await seen(byPhone.page.get
 await byPhone.ctx.close();
 
 // enter / exit workspace
-const enter = await api(sa, "POST", "/api/platform/workspace", { tenantId: newId });
+const noReason = await api(sa, "POST", "/api/platform/workspace", { tenantId: newId });
+check("entering a clinic without a reason and password is refused (Phase 14)", noReason.status === 400 || noReason.status === 403);
+const enter = await api(sa, "POST", "/api/platform/workspace", { tenantId: newId, reason: "E2E security verification of the workspace", password: process.env.SEED_DEMO_PASSWORD ?? "Demo-Local-Pass-1" });
 check("super admin enters a clinic workspace", enter.status === 200);
 await sa.page.goto(`${BASE}/team`);
-check("'Viewing as Super Admin' banner shown", await seen(sa.page.getByText("Viewing as Super Admin")));
+check("'Viewing as Super Admin' banner shown", await seen(sa.page.getByText("SUPER ADMIN SUPPORT ACCESS")));
 check("team lists that clinic's users", await seen(sa.page.getByText("E2E Admin")));
 await api(sa, "DELETE", "/api/platform/workspace");
 await sa.page.goto(`${BASE}/team`);

@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
+import { disabledFeaturesOf } from "@/lib/platform/runtime";
 import { TENANT_ACCESS_STATUSES } from "@/lib/domain/constants";
 import { logger } from "@/lib/logger";
 import { findTenantByHost } from "@/lib/tenant/resolve-core";
@@ -35,7 +36,8 @@ export async function authorizePatient(credentials: Partial<Record<string, unkno
   const password = typeof credentials.password === "string" ? credentials.password : "";
   const clinic = typeof credentials.clinic === "string" ? credentials.clinic : null;
   if (!id || !password || password.length > 128) return null;
-  const tenantId = await resolvePortalTenantId(clinic);
+  let tenantId = await resolvePortalTenantId(clinic);
+  if (tenantId && (await disabledFeaturesOf(tenantId)).includes("patientPortal")) tenantId = null; // portal switched off for this clinic: same generic failure as an unknown clinic
   const account = tenantId
     ? await db.patientAccount.findFirst({ where: { tenantId, ...(id.kind === "email" ? { loginEmail: id.value } : { loginPhone: id.value }) }, include: { user: { include: { role: { select: { key: true } } } }, patient: { select: { status: true, deletedAt: true } } } })
     : null;

@@ -2,6 +2,7 @@ import "server-only";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import type { TenantRequestContext } from "@/lib/auth/context";
 import { MANUAL_METHODS } from "@/lib/billing/money";
+import { getPlatformSetting } from "@/lib/platform/runtime";
 import { AppError } from "@/lib/errors";
 import { tenantDb } from "@/lib/tenant/db";
 import { parseOrThrow } from "@/lib/validation";
@@ -26,8 +27,9 @@ export interface BillingSettingsView {
 const parseJson = <T,>(s: string | null | undefined, fallback: T): T => { try { return s ? (JSON.parse(s) as T) : fallback; } catch { return fallback; } };
 export async function loadBillingSettings(client: Client, tenantId: string): Promise<BillingSettingsView> {
   const s = await client.billingSettings.findFirst({ where: { tenantId } });
+  const platform = s ? null : await getPlatformSetting<{ currency?: string }>("defaults", {}); // platform default currency applies only until the clinic saves billing settings
   return {
-    currency: s?.currency ?? "INR", invoicePrefix: s?.invoicePrefix ?? "INV", receiptPrefix: s?.receiptPrefix ?? "REC", paymentPrefix: s?.paymentPrefix ?? "PAY", refundPrefix: s?.refundPrefix ?? "REF",
+    currency: s?.currency ?? platform?.currency ?? "INR", invoicePrefix: s?.invoicePrefix ?? "INV", receiptPrefix: s?.receiptPrefix ?? "REC", paymentPrefix: s?.paymentPrefix ?? "PAY", refundPrefix: s?.refundPrefix ?? "REF",
     taxMode: (s?.taxMode ?? "EXCLUSIVE") as "EXCLUSIVE" | "INCLUSIVE", paymentMethods: parseJson<string[]>(s?.paymentMethods, [...MANUAL_METHODS]), discountRules: parseJson<Record<string, DiscountRule>>(s?.discountRules, {}),
     invoiceFooter: s?.invoiceFooter ?? null, receiptFooter: s?.receiptFooter ?? null, paymentTerms: s?.paymentTerms ?? null, dueDays: s?.dueDays ?? null,
     defaultConsultationServiceId: s?.defaultConsultationServiceId ?? null, defaultFollowUpServiceId: s?.defaultFollowUpServiceId ?? null,

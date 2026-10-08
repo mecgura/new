@@ -31,6 +31,12 @@ model Tenant {
   customDomain           String?   @unique
   /// Set manually by a Super Admin after DNS/SSL are confirmed. Null = not verified, not resolved.
   customDomainVerifiedAt DateTime?
+  /// PENDING | VERIFYING | VERIFIED | FAILED | DISABLED  (VERIFIED is only ever set by a real DNS check or an explicit, audited manual confirmation)
+  customDomainStatus     String    @default("PENDING")
+  /// secret-ish token the clinic puts in a DNS TXT record; shown to Super Admin only
+  customDomainToken      String?
+  customDomainCheckedAt  DateTime?
+  customDomainFailure    String?
   /// Subdomain label under TENANT_ROOT_DOMAIN
   subdomain              String?   @unique
   contactEmail           String?
@@ -79,6 +85,7 @@ model Tenant {
 
   @@index([status])
   @@index([clinicType])
+  @@index([createdAt])
 }
 
 /// White-label theme for one tenant (1:1). Null colour => product default.
@@ -199,6 +206,8 @@ model User {
   @@index([tenantId, status])
   @@index([tenantId, roleId])
   @@index([roleId])
+  @@index([status, createdAt])
+  @@index([lastLoginAt])
 }
 
 /// Append-only audit trail. NEVER store medical content or secrets in `metadata`
@@ -222,6 +231,8 @@ model AuditLog {
   @@index([tenantId, createdAt])
   @@index([tenantId, action, createdAt])
   @@index([actorId, createdAt])
+  @@index([createdAt])
+  @@index([action, createdAt])
   @@index([entityType, entityId])
 }
 
@@ -2548,4 +2559,84 @@ model ScheduledReport {
   updatedAt   DateTime  @updatedAt
 
   @@index([tenantId, enabled])
+}
+
+/// Phase 14: every clinic lifecycle change (activate / suspend / archive / restore ...) with who, why and when. Never deleted.
+model TenantStatusEvent {
+  id         String   @id @default(cuid())
+  tenantId   String
+  fromStatus String
+  toStatus   String
+  /// ADMINISTRATIVE | SECURITY | TECHNICAL | CONTRACTUAL | OTHER | ONBOARDING
+  category   String
+  notes      String?
+  actorId    String
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+/// Phase 14: per-clinic feature switch. No row = enabled (default). Disabling never deletes data.
+model TenantFeature {
+  id          String   @id @default(cuid())
+  tenantId    String
+  key         String
+  enabled     Boolean  @default(true)
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, key])
+  @@index([tenantId, enabled])
+}
+
+/// Phase 14: per-clinic platform configuration that is not branding/profile: limits (foundation, NOT enforced), retention (foundation, never auto-deletes), maintenance.
+model TenantConfig {
+  id                 String   @id @default(cuid())
+  tenantId           String   @unique
+  /// JSON: { maxDoctors, maxStaff, maxPatients, maxAppointmentsPerMonth, storageLimitMb } (null = unlimited). Configuration only.
+  limits             String   @default("{}")
+  /// JSON: { clinicalYears, documentYears, communicationDays, auditYears } (null = keep). Nothing is deleted automatically.
+  retention          String   @default("{}")
+  maintenanceMode    Boolean  @default(false)
+  maintenanceMessage String?
+  updatedById        String?
+  updatedAt          DateTime @updatedAt
+}
+
+/// Phase 14: an explicit, reasoned, time-limited Super Admin visit to a clinic workspace. The workspace cookie is only honoured while an open row exists.
+model SupportAccess {
+  id        String    @id @default(cuid())
+  tenantId  String
+  actorId   String
+  reason    String
+  startedAt DateTime  @default(now())
+  expiresAt DateTime
+  endedAt   DateTime?
+
+  @@index([actorId, endedAt])
+  @@index([tenantId, startedAt])
+}
+
+/// Phase 14: platform-wide defaults and switches (key/value JSON). Clinic configuration overrides these where appropriate.
+model PlatformSetting {
+  key         String   @id
+  value       String
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
+/// Phase 14: announcements shown as a banner to signed-in staff. Audience ALL | ADMINS | SELECTED (audienceTenants = JSON array of clinic ids).
+model PlatformAnnouncement {
+  id              String    @id @default(cuid())
+  title           String
+  body            String
+  audience        String    @default("ALL")
+  audienceTenants String    @default("[]")
+  startsAt        DateTime  @default(now())
+  endsAt          DateTime?
+  active          Boolean   @default(true)
+  createdById     String
+  createdAt       DateTime  @default(now())
+
+  @@index([active, startsAt])
 }

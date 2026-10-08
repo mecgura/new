@@ -37,6 +37,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <h1 className="type-page-title">Welcome back</h1>
           <p className="type-secondary mb-6 mt-1">Sign in to your account</p>
           {reason === "tenant_unavailable" && <Alert tone="warning" className="mb-4" title="Clinic workspace unavailable">This clinic&apos;s workspace is currently suspended or inactive. Contact your MECGURA administrator.</Alert>}
+          {reason === "maintenance" && <Alert tone="info" className="mb-4" title="Scheduled maintenance">MECGURA HEALTH is undergoing maintenance. Please try again shortly.</Alert>}
+          {reason === "session_expired" && <Alert tone="info" className="mb-4" title="Please sign in again">Platform administrator sessions end after a few hours for security.</Alert>}
           {reason === "user_unavailable" && <Alert tone="warning" className="mb-4" title="Account unavailable">Your account is not active. Contact your clinic admin.</Alert>}
           <LoginForm callbackUrl={dest} />
           {tenant?.isDemo && <p className="type-caption mt-6 rounded-lg bg-warning-soft px-3 py-2 !text-warning">Demo workspace — sample data only.</p>}

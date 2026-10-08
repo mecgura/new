@@ -1,0 +1,9 @@
+/** Audit presentation for the Platform Audit Center: category from the action prefix, severity from a fixed list of sensitive actions. */
+export type Severity = "info" | "notice" | "high";
+const HIGH = new Set(["clinic.status_changed", "clinic.suspended", "clinic.archived", "platform.support_started", "platform.admin_changed", "platform.user_role_changed", "platform.feature_changed", "platform.api_scope", "auth.login_failed", "user.disabled", "platform.settings_changed", "platform.maintenance_changed", "platform.user_status_changed", "platform.reauth_failed"]);
+const NOTICE = new Set(["clinic.created", "clinic.updated", "clinic.domain_updated", "clinic.domain_verified", "tenant.entered", "tenant.exited", "user.invited", "platform.branding_changed", "platform.announcement_saved", "platform.clinic_config_changed", "platform.domain_checked", "platform.access_reset"]);
+export function severityOf(action: string): Severity { return HIGH.has(action) ? "high" : NOTICE.has(action) ? "notice" : "info"; }
+const CATEGORY: [string, string][] = [["platform.", "Platform"], ["clinic.", "Clinic"], ["tenant.", "Clinic"], ["user.", "Users"], ["auth.", "Security"], ["login", "Security"], ["billing.", "Billing"], ["pharmacy.", "Pharmacy"], ["lab.", "Lab"], ["report.", "Lab"], ["followup.", "Follow-ups"], ["appointment.", "Appointments"], ["portal.", "Portal"], ["comm.", "Communications"], ["communication.", "Communications"], ["notification.", "Notifications"], ["analytics.", "Analytics"], ["patient.", "Patients"], ["consultation.", "Consultation"], ["website.", "Website"]];
+export function categoryOf(action: string): string { for (const [p, c] of CATEGORY) if (action.startsWith(p)) return c; return "Other"; }
+export const CATEGORIES_LIST = [...new Set(CATEGORY.map(([, c]) => c)), "Other"];
+export function prefixesOfCategory(category: string): string[] { return CATEGORY.filter(([, c]) => c === category).map(([p]) => p); }

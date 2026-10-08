@@ -6,6 +6,8 @@ import { AppError } from "@/lib/errors";
 import { assertPermission } from "@/lib/permissions";
 import type { ClinicCreateInput, ClinicProfileInput } from "@/lib/validation/clinic";
 import { RESERVED_LABELS, TENANT_STATUSES, type TenantStatus } from "@/lib/domain/constants";
+import { getPlatformSetting } from "@/lib/platform/runtime";
+import { newDomainToken } from "@/lib/platform/domain";
 import { changedKeys, containsCI, getRoleId, newInviteToken, pageParams, uniqueViolation } from "./shared";
 
 /** Platform-level clinic management. EVERY function requires `platform.manage` (SUPER_ADMIN only). */
@@ -99,6 +101,10 @@ export async function createClinic(ctx: RequestContext, input: ClinicCreateInput
       });
       return { tenant, user };
     });
+    // Platform feature defaults: features the platform keeps OFF for new clinics start switched off (clinic data is untouched either way).
+    const defaults = await getPlatformSetting<{ featureDefaults?: Record<string, boolean> }>("defaults", {});
+    const startOff = Object.entries(defaults.featureDefaults ?? {}).filter(([, v]) => v === false).map(([k]) => k);
+    if (startOff.length) await db.tenantFeature.createMany({ data: startOff.map((key) => ({ tenantId: tenant.id, key, enabled: false, updatedById: ctx.user.id })) });
     await recordAudit({ action: AUDIT_ACTIONS.CLINIC_CREATED, tenantId: tenant.id, actorId: ctx.user.id, entityType: "tenant", entityId: tenant.id, metadata: { status: input.status, clinicType: profile.clinicType } });
     await recordAudit({ action: AUDIT_ACTIONS.USER_INVITED, tenantId: tenant.id, actorId: ctx.user.id, entityType: "user", entityId: user.id, metadata: { role: admin.role } });
     return { tenant, adminUserId: user.id, inviteToken: invite.token, inviteExpiresAt: invite.expiresAt };
@@ -147,7 +153,7 @@ export async function updateDomain(ctx: RequestContext, id: string, input: { sub
   const domainChanged = customDomain !== before.customDomain;
   const updated = await db.tenant.update({
     where: { id },
-    data: { subdomain, customDomain, websiteEnabled: input.websiteEnabled ?? before.websiteEnabled, ...(domainChanged ? { customDomainVerifiedAt: null } : {}) },
+    data: { subdomain, customDomain, websiteEnabled: input.websiteEnabled ?? before.websiteEnabled, ...(domainChanged ? { customDomainVerifiedAt: null, customDomainStatus: "PENDING", customDomainToken: customDomain ? newDomainToken() : null, customDomainFailure: null, customDomainCheckedAt: null } : {}) },
   });
   await recordAudit({ action: AUDIT_ACTIONS.DOMAIN_UPDATED, tenantId: id, actorId: ctx.user.id, entityType: "tenant", entityId: id, metadata: { subdomainChanged: subdomain !== before.subdomain, customDomainChanged: domainChanged } });
   return updated;
@@ -159,7 +165,7 @@ export async function markDomainVerified(ctx: RequestContext, id: string, verifi
   const t = await db.tenant.findFirst({ where: { id, deletedAt: null }, select: { customDomain: true } });
   if (!t) throw new AppError("NOT_FOUND");
   if (!t.customDomain) throw new AppError("VALIDATION_ERROR", { message: "Set a custom domain first." });
-  await db.tenant.update({ where: { id }, data: { customDomainVerifiedAt: verified ? new Date() : null } });
+  await db.tenant.update({ where: { id }, data: { customDomainVerifiedAt: verified ? new Date() : null, customDomainStatus: verified ? "VERIFIED" : "PENDING", customDomainFailure: null } });
   await recordAudit({ action: AUDIT_ACTIONS.DOMAIN_VERIFIED, tenantId: id, actorId: ctx.user.id, entityType: "tenant", entityId: id, metadata: { verified } });
   return { verified };
 }

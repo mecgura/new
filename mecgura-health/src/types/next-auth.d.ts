@@ -6,6 +6,8 @@ declare module "next-auth" {
     user: { id: string; name?: string | null; email?: string | null };
     /** present only for patient-portal sessions: when it was signed in and when it must end regardless of activity (ms) */
     portal?: { sa: number; pexp: number } | null;
+    /** staff sessions: when the user signed in (ms), used to cap platform-admin sessions */
+    signedInAt?: number | null;
   }
   interface User {
     kind?: "patient";
@@ -21,5 +23,7 @@ declare module "next-auth/jwt" {
     sa?: number;
     /** absolute end of a patient session (ms) */
     pexp?: number;
+    /** staff sign-in time (ms) */
+    sat?: number;
   }
 }

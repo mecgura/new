@@ -4,7 +4,7 @@ import type { ModuleKey } from "./modules";
 export type NavIcon =
   | "dashboard" | "patients" | "opd" | "appointments" | "consultations" | "prescriptions" | "tests"
   | "documents" | "tasks" | "billing" | "inventory" | "followups" | "communications" | "analytics"
-  | "website" | "settings" | "clinics" | "team";
+  | "website" | "settings" | "clinics" | "team" | "platform" | "roles" | "features" | "audit" | "system";
 
 export interface NavItemConfig {
   /** Module this entry belongs to (plan/subscription gate) */
@@ -21,9 +21,18 @@ export interface NavItemConfig {
 /** Single source of truth for sidebar order. Visibility = role permission ∧ plan module ∧ implemented. */
 export const NAV_ITEMS: readonly NavItemConfig[] = [
   { module: "dashboard", label: "Dashboard", href: "/dashboard", icon: "dashboard", permission: "dashboard.view" },
+  { module: "platform", label: "Platform", href: "/platform", icon: "platform", permission: "platform.manage" },
   { module: "platform", label: "Clinics", href: "/platform/clinics", icon: "clinics", permission: "platform.manage" },
+  { module: "platform", label: "Users", href: "/platform/users", icon: "team", permission: "platform.manage" },
+  { module: "platform", label: "Roles & permissions", href: "/platform/roles", icon: "roles", permission: "platform.manage" },
+  { module: "platform", label: "Domains", href: "/platform/domains", icon: "website", permission: "platform.manage" },
+  { module: "platform", label: "Features", href: "/platform/features", icon: "features", permission: "platform.manage" },
   { module: "platform", label: "Communications", href: "/platform/communications", icon: "communications", permission: "platform.manage" },
   { module: "platform", label: "Platform alerts", href: "/platform/notifications", icon: "communications", permission: "platform.manage" },
+  { module: "platform", label: "Analytics", href: "/platform/analytics", icon: "analytics", permission: "platform.manage" },
+  { module: "platform", label: "Audit logs", href: "/platform/audit", icon: "audit", permission: "platform.manage" },
+  { module: "platform", label: "System health", href: "/platform/system", icon: "system", permission: "platform.manage" },
+  { module: "platform", label: "Platform settings", href: "/platform/settings", icon: "settings", permission: "platform.manage" },
   { module: "team", label: "Team", href: "/team", icon: "team", permission: "users.view" },
   { module: "patients", label: "Patients", href: "/patients", icon: "patients", permission: "patients.view" },
   { module: "patients", label: "Portal requests", href: "/patients/requests", icon: "patients", permission: "portal.manage" },

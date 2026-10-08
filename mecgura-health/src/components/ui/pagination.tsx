@@ -17,7 +17,7 @@ export function Pagination({ page, pageCount, hrefFor, onPageChange }: Props) {
     const disabled = target < 1 || target > pageCount;
     const cls = buttonClass("outline", "sm", "min-w-9");
     if (hrefFor && !disabled) return <Link href={hrefFor(target)} className={cls} aria-label={label}>{children}</Link>;
-    return <button type="button" className={cls} aria-label={label} disabled={disabled} onClick={() => onPageChange?.(target)}>{children}</button>;
+    return <button type="button" className={cls} aria-label={label} disabled={disabled} onClick={onPageChange ? () => onPageChange(target) : undefined}>{children}</button>;
   };
   return (
     <nav aria-label="Pagination" className="flex items-center justify-between gap-3 pt-3">

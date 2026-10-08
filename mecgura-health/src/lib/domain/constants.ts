@@ -12,10 +12,12 @@ export type ClinicType = keyof typeof CLINIC_TYPES;
 export const CLINIC_TYPE_KEYS = Object.keys(CLINIC_TYPES) as [ClinicType, ...ClinicType[]];
 
 export const TENANT_STATUSES = {
+  PENDING: { label: "Pending setup", tone: "info" },
   ACTIVE: { label: "Active", tone: "success" },
   TRIAL: { label: "Trial", tone: "info" },
   SUSPENDED: { label: "Suspended", tone: "warning" },
   INACTIVE: { label: "Inactive", tone: "neutral" },
+  ARCHIVED: { label: "Archived", tone: "neutral" },
 } as const;
 export type TenantStatus = keyof typeof TENANT_STATUSES;
 export const TENANT_STATUS_KEYS = Object.keys(TENANT_STATUSES) as [TenantStatus, ...TenantStatus[]];
@@ -30,6 +32,13 @@ export const USER_STATUSES = {
 } as const;
 export type UserStatus = keyof typeof USER_STATUSES;
 export const USER_STATUS_KEYS = Object.keys(USER_STATUSES) as [UserStatus, ...UserStatus[]];
+
+/** Custom-domain verification lifecycle. VERIFIED is only reached by a real DNS check (or an explicit, audited manual confirmation). */
+export const DOMAIN_STATUSES = {
+  PENDING: { label: "Pending", tone: "warning" }, VERIFYING: { label: "Verifying", tone: "info" }, VERIFIED: { label: "Verified", tone: "success" },
+  FAILED: { label: "Failed", tone: "danger" }, DISABLED: { label: "Disabled", tone: "neutral" },
+} as const;
+export type DomainStatus = keyof typeof DOMAIN_STATUSES;
 
 export const GENDERS = { MALE: "Male", FEMALE: "Female", OTHER: "Other", UNDISCLOSED: "Prefer not to say" } as const;
 export type Gender = keyof typeof GENDERS;

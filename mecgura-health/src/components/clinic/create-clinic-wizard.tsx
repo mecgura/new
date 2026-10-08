@@ -28,7 +28,7 @@ export function CreateClinicWizard() {
   const [slugTouched, setSlugTouched] = useState(false);
   const [brand, setBrand] = useState<BrandColors>({ ...DEFAULT_BRAND });
   const [admin, setAdmin] = useState({ name: "", email: "", phone: "", role: "CLINIC_ADMIN" });
-  const [status, setStatus] = useState("TRIAL");
+  const [status, setStatus] = useState("PENDING");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ id: string; token: string; expiresAt: string } | null>(null);
@@ -134,7 +134,7 @@ export function CreateClinicWizard() {
               ))}
             </dl>
             <BrandPreview brand={brand} name={profile.name} />
-            <Field label="Initial status" hint="Trial and Active both allow normal access. Suspended / Inactive block sign-in."><Select value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: "TRIAL", label: "Trial" }, { value: "ACTIVE", label: "Active" }, { value: "SUSPENDED", label: "Suspended" }, { value: "INACTIVE", label: "Inactive" }]} /></Field>
+            <Field label="Initial status" hint="Pending setup keeps the clinic closed until you finish setup and activate it. Trial and Active allow normal access."><Select value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: "PENDING", label: "Pending setup (recommended)" }, { value: "TRIAL", label: "Trial" }, { value: "ACTIVE", label: "Active" }, { value: "SUSPENDED", label: "Suspended" }, { value: "INACTIVE", label: "Inactive" }]} /></Field>
             <div className="flex items-center gap-2"><StatusBadge tone={status === "ACTIVE" ? "success" : status === "TRIAL" ? "info" : "warning"}>{status.charAt(0) + status.slice(1).toLowerCase()}</StatusBadge></div>
           </>)}
         </CardBody>

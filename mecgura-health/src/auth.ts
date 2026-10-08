@@ -87,12 +87,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.uid = user.id;
         // Set ONCE at sign-in: a portal session has a fixed absolute lifetime and a sign-in time that "log out everywhere" can compare.
         if (user.kind === "patient") { token.kind = "patient"; token.sa = Date.now(); token.pexp = token.sa + PATIENT_SESSION_MS; }
-        else { delete token.kind; delete token.sa; delete token.pexp; }
+        else { delete token.kind; delete token.sa; delete token.pexp; token.sat = Date.now(); }
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user && typeof token.uid === "string") session.user.id = token.uid;
+      session.signedInAt = token.kind !== "patient" && typeof token.sat === "number" ? token.sat : null;
       session.portal = token.kind === "patient" && typeof token.sa === "number" && typeof token.pexp === "number" ? { sa: token.sa, pexp: token.pexp } : null;
       return session;
     },

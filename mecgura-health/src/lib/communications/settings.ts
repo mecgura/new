@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { disabledFeaturesOf, getPlatformSetting } from "@/lib/platform/runtime";
 import { CHANNELS, EVENTS, isChannel, isEventType, LANGUAGES, type Channel, type EventType, type Language } from "./catalog";
 
 export interface CommSettings {
@@ -21,7 +22,13 @@ export function toSettings(r: Record<string, any> | null): CommSettings {
     maxRetries: Math.min(6, Math.max(0, r?.maxRetries ?? 3)), dailyCapPerPatient: Math.min(50, Math.max(1, r?.dailyCapPerPatient ?? 8)),
   };
 }
-export async function loadSettings(tenantId: string): Promise<CommSettings> { return toSettings(await db.communicationSettings.findUnique({ where: { tenantId } })); }
+/** The clinic's settings, with any channel the Super Admin switched off at platform level forced OFF (the clinic cannot turn it back on). */
+export async function loadSettings(tenantId: string): Promise<CommSettings> {
+  const [row, off] = await Promise.all([db.communicationSettings.findUnique({ where: { tenantId } }), disabledFeaturesOf(tenantId)]);
+  const s = toSettings(row);
+  if (!row) { const d = await getPlatformSetting<{ reminderOffsets?: number[] }>("defaults", {}); if (d.reminderOffsets?.length) s.reminderOffsets = d.reminderOffsets.filter((n) => n >= 15 && n <= 10080).slice(0, 4); } // platform default → clinic setting
+  return { ...s, whatsappEnabled: s.whatsappEnabled && !off.includes("whatsapp"), smsEnabled: s.smsEnabled && !off.includes("sms"), emailEnabled: s.emailEnabled && !off.includes("email") };
+}
 export const channelEnabled = (s: CommSettings, c: Channel) => (c === "WHATSAPP" ? s.whatsappEnabled : c === "SMS" ? s.smsEnabled : s.emailEnabled);
 export const anyChannelEnabled = (s: CommSettings) => s.whatsappEnabled || s.smsEnabled || s.emailEnabled;
 export const eventEnabled = (s: CommSettings, e: EventType) => s.eventToggles[e] ?? EVENTS[e].defaultOn;

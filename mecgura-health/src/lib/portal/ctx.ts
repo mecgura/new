@@ -21,7 +21,7 @@ export type PortalBlock = "no_session" | "expired" | "account_unavailable" | "cl
 
 export const getPatientAccess = cache(async (): Promise<{ ctx: PatientContext | null; block: PortalBlock | null }> => {
   const { ctx, blocked } = await getAccess();
-  if (!ctx) return { ctx: null, block: blocked === "tenant_unavailable" ? "clinic_unavailable" : "no_session" };
+  if (!ctx) return { ctx: null, block: blocked === "tenant_unavailable" || blocked === "maintenance" ? "clinic_unavailable" : "no_session" };
   const session = await auth();
   const portal = session?.portal;
   if (ctx.user.role !== "PATIENT" || !portal || !ctx.tenant) return { ctx: null, block: "no_session" };
@@ -29,6 +29,7 @@ export const getPatientAccess = cache(async (): Promise<{ ctx: PatientContext | 
   const account = await db.patientAccount.findFirst({ where: { userId: ctx.user.id, tenantId: ctx.tenant.id }, include: { patient: { select: { id: true, code: true, name: true, preferredName: true, status: true, deletedAt: true } } } });
   if (!account || account.status !== "ACTIVE" || account.patient.deletedAt || account.patient.status === "ARCHIVED") return { ctx: null, block: "account_unavailable" };
   if (portal.sa < account.sessionsValidFrom.getTime()) return { ctx: null, block: "expired" }; // signed in before "log out everywhere" / a password change
+  if (ctx.disabledFeatures?.includes("patientPortal")) return { ctx: null, block: "clinic_unavailable" }; // switched off by the platform: records stay, access stops
   const settings = await db.portalSettings.findFirst({ where: { tenantId: ctx.tenant.id }, select: { enabled: true } });
   if (settings && !settings.enabled) return { ctx: null, block: "clinic_unavailable" };
   return { ctx: { ...ctx, tenant: ctx.tenant, tenantId: ctx.tenant.id, patientId: account.patientId, accountId: account.id, patient: { id: account.patient.id, code: account.patient.code, name: account.patient.name, preferredName: account.patient.preferredName } }, block: null };

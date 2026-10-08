@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { DomainForm } from "@/components/clinic/domain-form";
 import { ClinicProfileForm } from "@/components/clinic/profile-form";
 import { profileFromTenant } from "@/components/clinic/profile-values";
 import { Breadcrumb } from "@/components/ui";
 import { requirePagePermission } from "@/lib/auth/context";
-import { getEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { getClinic } from "@/lib/services/clinics";
 
@@ -19,7 +17,7 @@ export default async function EditClinicPage({ params }: { params: Promise<{ id:
     <div className="space-y-section">
       <div><Breadcrumb items={[{ label: "Clinics", href: "/platform/clinics" }, { label: t.name, href: `/platform/clinics/${t.id}` }, { label: "Edit" }]} /><h1 className="type-page-title">Edit clinic</h1></div>
       <ClinicProfileForm initial={profileFromTenant(t)} endpoint={`/api/platform/clinics/${t.id}`} />
-      <div id="domain"><DomainForm id={t.id} subdomain={t.subdomain} customDomain={t.customDomain} verified={!!t.customDomainVerifiedAt} websiteEnabled={t.websiteEnabled} rootDomain={getEnv().TENANT_ROOT_DOMAIN ?? null} /></div>
+      <p className="type-secondary" id="domain">Domains are managed on the clinic&apos;s <a href={`/platform/clinics/${t.id}/domains`}>Domains tab</a>, where ownership is verified with a DNS record.</p>
     </div>
   );
 }
