@@ -1,0 +1,2909 @@
+// GENERATED from prisma/schema.prisma by scripts/sync-pg-schema.mjs — do not edit.
+// MECGURA HEALTH — database schema (Phase 0 foundation).
+//
+// Conventions (every future model MUST follow them):
+//  * String cuid ids; strings instead of Prisma enums so SQLite (dev) and
+//    PostgreSQL (prod) share one schema. Allowed values live in src/lib/*/constants.
+//  * Every business record carries `tenantId` + an index starting with tenantId.
+//    Register the model in src/lib/tenant/scoped-models.ts so server-side
+//    tenant isolation is applied automatically.
+//  * createdAt / updatedAt on everything; `deletedAt` for records that must be
+//    recoverable (soft delete). AuditLog is append-only and never soft-deleted.
+//  * PostgreSQL schema is GENERATED from this file: `npm run db:sync-schema`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// A clinic / doctor practice. Root of all tenant data.
+model Tenant {
+  id                     String    @id @default(cuid())
+  name                   String
+  legalName              String?
+  slug                   String    @unique
+  /// INDIVIDUAL_DOCTOR | SINGLE_SPECIALIST | MULTI_DOCTOR | SPECIALIST_CLINIC | DIAGNOSTIC | OTHER
+  clinicType             String    @default("MULTI_DOCTOR")
+  /// Custom domain, e.g. "drsharma.com" (lowercase, no scheme). Only RESOLVES once verified.
+  customDomain           String?   @unique
+  /// Set manually by a Super Admin after DNS/SSL are confirmed. Null = not verified, not resolved.
+  customDomainVerifiedAt DateTime?
+  /// PENDING | VERIFYING | VERIFIED | FAILED | DISABLED  (VERIFIED is only ever set by a real DNS check or an explicit, audited manual confirmation)
+  customDomainStatus     String    @default("PENDING")
+  /// secret-ish token the clinic puts in a DNS TXT record; shown to Super Admin only
+  customDomainToken      String?
+  customDomainCheckedAt  DateTime?
+  customDomainFailure    String?
+  /// Subdomain label under TENANT_ROOT_DOMAIN
+  subdomain              String?   @unique
+  contactEmail           String?
+  contactPhone           String?
+  alternatePhone         String?
+  address                String?
+  city                   String?
+  state                  String?
+  country                String    @default("India")
+  pincode                String?
+  timezone               String    @default("Asia/Kolkata")
+  /// Public website switch (the website itself is Phase 2)
+  websiteEnabled         Boolean   @default(false)
+  /// ACTIVE | TRIAL | SUSPENDED | INACTIVE
+  status                 String    @default("TRIAL")
+  /// true => seeded demo workspace; never holds real patient data
+  isDemo                 Boolean   @default(false)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  deletedAt              DateTime?
+
+  branding             TenantBranding?
+  subscription         Subscription?
+  users                User[]
+  auditLogs            AuditLog[]
+  assets               TenantAsset[]
+  invitations          Invitation[]
+  doctorProfiles       DoctorProfile[]
+  staffProfiles        StaffProfile[]
+  permissionGrants     UserPermissionGrant[]
+  website              Website?
+  websiteServices      WebsiteService[]
+  doctorPublicProfiles DoctorPublicProfile[]
+  testimonials         Testimonial[]
+  faqItems             FaqItem[]
+  articles             Article[]
+  contactEnquiries     ContactEnquiry[]
+  patients             Patient[]
+  counters             TenantCounter[]
+  doctorSchedules      DoctorSchedule[]
+  availabilityWindows  AvailabilityWindow[]
+  blockedTimes         BlockedTime[]
+  appointments         Appointment[]
+  opdVisits            OpdVisit[]
+  opdSettings          OpdSettings?
+
+  @@index([status])
+  @@index([clinicType])
+  @@index([createdAt])
+}
+
+/// White-label theme for one tenant (1:1). Null colour => product default.
+model TenantBranding {
+  id             String   @id @default(cuid())
+  tenantId       String   @unique
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  logoUrl        String?
+  faviconUrl     String?
+  primaryColor   String? // #RRGGBB
+  secondaryColor String? // #RRGGBB
+  accentColor    String? // #RRGGBB
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+/// Commercial plan. `modules` is a JSON array of module keys (src/config/modules.ts).
+model Plan {
+  id                  String         @id @default(cuid())
+  key                 String         @unique
+  name                String
+  modules             String         @default("[]")
+  isActive            Boolean        @default(true)
+  /// Public websites show "Website by MECGURA HEALTH" in the footer when true
+  requiresAttribution Boolean        @default(true)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  subscriptions       Subscription[]
+
+  // ---- Phase 15: commercial plan (key = slug). The legacy `modules` list still drives the menu for unmanaged (legacy) subscriptions. ----
+  description         String?
+  /// DRAFT | ACTIVE | INACTIVE | ARCHIVED   (only ACTIVE plans can be chosen for NEW subscriptions)
+  status              String         @default("ACTIVE")
+  currency            String         @default("INR")
+  /// integer minor units (paise). Never a float, never a formatted string.
+  monthlyPriceMinor   Int            @default(0)
+  annualPriceMinor    Int            @default(0)
+  setupFeeMinor       Int            @default(0)
+  trialDays           Int            @default(0)
+  isPublic            Boolean        @default(false)
+  sortOrder           Int            @default(0)
+  /// JSON { featureKey: boolean }
+  features            String         @default("{}")
+  /// JSON { limitKey: { mode: "LIMITED"|"UNLIMITED"|"DISABLED", value?: number } }
+  limits              String         @default("{}")
+  supportLevel        String?
+  /// bumped on every commercial change; subscriptions keep their own snapshot, so old billing never changes
+  version             Int            @default(1)
+  archivedAt          DateTime?
+
+  @@index([status, sortOrder])
+}
+
+/// Which plan a tenant is on. One current subscription per tenant (Phase 0).
+model Subscription {
+  id        String    @id @default(cuid())
+  tenantId  String    @unique
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  planId    String
+  plan      Plan      @relation(fields: [planId], references: [id])
+  /// TRIAL | ACTIVE | PAST_DUE | CANCELLED
+  status    String    @default("TRIAL")
+  startsAt  DateTime  @default(now())
+  endsAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // ---- Phase 15 (all defaults keep existing rows behaving exactly as before: managed=false = legacy, no limits, no billing) ----
+  /// false = legacy row (clinic lifecycle drives its status, nothing is metered). true = commercial subscription controlled by the subscription system.
+  managed             Boolean   @default(false)
+  /// MONTHLY | YEARLY
+  billingInterval     String    @default("MONTHLY")
+  currency            String    @default("INR")
+  /// price of the CURRENT term in minor units (a snapshot: later plan edits never change it)
+  priceMinor          Int       @default(0)
+  planVersion         Int       @default(1)
+  /// JSON snapshot of the plan at subscription time: { name, features, limits, setupFeeMinor, trialDays }
+  snapshot            String    @default("{}")
+  trialStart          DateTime?
+  trialEnd            DateTime?
+  trialUsed           Boolean   @default(false)
+  currentPeriodStart  DateTime?
+  currentPeriodEnd    DateTime?
+  nextBillingDate     DateTime?
+  cancelAtPeriodEnd   Boolean   @default(false)
+  cancelledAt         DateTime?
+  cancellationReason  String?
+  cancellationNotes   String?
+  gracePeriodStart    DateTime?
+  gracePeriodEnd      DateTime?
+  pausedAt            DateTime?
+  suspendedAt         DateTime?
+  /// issue the renewal invoice automatically at the end of each paid period (it never charges a card by itself)
+  autoRenew           Boolean   @default(true)
+  /// JSON { planId, billingInterval, effectiveAt } — a downgrade or interval change waiting for the end of the paid period
+  scheduledChange     String?
+  /// number of failed collection attempts for the current invoice and the last dunning step sent
+  failedPaymentCount  Int       @default(0)
+  dunningStage        Int       @default(0)
+  lastPaymentFailedAt DateTime?
+  /// ONLINE | MANUAL | SYSTEM
+  source              String    @default("SYSTEM")
+  provider            String?
+  externalCustomerId     String?
+  externalSubscriptionId String? @unique
+
+  @@index([planId])
+  @@index([status, currentPeriodEnd])
+  @@index([nextBillingDate])
+  @@index([status, trialEnd])
+}
+
+/// Role definition. tenantId = null => system role (SUPER_ADMIN, DOCTOR, ...).
+/// Tenant-defined custom roles arrive later; Phase 0 only has system roles.
+model Role {
+  id          String           @id @default(cuid())
+  tenantId    String?
+  key         String
+  name        String
+  isSystem    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       User[]
+  permissions RolePermission[]
+
+  @@unique([tenantId, key])
+  @@index([key])
+}
+
+/// Permission catalogue, e.g. "patients.view". Source of truth: src/lib/permissions.
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  module      String
+  description String?
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+/// Staff/platform account. tenantId = null only for SUPER_ADMIN.
+model User {
+  id               String          @id @default(cuid())
+  patientAccount   PatientAccount?
+  tenantId         String?
+  tenant           Tenant?         @relation(fields: [tenantId], references: [id])
+  roleId           String
+  role             Role            @relation(fields: [roleId], references: [id])
+  email            String          @unique
+  name             String
+  phone            String?         @unique
+  avatarUrl        String?
+  /// Null until an invited user sets their password
+  passwordHash     String?
+  /// ACTIVE | INVITED | SUSPENDED | DISABLED
+  status           String          @default("ACTIVE")
+  lastLoginAt      DateTime?
+  failedLoginCount Int             @default(0)
+  lockedUntil      DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  deletedAt        DateTime?
+
+  auditLogs             AuditLog[]
+  doctorProfile         DoctorProfile?
+  staffProfile          StaffProfile?
+  invitations           Invitation[]
+  permissionGrants      UserPermissionGrant[]
+  doctorSchedule        DoctorSchedule?
+  appointmentsAsDoctor  Appointment[]         @relation("AppointmentDoctor")
+  opdVisitsAsDoctor     OpdVisit[]            @relation("OpdVisitDoctor")
+  doctorPublicProfile   DoctorPublicProfile?
+  consultationsAsDoctor Consultation[]        @relation("ConsultationDoctor")
+
+  @@index([tenantId, status])
+  @@index([tenantId, roleId])
+  @@index([roleId])
+  @@index([status, createdAt])
+  @@index([lastLoginAt])
+}
+
+/// Append-only audit trail. NEVER store medical content or secrets in `metadata`
+/// — only identifiers and non-sensitive context (see src/lib/audit).
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String?
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id])
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  /// e.g. "patient.viewed" — see AUDIT_ACTIONS
+  action     String
+  entityType String?
+  entityId   String?
+  /// JSON string, redacted + size-capped
+  metadata   String?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, action, createdAt])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+  @@index([action, createdAt])
+  @@index([entityType, entityId])
+}
+
+/// Doctor profile (1:1 with a DOCTOR user). Services, availability, public page etc. come later.
+model DoctorProfile {
+  id                 String   @id @default(cuid())
+  tenantId           String
+  tenant             Tenant   @relation(fields: [tenantId], references: [id])
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  qualification      String?
+  specialization     String?
+  registrationNumber String?
+  experienceYears    Int?
+  /// MALE | FEMALE | OTHER | UNDISCLOSED
+  gender             String?
+  bio                String?
+  /// Whole rupees; fee rules/billing are a later phase
+  consultationFee    Int?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+/// Staff profile (1:1 with any non-doctor staff user).
+model StaffProfile {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeRef String?
+  designation String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+/// Extra permission granted to ONE user on top of the role defaults (only grantable permissions).
+model UserPermissionGrant {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, permission])
+  @@index([tenantId])
+}
+
+/// Invitation to set a password. Only the SHA-256 of the token is stored.
+model Invitation {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId, userId])
+}
+
+/// Uploaded image bytes (logo, favicon, avatars). Phase 1 stores them in the database — validated
+/// by magic bytes and size — until object storage is configured. LOGO/FAVICON are public.
+model TenantAsset {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// LOGO | FAVICON | AVATAR
+  kind      String
+  /// userId for AVATAR, empty string otherwise
+  ownerId   String   @default("")
+  mimeType  String
+  size      Int
+  data      Bytes
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, kind, ownerId])
+}
+
+/// One public website per clinic. Site-wide content (home/about/clinic/hours/navigation/SEO/legal) is a validated
+/// JSON document with a DRAFT copy (edited in the CMS) and a PUBLISHED snapshot (what visitors see).
+model Website {
+  id                String    @id @default(cuid())
+  tenantId          String    @unique
+  tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Template key, see src/website/templates
+  template          String    @default("MODERN_MEDICAL")
+  /// DRAFT | PUBLISHED — whether the public site is live at all
+  status            String    @default("DRAFT")
+  draftContent      String    @default("{}")
+  publishedContent  String?
+  publishedAt       DateTime?
+  publishedById     String?
+  /// Custom domain a clinic admin asked for; a Super Admin applies + verifies it (Phase 1 domain flow)
+  requestedDomain   String?
+  domainRequestedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model WebsiteService {
+  id               String    @id @default(cuid())
+  tenantId         String
+  tenant           Tenant    @relation(fields: [tenantId], references: [id])
+  slug             String
+  title            String
+  shortDescription String?
+  description      String?
+  category         String?
+  durationMinutes  Int?
+  fee              Int?
+  showFee          Boolean   @default(false)
+  imageUrl         String?
+  imageAlt         String?
+  icon             String?
+  sortOrder        Int       @default(0)
+  /// DRAFT | PUBLISHED | ARCHIVED
+  status           String    @default("DRAFT")
+  seoTitle         String?
+  seoDescription   String?
+  publishedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, status, sortOrder])
+}
+
+/// Public-facing profile of a doctor. Qualification/specialization/experience/registration/fee stay on DoctorProfile.
+model DoctorPublicProfile {
+  id               String    @id @default(cuid())
+  tenantId         String
+  tenant           Tenant    @relation(fields: [tenantId], references: [id])
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slug             String
+  photoUrl         String?
+  photoAlt         String?
+  shortBio         String?
+  bio              String?
+  education        String?
+  /// JSON string arrays
+  certifications   String    @default("[]")
+  memberships      String    @default("[]")
+  languages        String    @default("[]")
+  philosophy       String?
+  showRegistration Boolean   @default(false)
+  showFee          Boolean   @default(false)
+  sortOrder        Int       @default(0)
+  /// DRAFT | PUBLISHED | ARCHIVED
+  status           String    @default("DRAFT")
+  seoTitle         String?
+  seoDescription   String?
+  publishedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, status, sortOrder])
+}
+
+model Testimonial {
+  id           String    @id @default(cuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  /// null/empty => shown as "Anonymous Patient"
+  displayName  String?
+  text         String
+  rating       Int?
+  givenOn      DateTime?
+  doctorUserId String?
+  serviceId    String?
+  sortOrder    Int       @default(0)
+  /// DRAFT | PUBLISHED | ARCHIVED
+  status       String    @default("DRAFT")
+  publishedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([tenantId, status, sortOrder])
+}
+
+model FaqItem {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  question    String
+  answer      String
+  category    String?
+  sortOrder   Int       @default(0)
+  /// DRAFT | PUBLISHED | ARCHIVED
+  status      String    @default("DRAFT")
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([tenantId, status, sortOrder])
+}
+
+model Article {
+  id               String    @id @default(cuid())
+  tenantId         String
+  tenant           Tenant    @relation(fields: [tenantId], references: [id])
+  slug             String
+  title            String
+  excerpt          String?
+  content          String    @default("")
+  featuredImageUrl String?
+  featuredImageAlt String?
+  authorUserId     String?
+  category         String?
+  /// JSON string array
+  tags             String    @default("[]")
+  /// DRAFT | PUBLISHED | ARCHIVED
+  status           String    @default("DRAFT")
+  publishedAt      DateTime?
+  seoTitle         String?
+  seoDescription   String?
+  canonicalUrl     String?
+  ogImageUrl       String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, status, publishedAt])
+  @@index([authorUserId])
+}
+
+/// Message from the public contact form. Never exposed publicly; visible to the owning clinic only.
+model ContactEnquiry {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  name      String
+  phone     String?
+  email     String?
+  message   String
+  consent   Boolean  @default(false)
+  /// NEW | READ | ARCHIVED
+  status    String   @default("NEW")
+  /// salted hash of the sender IP (abuse analysis without storing the address)
+  ipHash    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, status, createdAt])
+}
+
+/// MINIMAL patient registry (identity only — name, mobile, age/DOB, a clinic-unique code). No medical data:
+/// the full patient record (history, documents, timeline) is Phase 4 and extends this model.
+model Patient {
+  dispensings              Dispensing[]
+  id                       String                 @id @default(cuid())
+  tenantId                 String
+  tenant                   Tenant                 @relation(fields: [tenantId], references: [id])
+  /// Clinic-unique, human-readable, never reused, not derived from phone or medical data, e.g. P-000042
+  code                     String
+  /// full name as the patient uses it (kept as one field: Phase 3 flows already depend on it)
+  name                     String
+  preferredName            String?
+  /// normalised +91XXXXXXXXXX (not unique: families share a number)
+  phone                    String?
+  alternatePhone           String?
+  email                    String?
+  /// MALE | FEMALE | OTHER | UNDISCLOSED
+  gender                   String?
+  dateOfBirth              DateTime?
+  /// used when only an approximate age is known
+  ageYears                 Int?
+  addressLine              String?
+  city                     String?
+  state                    String?
+  country                  String?
+  pincode                  String?
+  /// A+ | A- | B+ | B- | AB+ | AB- | O+ | O-  (as stated by the patient / clinician; never inferred)
+  bloodGroup               String?
+  maritalStatus            String?
+  occupation               String?
+  emergencyContactName     String?
+  emergencyContactRelation String?
+  emergencyContactPhone    String?
+  /// ACTIVE | INACTIVE | ARCHIVED   (patients are archived, never hard-deleted)
+  status                   String                 @default("ACTIVE")
+  archivedAt               DateTime?
+  archivedReason           String?
+  /// ALLOWED | NOT_ALLOWED | UNKNOWN  — preferences only; nothing is sent in this phase
+  prefPhone                String                 @default("UNKNOWN")
+  prefWhatsapp             String                 @default("UNKNOWN")
+  prefSms                  String                 @default("UNKNOWN")
+  prefEmail                String                 @default("UNKNOWN")
+  /// Optional household grouping. Grouping NEVER merges or shares medical records.
+  familyGroupId            String?
+  familyGroup              FamilyGroup?           @relation(fields: [familyGroupId], references: [id])
+  familyRelation           String?
+  createdById              String?
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  deletedAt                DateTime?
+  appointments             Appointment[]
+  opdVisits                OpdVisit[]
+  allergies                PatientAllergy[]
+  medications              PatientMedication[]
+  history                  PatientHistory[]
+  familyHistory            PatientFamilyHistory[]
+  notes                    PatientNote[]
+  consents                 PatientConsent[]
+  consultations            Consultation[]
+  investigationOrders      InvestigationOrder[]
+  followUps                FollowUp[]
+  recalls                  Recall[]
+  invoices                 Invoice[]
+  payments                 Payment[]
+  patientAccount           PatientAccount?
+
+  @@unique([tenantId, code])
+  @@index([tenantId, phone])
+  @@index([tenantId, name])
+  @@index([tenantId, status, createdAt])
+  @@index([familyGroupId])
+}
+
+model FamilyGroup {
+  id        String    @id @default(cuid())
+  tenantId  String
+  createdAt DateTime  @default(now())
+  members   Patient[]
+
+  @@index([tenantId])
+}
+
+/// Structured allergy record. Entered by staff from what the patient/clinician states; never inferred.
+model PatientAllergy {
+  id           String   @id @default(cuid())
+  tenantId     String
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  allergen     String
+  reaction     String?
+  /// MILD | MODERATE | SEVERE | UNKNOWN
+  severity     String   @default("UNKNOWN")
+  notes        String?
+  /// ACTIVE | INACTIVE | UNKNOWN
+  status       String   @default("ACTIVE")
+  recordedById String?
+  recordedAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, patientId])
+}
+
+/// Patient-level summary of medicines the patient says they take. A record only — not a prescription.
+model PatientMedication {
+  id           String   @id @default(cuid())
+  tenantId     String
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name         String
+  strength     String?
+  frequency    String?
+  notes        String?
+  /// PATIENT_REPORTED | CLINICIAN_RECORDED | OTHER
+  source       String   @default("PATIENT_REPORTED")
+  active       Boolean  @default(true)
+  recordedById String?
+  recordedAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, patientId])
+}
+
+/// Medical history entry (condition, surgery, ...). Entered by staff; never inferred.
+model PatientHistory {
+  id           String   @id @default(cuid())
+  tenantId     String
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  /// CONDITION | SURGERY | HOSPITALIZATION | CHRONIC_CONDITION | PROCEDURE | OTHER
+  category     String
+  title        String
+  description  String?
+  /// free text year or date, e.g. "2019" or "2019-03"
+  occurredOn   String?
+  /// ACTIVE | RESOLVED | UNKNOWN
+  status       String   @default("UNKNOWN")
+  notes        String?
+  recordedById String?
+  recordedAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, patientId])
+}
+
+model PatientFamilyHistory {
+  id           String   @id @default(cuid())
+  tenantId     String
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  relation     String
+  condition    String
+  notes        String?
+  recordedById String?
+  recordedAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, patientId])
+}
+
+/// Internal note. kind decides who may read it: GENERAL/RECEPTION need patients.view, CLINICAL needs patients.clinical.
+model PatientNote {
+  id         String   @id @default(cuid())
+  tenantId   String
+  patientId  String
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  /// GENERAL | RECEPTION | CLINICAL
+  kind       String   @default("GENERAL")
+  content    String
+  authorId   String
+  authorRole String
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, patientId, createdAt])
+}
+
+/// Append-only consent log. The latest row per type is the current state; history is kept.
+model PatientConsent {
+  id           String   @id @default(cuid())
+  tenantId     String
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  /// PRIVACY | COMMUNICATION | DATA_PROCESSING
+  type         String
+  /// GRANTED | WITHDRAWN
+  status       String
+  /// the clinic's own notice/version label
+  version      String
+  note         String?
+  recordedById String?
+  recordedAt   DateTime @default(now())
+
+  @@index([tenantId, patientId, type, recordedAt])
+}
+
+/// Atomic per-clinic counters (patient codes, daily tokens, queue order). Incremented inside transactions.
+model TenantCounter {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  key      String
+  value    Int    @default(0)
+
+  @@unique([tenantId, key])
+}
+
+/// Per-doctor booking rules.
+model DoctorSchedule {
+  id               String   @id @default(cuid())
+  tenantId         String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  doctorUserId     String   @unique
+  doctor           User     @relation(fields: [doctorUserId], references: [id], onDelete: Cascade)
+  slotMinutes      Int      @default(15)
+  bufferMinutes    Int      @default(0)
+  maxPerDay        Int?
+  /// offer this doctor on the public website
+  onlineBooking    Boolean  @default(false)
+  advanceDays      Int      @default(30)
+  minNoticeMinutes Int      @default(60)
+  /// shown on the waiting-room display, e.g. "Doctor Room 1"
+  roomLabel        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+/// Weekly working window (several per day = breaks in between). Minutes are clinic-local minutes after midnight.
+model AvailabilityWindow {
+  id           String @id @default(cuid())
+  tenantId     String
+  tenant       Tenant @relation(fields: [tenantId], references: [id])
+  doctorUserId String
+  /// 0 = Sunday … 6 = Saturday
+  weekday      Int
+  startMinutes Int
+  endMinutes   Int
+
+  @@index([tenantId, doctorUserId, weekday])
+}
+
+/// Holiday / leave / closure. doctorUserId null = the whole clinic. Stored in UTC.
+model BlockedTime {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  doctorUserId String?
+  startsAt     DateTime
+  endsAt       DateTime
+  /// HOLIDAY | LEAVE | MEETING | EMERGENCY | CLOSURE | OTHER
+  kind         String   @default("OTHER")
+  reason       String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId, startsAt])
+  @@index([tenantId, doctorUserId, startsAt])
+}
+
+model Appointment {
+  id                 String    @id @default(cuid())
+  tenantId           String
+  tenant             Tenant    @relation(fields: [tenantId], references: [id])
+  /// Short unguessable reference shown to the patient, e.g. AP-7K3QH9XM
+  publicId           String
+  doctorUserId       String
+  doctor             User      @relation("AppointmentDoctor", fields: [doctorUserId], references: [id])
+  /// resolved by STAFF at check-in/creation — never chosen by an anonymous visitor
+  patientId          String?
+  patient            Patient?  @relation(fields: [patientId], references: [id])
+  /// WebsiteService id (validated against the clinic)
+  serviceId          String?
+  /// ONLINE_APPOINTMENT | WALK_IN | FOLLOW_UP | EMERGENCY | OPD | PROCEDURE | OTHER
+  type               String    @default("OPD")
+  /// WEBSITE | PHONE | WALK_IN | RECEPTION | WHATSAPP | REFERRAL | OTHER
+  source             String    @default("RECEPTION")
+  /// REQUESTED | CONFIRMED | CHECKED_IN | WAITING | CALLED | IN_CONSULTATION | COMPLETED | CANCELLED | NO_SHOW | ON_HOLD | SKIPPED
+  status             String    @default("CONFIRMED")
+  /// UTC instants
+  startsAt           DateTime
+  endsAt             DateTime
+  /// "<doctorUserId>|<startsAt ISO>" while the slot is occupied, NULL once CANCELLED/NO_SHOW.
+  /// UNIQUE ⇒ the database itself refuses a second booking of the same doctor+slot (NULLs don't collide).
+  slotLock           String?   @unique
+  /// contact snapshot from the booking form (patient identity is resolved by staff later)
+  contactName        String?
+  contactPhone       String?
+  contactEmail       String?
+  contactDob         String?
+  contactGender      String?
+  reason             String?
+  notes              String?
+  createdById        String?
+  confirmedAt        DateTime?
+  checkedInAt        DateTime?
+  calledAt           DateTime?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancelledById      String?
+  cancellationReason String?
+  noShowAt           DateTime?
+  noShowById         String?
+  noShowReason       String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  opdVisit           OpdVisit?
+
+  consultation Consultation?
+
+  @@unique([tenantId, publicId])
+  @@index([tenantId, startsAt])
+  @@index([tenantId, doctorUserId, startsAt])
+  @@index([tenantId, status, startsAt])
+  @@index([patientId])
+}
+
+/// One patient visit in the live queue (walk-in, emergency or checked-in appointment). Hands over to Phase 5 consultation.
+model OpdVisit {
+  id                String       @id @default(cuid())
+  tenantId          String
+  tenant            Tenant       @relation(fields: [tenantId], references: [id])
+  patientId         String
+  patient           Patient      @relation(fields: [patientId], references: [id])
+  doctorUserId      String
+  doctor            User         @relation("OpdVisitDoctor", fields: [doctorUserId], references: [id])
+  /// at most ONE visit per appointment (no duplicate check-ins)
+  appointmentId     String?      @unique
+  appointment       Appointment? @relation(fields: [appointmentId], references: [id])
+  /// ONLINE_APPOINTMENT | WALK_IN | FOLLOW_UP | EMERGENCY | PROCEDURE | OPD | OTHER
+  visitType         String       @default("WALK_IN")
+  /// GENERAL | FOLLOW_UP | EMERGENCY | PROCEDURE | ONLINE_APPOINTMENT | WALK_IN
+  queueType         String       @default("GENERAL")
+  /// NORMAL | HIGH | EMERGENCY
+  priority          String       @default("NORMAL")
+  /// WAITING | CALLED | IN_CONSULTATION | COMPLETED | ON_HOLD | SKIPPED | CANCELLED
+  status            String       @default("WAITING")
+  /// clinic-local day, yyyy-mm-dd
+  tokenDate         String
+  tokenPrefix       String       @default("")
+  tokenNumber       Int
+  tokenLabel        String
+  /// unguessable id for the patient-facing token page
+  publicToken       String       @unique
+  /// monotonic arrival order within the clinic day
+  queueSeq          Int
+  checkedInAt       DateTime     @default(now())
+  calledAt          DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  heldAt            DateTime?
+  skippedAt         DateTime?
+  priorityChangedAt DateTime?
+  note              String?
+  createdById       String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  /// a token number is unique per clinic + day + queue prefix
+  consultation Consultation?
+
+  @@unique([tenantId, tokenDate, tokenPrefix, tokenNumber])
+  @@index([tenantId, tokenDate, doctorUserId, status])
+  @@index([tenantId, tokenDate, status])
+  @@index([patientId])
+}
+
+model OpdSettings {
+  id                String   @id @default(cuid())
+  tenantId          String   @unique
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// NUMERIC (07) | PREFIXED (A-007)
+  tokenFormat       String   @default("NUMERIC")
+  tokenPad          Int      @default(2)
+  /// JSON map queueType -> prefix, used when tokenFormat = PREFIXED
+  prefixes          String   @default("{}")
+  voiceAnnouncement Boolean  @default(false)
+  showNextOnDisplay Boolean  @default(true)
+  /// assign a token when an online appointment is booked (default: at clinic check-in)
+  onlineTokens      Boolean  @default(false)
+  /// AUTO_CONFIRM | REQUIRES_CONFIRMATION
+  bookingMode       String   @default("AUTO_CONFIRM")
+  /// secret in the public waiting-room URL (/display/<key>); null = display switched off
+  displayKey        String?  @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+/// ---------------------------------------------------------------------------------------------------------------
+/// Phase 5 — consultation, vitals, diagnosis, prescription, orders. Every row is tenant-scoped (tenantDb) and linked
+/// to the Phase 3/4 patient + OPD visit (no duplicate core models). Doctors own clinical content; finalized content is
+/// immutable and only changes through versioned amendments.
+/// ---------------------------------------------------------------------------------------------------------------
+model Consultation {
+  id                  String                  @id @default(cuid())
+  tenantId            String
+  /// CONS-2026-000145 — clinic-scoped, separate from patient id, token and prescription number
+  number              String
+  patientId           String
+  patient             Patient                 @relation(fields: [patientId], references: [id])
+  doctorUserId        String
+  doctor              User                    @relation("ConsultationDoctor", fields: [doctorUserId], references: [id])
+  /// at most ONE consultation per OPD visit
+  opdVisitId          String                  @unique
+  opdVisit            OpdVisit                @relation(fields: [opdVisitId], references: [id])
+  appointmentId       String?                 @unique
+  appointment         Appointment?            @relation(fields: [appointmentId], references: [id])
+  /// DRAFT | IN_PROGRESS | READY_FOR_REVIEW | FINALIZED | CANCELLED
+  status              String                  @default("IN_PROGRESS")
+  /// optimistic-concurrency counter for autosave
+  rev                 Int                     @default(0)
+  /// JSON arrays: [{ text, duration, severity, notes }] and [{ name, duration, severity, onset, notes }]
+  chiefComplaints     String                  @default("[]")
+  symptoms            String                  @default("[]")
+  /// JSON object of free-text sections: hpi, pastMedical, surgical, family, medication, allergy, social, other
+  history             String                  @default("{}")
+  /// JSON object of free-text sections: general, respiratory, cardiovascular, abdomen, neurological, other, custom[]
+  examination         String                  @default("{}")
+  assessment          String?
+  impression          String?
+  differential        String?
+  assessmentNotes     String?
+  clinicalNotes       String?
+  advice              String?
+  followUpRequired    Boolean                 @default(false)
+  followUpAfterDays   Int?
+  followUpDate        String?
+  followUpNotes       String?
+  startedAt           DateTime                @default(now())
+  readyAt             DateTime?
+  finalizedAt         DateTime?
+  finalizedById       String?
+  /// bumps each time a finalized consultation is amended and finalized again
+  version             Int                     @default(0)
+  amendReason         String?
+  cancelledAt         DateTime?
+  cancelReason        String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  vitals              ConsultationVitals[]
+  diagnoses           ConsultationDiagnosis[]
+  prescription        Prescription?
+  orders              DoctorOrder[]
+  versions            ConsultationVersion[]
+  investigationOrders InvestigationOrder[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, patientId, startedAt])
+  @@index([tenantId, doctorUserId, status])
+  @@index([tenantId, startedAt])
+}
+
+/// Immutable snapshot written every time a consultation is finalized (v1, v2 …). contentHash proves it wasn't altered.
+model ConsultationVersion {
+  id             String       @id @default(cuid())
+  tenantId       String
+  consultationId String
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  version        Int
+  snapshot       String
+  contentHash    String
+  reason         String?
+  createdById    String
+  createdAt      DateTime     @default(now())
+
+  @@unique([consultationId, version])
+}
+
+model ConsultationVitals {
+  id             String       @id @default(cuid())
+  tenantId       String
+  consultationId String
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  patientId      String
+  /// units are fixed: mmHg, bpm, °F (or °C per tempUnit), %, breaths/min, kg, cm, mg/dL
+  systolic       Int?
+  diastolic      Int?
+  pulse          Int?
+  temperature    Float?
+  tempUnit       String       @default("F")
+  spo2           Int?
+  respRate       Int?
+  weightKg       Float?
+  heightCm       Float?
+  bmi            Float?
+  bloodSugar     Float?
+  /// FASTING | RANDOM | PRE_MEAL | POST_MEAL
+  sugarType      String?
+  painScore      Int?
+  notes          String?
+  recordedById   String
+  recordedAt     DateTime     @default(now())
+
+  @@index([tenantId, consultationId])
+  @@index([tenantId, patientId, recordedAt])
+}
+
+model ConsultationDiagnosis {
+  id             String       @id @default(cuid())
+  tenantId       String
+  consultationId String
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  patientId      String
+  name           String
+  /// only when a real terminology source supplied it (none is configured yet)
+  code           String?
+  codeSystem     String?
+  /// PRIMARY | SECONDARY
+  type           String       @default("SECONDARY")
+  notes          String?
+  createdById    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([tenantId, consultationId])
+  @@index([tenantId, patientId])
+}
+
+/// One prescription per consultation; its history lives in PrescriptionVersion. Items are the editable working copy.
+model Prescription {
+  dispensings    Dispensing[]
+  id             String                @id @default(cuid())
+  tenantId       String
+  consultationId String                @unique
+  consultation   Consultation          @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  patientId      String
+  doctorUserId   String
+  /// RX-2026-000001, assigned at first finalization; unique per clinic
+  number         String?
+  /// DRAFT | REVIEW | FINALIZED
+  status         String                @default("DRAFT")
+  /// 0 until the first finalization
+  currentVersion Int                   @default(0)
+  /// set while a finalized prescription is being amended
+  amendReason    String?
+  finalizedAt    DateTime?
+  finalizedById  String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  items          PrescriptionItem[]
+  versions       PrescriptionVersion[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, patientId])
+}
+
+model PrescriptionItem {
+  id             String       @id @default(cuid())
+  tenantId       String
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  position       Int
+  name           String
+  genericName    String?
+  brandName      String?
+  strength       String?
+  dose           String?
+  route          String?
+  frequency      String?
+  morning        Boolean      @default(false)
+  afternoon      Boolean      @default(false)
+  evening        Boolean      @default(false)
+  night          Boolean      @default(false)
+  /// BEFORE_FOOD | AFTER_FOOD | WITH_FOOD | ANYTIME
+  foodTiming     String?
+  durationDays   Int?
+  quantity       Float?
+  quantityUnit   String?
+  startDate      String?
+  endDate        String?
+  instructions   String?
+  /// set when the doctor picked it from the clinic medicine list (otherwise typed manually)
+  medicineRefId  String?
+
+  @@index([prescriptionId, position])
+}
+
+/// Immutable: a finalized prescription as the doctor approved it. Never updated, never deleted.
+model PrescriptionVersion {
+  id             String       @id @default(cuid())
+  tenantId       String
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  version        Int
+  snapshot       String
+  contentHash    String
+  reason         String?
+  createdById    String
+  createdAt      DateTime     @default(now())
+
+  @@unique([prescriptionId, version])
+}
+
+/// Operational task created from a consultation. Never changes the prescription.
+model DoctorOrder {
+  id             String       @id @default(cuid())
+  tenantId       String
+  patientId      String
+  consultationId String
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  doctorUserId   String
+  assignedToId   String?
+  /// MEDICATION | INVESTIGATION | DOCUMENT | FOLLOW_UP | OTHER
+  type           String
+  title          String
+  description    String?
+  /// NORMAL | HIGH | URGENT
+  priority       String       @default("NORMAL")
+  /// PENDING | IN_PROGRESS | COMPLETED | CANCELLED
+  status         String       @default("PENDING")
+  createdById    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  completedAt    DateTime?
+  completedById  String?
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, consultationId])
+  @@index([tenantId, assignedToId, status])
+}
+
+/// A doctor's own drafting template. Applying one only copies editable skeleton text into a draft.
+model ConsultationTemplate {
+  id           String   @id @default(cuid())
+  tenantId     String
+  doctorUserId String
+  name         String
+  /// JSON: { chiefComplaint?, history?, examination?, assessment?, advice?, clinicalNotes? }
+  content      String
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId, doctorUserId])
+}
+
+/// The clinic's imported medicine list (formulary). EMPTY unless the clinic loads a real list — nothing is seeded or invented.
+model MedicineReference {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  genericName String?
+  brandName   String?
+  strength    String?
+  form        String?
+  source      String   @default("CLINIC_IMPORT")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, name])
+  @@index([tenantId, genericName])
+}
+
+/// ---------------------------------------------------------------------------------------------------------------
+/// Phase 6 — investigations & laboratory. Tenant-scoped; linked to the Phase 4/5 patient, consultation and doctor order.
+/// Test details are SNAPSHOTTED onto each order item, so later changes to the test master never alter old orders/reports.
+/// ---------------------------------------------------------------------------------------------------------------
+
+/// Configurable lists: CATEGORY | SAMPLE_TYPE | DEPARTMENT | REJECTION_REASON (nothing is hardcoded as the only choice).
+model LabConfigItem {
+  id        String   @id @default(cuid())
+  tenantId  String
+  kind      String
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, kind, name])
+  @@index([tenantId, kind])
+}
+
+model Investigation {
+  id              String                   @id @default(cuid())
+  tenantId        String
+  testCode        String
+  testName        String
+  shortName       String?
+  category        String
+  description     String?
+  sampleType      String?
+  department      String?
+  preparation     String?
+  turnaroundHours Int?
+  active          Boolean                  @default(true)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  parameters      InvestigationParameter[]
+
+  @@unique([tenantId, testCode])
+  @@index([tenantId, active, category])
+  @@index([tenantId, testName])
+}
+
+/// One reportable value of a test (CBC has several). A test with a single value has one parameter.
+model InvestigationParameter {
+  id              String        @id @default(cuid())
+  tenantId        String
+  investigationId String
+  investigation   Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  position        Int
+  name            String
+  /// NUMERIC | TEXT | QUALITATIVE
+  resultType      String        @default("NUMERIC")
+  unit            String?
+  /// JSON [{ value, flag? }] for QUALITATIVE (flag only if the lab configured one)
+  options         String?
+  /// JSON [{ gender?, minAgeYears?, maxAgeYears?, low?, high?, criticalLow?, criticalHigh?, text? }] — lab-configured only
+  ranges          String?
+
+  @@index([investigationId, position])
+}
+
+model LabPartner {
+  id              String   @id @default(cuid())
+  tenantId        String
+  name            String
+  code            String
+  contact         String?
+  address         String?
+  /// MANUAL = tracked by hand. No API integration is available yet.
+  integrationType String   @default("MANUAL")
+  /// name of a secret held in the environment/secret store — never the secret itself
+  configRef       String?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@unique([tenantId, code])
+}
+
+model InvestigationOrder {
+  id             String                   @id @default(cuid())
+  tenantId       String
+  /// LAB-2026-000001
+  orderNumber    String
+  patientId      String
+  patient        Patient                  @relation(fields: [patientId], references: [id])
+  consultationId String?
+  consultation   Consultation?            @relation(fields: [consultationId], references: [id])
+  doctorUserId   String
+  /// the Phase 5 DoctorOrder this belongs to (no duplicate orders)
+  doctorOrderId  String?                  @unique
+  /// INTERNAL | EXTERNAL
+  source         String                   @default("INTERNAL")
+  labPartnerId   String?
+  externalRef    String?
+  /// NORMAL | HIGH | URGENT | STAT — always chosen by the doctor
+  priority       String                   @default("NORMAL")
+  /// 0 STAT .. 3 NORMAL, so the worklist can sort by urgency in the database
+  priorityRank   Int                      @default(3)
+  /// ORDERED | CONFIRMED | SAMPLE_PENDING | SAMPLE_COLLECTED | SAMPLE_RECEIVED | PROCESSING | RESULT_READY | REPORT_GENERATED | DOCTOR_REVIEWED | CANCELLED
+  status         String                   @default("ORDERED")
+  clinicalNotes  String?
+  orderedAt      DateTime                 @default(now())
+  scheduledAt    DateTime?
+  completedAt    DateTime?
+  cancelledAt    DateTime?
+  cancelReason   String?
+  createdById    String
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  items          InvestigationOrderItem[]
+  samples        Sample[]
+  report         LabReport?
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId, status, priorityRank, orderedAt])
+  @@index([tenantId, patientId])
+  @@index([tenantId, doctorUserId])
+  @@index([tenantId, orderedAt])
+}
+
+model InvestigationOrderItem {
+  id                   String             @id @default(cuid())
+  tenantId             String
+  investigationOrderId String
+  order                InvestigationOrder @relation(fields: [investigationOrderId], references: [id], onDelete: Cascade)
+  investigationId      String?
+  testNameSnapshot     String
+  sampleTypeSnapshot   String?
+  /// full snapshot of the test (code, category, preparation, parameters with ranges) at order time
+  snapshot             String
+  priority             String             @default("NORMAL")
+  /// ORDERED | SAMPLE_COLLECTED | SAMPLE_RECEIVED | PROCESSING | RESULT_READY | RECOLLECTION_REQUIRED | CANCELLED
+  status               String             @default("ORDERED")
+  /// NONE | DRAFT | SUBMITTED | VERIFIED | RELEASED
+  resultStatus         String             @default("NONE")
+  notes                String?
+  /// the current (non-rejected) sample
+  sampleId             String?
+  results              LabResultEntry[]
+
+  @@index([tenantId, investigationOrderId])
+  @@index([sampleId])
+}
+
+model Sample {
+  id                   String             @id @default(cuid())
+  tenantId             String
+  /// SMP-2026-000001
+  sampleNumber         String
+  /// opaque identifier for barcode/QR (never contains patient data)
+  barcodeToken         String             @unique
+  investigationOrderId String
+  order                InvestigationOrder @relation(fields: [investigationOrderId], references: [id], onDelete: Cascade)
+  sampleType           String
+  /// 1 for the first collection, +1 per recollection
+  attempt              Int                @default(1)
+  previousSampleId     String?
+  /// COLLECTED | RECEIVED | REJECTED | PROCESSING | COMPLETED
+  status               String             @default("COLLECTED")
+  collectedById        String
+  collectedAt          DateTime           @default(now())
+  receivedById         String?
+  receivedAt           DateTime?
+  rejectedById         String?
+  rejectedAt           DateTime?
+  rejectionReason      String?
+  notes                String?
+  events               SampleEvent[]
+
+  @@unique([tenantId, sampleNumber])
+  @@index([tenantId, status])
+  @@index([investigationOrderId])
+}
+
+/// Chain of custody: append-only.
+model SampleEvent {
+  id         String   @id @default(cuid())
+  tenantId   String
+  sampleId   String
+  sample     Sample   @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  /// CREATED | COLLECTED | RECEIVED | REJECTED | RECOLLECTION_REQUESTED | PROCESSING_STARTED | PROCESSING_COMPLETED
+  action     String
+  userId     String
+  department String?
+  notes      String?
+  at         DateTime @default(now())
+
+  @@index([sampleId, at])
+}
+
+model LabResultEntry {
+  id            String                 @id @default(cuid())
+  tenantId      String
+  orderItemId   String
+  orderItem     InvestigationOrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  position      Int
+  parameterName String
+  value         String
+  numericValue  Float?
+  unit          String?
+  /// the reference range that applied (text), or null when none is configured
+  refText       String?
+  /// LOW | HIGH | NORMAL | CRITICAL | POSITIVE | NEGATIVE | ABNORMAL — only from configured data
+  flag          String?
+  remarks       String?
+  enteredById   String
+  updatedAt     DateTime               @updatedAt
+
+  @@unique([orderItemId, position])
+}
+
+model LabReport {
+  id                   String             @id @default(cuid())
+  tenantId             String
+  /// RPT-2026-000001
+  reportNumber         String
+  investigationOrderId String             @unique
+  order                InvestigationOrder @relation(fields: [investigationOrderId], references: [id], onDelete: Cascade)
+  patientId            String
+  doctorUserId         String
+  /// DRAFT | UNDER_REVIEW | VERIFIED | RELEASED | AMENDED | CANCELLED
+  status               String             @default("UNDER_REVIEW")
+  /// 0 until first release
+  currentVersion       Int                @default(0)
+  amendReason          String?
+  generatedById        String
+  generatedAt          DateTime           @default(now())
+  verifiedById         String?
+  verifiedAt           DateTime?
+  releasedById         String?
+  releasedAt           DateTime?
+  updatedAt            DateTime           @updatedAt
+  versions             LabReportVersion[]
+  reviews              LabReportReview[]
+
+  @@unique([tenantId, reportNumber])
+  @@index([tenantId, patientId])
+  @@index([tenantId, status])
+}
+
+/// Immutable snapshot of a released report. Never updated or deleted.
+model LabReportVersion {
+  id          String    @id @default(cuid())
+  tenantId    String
+  reportId    String
+  report      LabReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  version     Int
+  snapshot    String
+  contentHash String
+  reason      String?
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@unique([reportId, version])
+}
+
+/// A doctor's acknowledgement/review of a specific released version.
+model LabReportReview {
+  id           String    @id @default(cuid())
+  tenantId     String
+  reportId     String
+  report       LabReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  version      Int
+  doctorUserId String
+  /// ACKNOWLEDGED | REVIEWED
+  status       String
+  note         String?
+  at           DateTime  @default(now())
+
+  @@unique([reportId, version, doctorUserId])
+}
+
+/// Internal notifications (in-app only; no SMS/WhatsApp/email). `body` never carries results.
+model Notification {
+  id               String    @id @default(cuid())
+  /// null = a platform-level alert for a Super Admin
+  tenantId         String?
+  /// the RECIPIENT (staff user, or the patient's portal login)
+  userId           String
+  type             String
+  /// APPOINTMENT | OPD | PATIENT | CLINICAL | LAB | FOLLOWUP | BILLING | PHARMACY | SECURITY | SYSTEM | GENERAL
+  category         String    @default("GENERAL")
+  /// LOW | NORMAL | HIGH | URGENT | CRITICAL
+  priority         String    @default("NORMAL")
+  title            String
+  body             String?
+  /// an in-app path only ("/lab/..."); re-checked against the recipient's access when opened
+  actionUrl        String?
+  entityType       String?
+  entityId         String?
+  /// the patient the notification is about (staff search / filters) — never a place for medical content
+  patientId        String?
+  readAt           DateTime?
+  archivedAt       DateTime?
+  expiresAt        DateTime?
+  /// quiet hours: not shown (and not counted) before this moment
+  visibleAt        DateTime  @default(now())
+  ackRequired      Boolean   @default(false)
+  acknowledgedAt   DateTime?
+  acknowledgedById String?
+  /// set once when an unacknowledged important notification was escalated
+  escalatedAt      DateTime?
+  sourceEventId    String?
+  /// notifications with the same groupKey fold into one row with a count
+  groupKey         String?
+  groupCount       Int       @default(1)
+  /// small JSON of non-sensitive display hints
+  metadata         String?
+  /// lets in-app notifications be created lazily without duplicates (NULL = no dedupe)
+  dedupeKey        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now()) @updatedAt
+
+  @@unique([userId, dedupeKey])
+  @@index([tenantId, userId, readAt, createdAt])
+  @@index([userId, archivedAt, createdAt])
+  @@index([userId, category, createdAt])
+  @@index([tenantId, entityType, entityId])
+  @@index([priority, createdAt])
+  @@index([userId, groupKey])
+}
+
+/// Phase 12 — idempotency ledger: the same business event can never notify the same person twice, even when the row was grouped or archived.
+model NotificationEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  eventKey  String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, eventKey])
+  @@index([createdAt])
+}
+
+/// Clinic policy for one notification type: who gets it, how important, whether it needs acknowledging, whether it escalates, which external channels Phase 11 may use.
+model NotificationRule {
+  id               String   @id @default(cuid())
+  tenantId         String
+  type             String
+  enabled          Boolean  @default(true)
+  inApp            Boolean  @default(true)
+  /// JSON array of role keys that receive it (staff). Empty = the built-in default audience.
+  roles            String   @default("[]")
+  priority         String?
+  ackRequired      Boolean?
+  /// minutes without acknowledgement before the clinic admin is told (null = never)
+  escalateAfterMin Int?
+  /// JSON array of external channels Phase 11 may use for the patient (WHATSAPP | SMS | EMAIL); null = whatever the clinic enabled there
+  externalChannels String?
+  updatedAt        DateTime @updatedAt
+
+  @@unique([tenantId, type])
+}
+
+/// A user's own switches per category (in-app). Security and critical notifications cannot be switched off.
+model NotificationPreference {
+  id        String   @id @default(cuid())
+  tenantId  String?
+  userId    String
+  category  String
+  inApp     Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, category])
+}
+
+model NotificationUserSettings {
+  id            String   @id @default(cuid())
+  tenantId      String?
+  userId        String   @unique
+  quietEnabled  Boolean  @default(false)
+  quietStartMin Int      @default(1320)
+  quietEndMin   Int      @default(480)
+  digestEnabled Boolean  @default(false)
+  updatedAt     DateTime @updatedAt
+}
+
+model NotificationSettings {
+  id                   String   @id @default(cuid())
+  tenantId             String   @unique
+  /// retention is OFF unless the clinic switches it on; security / critical / unacknowledged items are never auto-archived
+  retentionEnabled     Boolean  @default(false)
+  archiveReadAfterDays Int      @default(30)
+  expireAfterDays      Int      @default(180)
+  /// default clinic quiet hours for staff who haven't set their own (null = none)
+  lowStockCheck        Boolean  @default(true)
+  updatedAt            DateTime @updatedAt
+}
+
+/// Clinic follow-up CRM (Phase 7). A follow-up is an operational task about a patient; it never contains medical decisions.
+model FollowUp {
+  id                   String            @id @default(cuid())
+  tenantId             String
+  /// FU-2026-000001
+  followUpNumber       String
+  patientId            String
+  patient              Patient           @relation(fields: [patientId], references: [id])
+  doctorUserId         String?
+  consultationId       String?
+  prescriptionId       String?
+  investigationOrderId String?
+  labReportId          String?
+  doctorOrderId        String?
+  recallId             String?
+  /// the appointment that was missed/cancelled (source) and the follow-up visit that was booked from this follow-up
+  sourceAppointmentId  String?
+  appointmentId        String?
+  /// CONSULTATION_FOLLOW_UP | REPORT_REVIEW | MEDICATION_REVIEW | PROCEDURE_FOLLOW_UP | MISSED_APPOINTMENT | NO_SHOW | ROUTINE_RECALL | MANUAL_FOLLOW_UP | DOCUMENT_PENDING | INVESTIGATION_PENDING | OTHER
+  type                 String
+  title                String
+  /// operational description, safe for reception
+  description          String?
+  /// clinical note from the doctor; only shown to users with clinical access
+  doctorNotes          String?
+  /// internal staff notes
+  notes                String?
+  /// YYYY-MM-DD in the clinic's time zone
+  dueDate              String
+  preferredDate        String?
+  /// LOW | NORMAL | HIGH | URGENT — always chosen by a person
+  priority             String            @default("NORMAL")
+  /// PENDING | DUE | IN_PROGRESS | CONTACTED | APPOINTMENT_BOOKED | COMPLETED | PATIENT_DECLINED | NO_RESPONSE | RESCHEDULED | CANCELLED | EXPIRED
+  status               String            @default("PENDING")
+  assignedToId         String?
+  assignedById         String?
+  assignedAt           DateTime?
+  /// CONSULTATION | PRESCRIPTION | REPORT | DOCTOR_ORDER | MANUAL | RECALL | NO_SHOW | CANCELLATION
+  source               String            @default("MANUAL")
+  /// prevents the same trigger creating two follow-ups (e.g. "noshow:<appointmentId>")
+  dedupeKey            String?
+  rescheduleCount      Int               @default(0)
+  outcome              String?
+  outcomeNotes         String?
+  completedAt          DateTime?
+  completedById        String?
+  cancelledAt          DateTime?
+  cancelledById        String?
+  cancelReason         String?
+  createdById          String
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  contacts             FollowUpContact[]
+  events               FollowUpEvent[]
+
+  @@unique([tenantId, followUpNumber])
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, status, dueDate])
+  @@index([tenantId, assignedToId, status])
+  @@index([tenantId, doctorUserId, status])
+  @@index([tenantId, patientId])
+  @@index([tenantId, appointmentId])
+}
+
+model FollowUpContact {
+  id             String   @id @default(cuid())
+  tenantId       String
+  followUpId     String
+  followUp       FollowUp @relation(fields: [followUpId], references: [id], onDelete: Cascade)
+  patientId      String
+  contactedById  String
+  /// PHONE | IN_PERSON | WHATSAPP | SMS | EMAIL | OTHER  — always a MANUAL log; nothing is sent by the system
+  method         String
+  /// CONTACTED | NO_RESPONSE | CALL_BACK_REQUESTED | APPOINTMENT_BOOKED | PATIENT_DECLINED | WRONG_NUMBER | MESSAGE_SENT | OTHER (or a clinic-defined outcome)
+  outcome        String
+  notes          String?
+  contactedAt    DateTime @default(now())
+  nextAction     String?
+  nextActionDate String?
+
+  @@index([tenantId, followUpId, contactedAt])
+}
+
+/// Append-only history: created, assigned, started, rescheduled (with from/to), appointment booked, completed, cancelled, ...
+model FollowUpEvent {
+  id         String   @id @default(cuid())
+  tenantId   String
+  followUpId String
+  followUp   FollowUp @relation(fields: [followUpId], references: [id], onDelete: Cascade)
+  patientId  String
+  /// CREATED | EDITED | ASSIGNED | STARTED | CONTACTED | RESCHEDULED | APPOINTMENT_BOOKED | APPOINTMENT_RELEASED | COMPLETED | CANCELLED | REOPENED
+  type       String
+  userId     String?
+  fromValue  String?
+  toValue    String?
+  note       String?
+  at         DateTime @default(now())
+
+  @@index([tenantId, followUpId, at])
+  @@index([tenantId, patientId, at])
+}
+
+/// A planned future reminder (annual check-up, routine review ...). Recurrence is explicit and bounded.
+model Recall {
+  id             String   @id @default(cuid())
+  tenantId       String
+  patientId      String
+  patient        Patient  @relation(fields: [patientId], references: [id])
+  doctorUserId   String?
+  type           String   @default("ROUTINE_RECALL")
+  title          String
+  /// YYYY-MM-DD
+  dueDate        String
+  /// ONE_TIME | MONTHLY | QUARTERLY | HALF_YEARLY | YEARLY | CUSTOM
+  frequency      String   @default("ONE_TIME")
+  customMonths   Int?
+  /// how many times it may repeat in total (1 for one-time)
+  maxOccurrences Int      @default(1)
+  occurrence     Int      @default(1)
+  /// ACTIVE | FOLLOW_UP_CREATED | COMPLETED | CANCELLED
+  status         String   @default("ACTIVE")
+  notes          String?
+  followUpId     String?
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([tenantId, status, dueDate])
+  @@index([tenantId, patientId])
+}
+
+/// Per-clinic follow-up rules. Nothing automatic happens unless it is switched on here (or chosen by the doctor).
+model FollowUpSettings {
+  id                    String   @id @default(cuid())
+  tenantId              String   @unique
+  createOnNoShow        Boolean  @default(true)
+  createOnCancellation  Boolean  @default(false)
+  recallCreatesFollowUp Boolean  @default(false)
+  completeWhenVisitDone Boolean  @default(false)
+  /// clinic-defined extra outcome codes (JSON string arrays)
+  contactOutcomes       String?
+  completionOutcomes    String?
+  updatedById           String?
+  updatedAt             DateTime @updatedAt
+}
+
+/// ---------------------------------------------------------------------------------------------------------------
+/// Phase 8 — clinic billing. All money is stored as INTEGER minor units (paise/cents) with an explicit currency.
+/// Financial rows hold no clinical data; they link to clinical records only by id.
+/// ---------------------------------------------------------------------------------------------------------------
+model BillingSettings {
+  id                           String   @id @default(cuid())
+  tenantId                     String   @unique
+  currency                     String   @default("INR")
+  invoicePrefix                String   @default("INV")
+  receiptPrefix                String   @default("REC")
+  paymentPrefix                String   @default("PAY")
+  refundPrefix                 String   @default("REF")
+  /// EXCLUSIVE (tax added on top) | INCLUSIVE (prices include tax)
+  taxMode                      String   @default("EXCLUSIVE")
+  /// JSON array of enabled payment methods
+  paymentMethods               String?
+  /// JSON { ROLE: { maxPercentBp, maxFixedMinor } } — nobody may discount until the clinic adds a rule
+  discountRules                String?
+  invoiceFooter                String?
+  receiptFooter                String?
+  paymentTerms                 String?
+  dueDays                      Int?
+  defaultConsultationServiceId String?
+  defaultFollowUpServiceId     String?
+  autoBillConsultation         Boolean  @default(false)
+  autoBillInvestigation        Boolean  @default(false)
+  autoBillFollowUp             Boolean  @default(false)
+  allowOverpayment             Boolean  @default(false)
+  refundSelfApproval           Boolean  @default(false)
+  useCashierSessions           Boolean  @default(false)
+  updatedById                  String?
+  updatedAt                    DateTime @updatedAt
+}
+
+model BillingTax {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  /// basis points: 1800 = 18.00%
+  rateBp    Int
+  /// GST | VAT | SALES | OTHER
+  type      String   @default("OTHER")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, name])
+}
+
+model BillingService {
+  id               String   @id @default(cuid())
+  tenantId         String
+  serviceCode      String
+  serviceName      String
+  description      String?
+  /// CONSULTATION | FOLLOW_UP | PROCEDURE | INVESTIGATION | MEDICINE | DOCUMENT | OTHER
+  type             String   @default("OTHER")
+  category         String?
+  priceMinor       Int
+  taxId            String?
+  discountEligible Boolean  @default(true)
+  /// Phase 6 investigation this price belongs to (optional)
+  investigationId  String?
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([tenantId, serviceCode])
+  @@index([tenantId, type, active])
+}
+
+model Invoice {
+  id                   String         @id @default(cuid())
+  tenantId             String
+  /// INV-2026-000001 (prefix configurable)
+  invoiceNumber        String
+  patientId            String
+  patient              Patient        @relation(fields: [patientId], references: [id])
+  appointmentId        String?
+  opdVisitId           String?
+  consultationId       String?
+  investigationOrderId String?
+  followUpId           String?
+  doctorUserId         String?
+  /// prevents the same clinical event creating two invoices ("consult:<id>")
+  sourceKey            String?
+  /// DRAFT | ISSUED | PARTIALLY_PAID | PAID | CANCELLED | REFUNDED | PARTIALLY_REFUNDED   (OVERDUE is derived from dueDate)
+  status               String         @default("DRAFT")
+  currency             String         @default("INR")
+  taxMode              String         @default("EXCLUSIVE")
+  invoiceDate          String
+  dueDate              String?
+  /// invoice-level discount input (item-level discounts live on the items)
+  discountType         String?
+  discountValue        Int?
+  discountReason       String?
+  discountById         String?
+  subtotalMinor        Int            @default(0)
+  discountMinor        Int            @default(0)
+  taxMinor             Int            @default(0)
+  totalMinor           Int            @default(0)
+  /// successful payments
+  collectedMinor       Int            @default(0)
+  /// processed refunds
+  refundedMinor        Int            @default(0)
+  /// total - collected (what is still owed; never grows because of a refund)
+  dueMinor             Int            @default(0)
+  notes                String?
+  footerSnapshot       String?
+  termsSnapshot        String?
+  issuedAt             DateTime?
+  issuedById           String?
+  createdById          String
+  cancelledAt          DateTime?
+  cancelledById        String?
+  cancelReason         String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  items                InvoiceItem[]
+  payments             Payment[]
+  refunds              Refund[]
+  events               InvoiceEvent[]
+
+  @@unique([tenantId, invoiceNumber])
+  @@unique([tenantId, sourceKey])
+  @@index([tenantId, status, invoiceDate])
+  @@index([tenantId, patientId])
+  @@index([tenantId, consultationId])
+  @@index([tenantId, appointmentId])
+  @@index([tenantId, dueDate])
+}
+
+model InvoiceItem {
+  id                   String  @id @default(cuid())
+  tenantId             String
+  invoiceId            String
+  invoice              Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  position             Int
+  serviceId            String?
+  serviceCodeSnapshot  String?
+  descriptionSnapshot  String
+  serviceTypeSnapshot  String?
+  quantity             Int
+  unitPriceMinor       Int
+  discountType         String?
+  discountValue        Int?
+  /// this line's own discount
+  discountMinor        Int     @default(0)
+  /// share of the invoice-level discount allocated to this line
+  invoiceDiscountMinor Int     @default(0)
+  taxName              String?
+  taxRateBp            Int     @default(0)
+  taxMinor             Int     @default(0)
+  lineSubtotalMinor    Int
+  lineTotalMinor       Int
+  /// CONSULTATION | FOLLOW_UP | INVESTIGATION | PROCEDURE | MEDICINE | DOCUMENT | OTHER
+  sourceType           String?
+  sourceId             String?
+
+  @@index([tenantId, invoiceId])
+  @@index([tenantId, serviceId])
+}
+
+model Payment {
+  id                   String    @id @default(cuid())
+  tenantId             String
+  invoiceId            String
+  invoice              Invoice   @relation(fields: [invoiceId], references: [id])
+  patientId            String
+  patient              Patient   @relation(fields: [patientId], references: [id])
+  /// PAY-2026-000001
+  paymentNumber        String
+  /// REC-2026-000001 (the receipt for this payment)
+  receiptNumber        String?
+  amountMinor          Int
+  /// CASH | UPI | CARD | BANK_TRANSFER | ONLINE | CHEQUE | OTHER
+  method               String
+  /// PENDING | SUCCESS | FAILED | CANCELLED | REFUNDED | PARTIALLY_REFUNDED
+  status               String    @default("SUCCESS")
+  transactionReference String?
+  /// client-generated key: submitting the same payment twice returns the first one
+  idempotencyKey       String?
+  paymentDate          String
+  notes                String?
+  receivedById         String
+  refundedMinor        Int       @default(0)
+  /// future online gateway (not connected): never set by manual payments
+  gatewayProvider      String?
+  gatewayOrderId       String?
+  gatewayTransactionId String?
+  cancelledAt          DateTime?
+  cancelledById        String?
+  cancelReason         String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  refunds              Refund[]
+
+  @@unique([tenantId, paymentNumber])
+  @@unique([tenantId, receiptNumber])
+  @@unique([tenantId, idempotencyKey])
+  @@unique([tenantId, method, transactionReference])
+  @@index([tenantId, paymentDate])
+  @@index([tenantId, invoiceId])
+  @@index([tenantId, patientId])
+}
+
+model Refund {
+  id            String    @id @default(cuid())
+  tenantId      String
+  invoiceId     String
+  invoice       Invoice   @relation(fields: [invoiceId], references: [id])
+  paymentId     String
+  payment       Payment   @relation(fields: [paymentId], references: [id])
+  /// REF-2026-000001
+  refundNumber  String
+  amountMinor   Int
+  reason        String
+  method        String
+  /// REQUESTED | APPROVED | PROCESSED | REJECTED | CANCELLED
+  status        String    @default("REQUESTED")
+  requestedById String
+  approvedById  String?
+  approvedAt    DateTime?
+  processedById String?
+  processedAt   DateTime?
+  rejectedById  String?
+  rejectedAt    DateTime?
+  rejectReason  String?
+  reference     String?
+  createdAt     DateTime  @default(now())
+
+  @@unique([tenantId, refundNumber])
+  @@index([tenantId, status])
+  @@index([tenantId, invoiceId])
+}
+
+/// Append-only financial history per invoice.
+model InvoiceEvent {
+  id          String   @id @default(cuid())
+  tenantId    String
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  patientId   String
+  /// CREATED | EDITED | ISSUED | PAYMENT_RECEIVED | PAYMENT_CANCELLED | CANCELLED | REFUND_REQUESTED | REFUND_APPROVED | REFUND_PROCESSED | REFUND_REJECTED
+  type        String
+  userId      String?
+  amountMinor Int?
+  ref         String?
+  note        String?
+  at          DateTime @default(now())
+
+  @@index([tenantId, invoiceId, at])
+  @@index([tenantId, patientId, at])
+}
+
+model CashierSession {
+  id            String    @id @default(cuid())
+  tenantId      String
+  openedById    String
+  openedAt      DateTime  @default(now())
+  openingMinor  Int
+  closedById    String?
+  closedAt      DateTime?
+  closingMinor  Int?
+  /// cash expected at close: opening + cash collected − cash refunded during the session by this cashier
+  expectedMinor Int?
+  /// OPEN | CLOSED
+  status        String    @default("OPEN")
+  notes         String?
+
+  @@index([tenantId, status])
+  @@index([tenantId, openedById, status])
+}
+
+/// ---------------------------------------------------------------------------------------------------------------
+/// Phase 9 — pharmacy & medicine inventory. Tenant-scoped. Stock quantities are whole base units (tablet, ml, vial …).
+/// Money is integer minor units (Phase 8 convention). Stock only ever changes through StockTransaction rows (the ledger),
+/// written in the same database transaction as the batch update. Ledger rows are never updated or deleted.
+/// ---------------------------------------------------------------------------------------------------------------
+
+model PharmacySettings {
+  id                  String   @id @default(cuid())
+  tenantId            String   @unique
+  /// days before expiry that count as "near expiry" (configurable, e.g. 30 / 60 / 90)
+  nearExpiryDays      Int      @default(90)
+  /// explicit override: allow dispensing more than the prescribed quantity
+  allowOverDispense   Boolean  @default(false)
+  /// clinic policy: are medicines returned by patients accepted at all?
+  allowPatientReturns Boolean  @default(false)
+  returnWindowDays    Int      @default(7)
+  billFooter          String?
+  updatedAt           DateTime @updatedAt
+}
+
+/// Configurable lists: DOSAGE_FORM | CATEGORY | UNIT (nothing is hardcoded as the only choice).
+model PharmacyConfigItem {
+  id        String   @id @default(cuid())
+  tenantId  String
+  kind      String
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, kind, name])
+  @@index([tenantId, kind])
+}
+
+model Medicine {
+  id                   String             @id @default(cuid())
+  tenantId             String
+  /// MED-000001, immutable, per clinic
+  medicineCode         String
+  genericName          String
+  brandName            String?
+  strength             String?
+  dosageForm           String?
+  route                String?
+  manufacturer         String?
+  category             String?
+  unit                 String             @default("unit")
+  packSize             Int?
+  barcode              String?
+  reorderLevel         Int                @default(0)
+  minimumStock         Int                @default(0)
+  maximumStock         Int?
+  purchasePriceMinor   Int                @default(0)
+  sellingPriceMinor    Int                @default(0)
+  taxRateBp            Int                @default(0)
+  prescriptionRequired Boolean            @default(true)
+  active               Boolean            @default(true)
+  notes                String?
+  createdById          String
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  batches              MedicineBatch[]
+  purchaseItems        PurchaseItem[]
+  transactions         StockTransaction[]
+
+  @@unique([tenantId, medicineCode])
+  @@index([tenantId, genericName])
+  @@index([tenantId, brandName])
+  @@index([tenantId, barcode])
+  @@index([tenantId, category])
+}
+
+model Supplier {
+  id            String     @id @default(cuid())
+  tenantId      String
+  /// SUP-000001
+  supplierCode  String
+  supplierName  String
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  taxId         String?
+  paymentTerms  String?
+  active        Boolean    @default(true)
+  notes         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  purchases     Purchase[]
+
+  @@unique([tenantId, supplierCode])
+  @@index([tenantId, supplierName])
+}
+
+model Purchase {
+  id                    String         @id @default(cuid())
+  tenantId              String
+  supplierId            String
+  supplier              Supplier       @relation(fields: [supplierId], references: [id])
+  /// PUR-2026-000001, assigned at creation, immutable
+  purchaseNumber        String
+  supplierInvoiceNumber String?
+  purchaseDate          String
+  subtotalMinor         Int            @default(0)
+  discountMinor         Int            @default(0)
+  taxMinor              Int            @default(0)
+  totalMinor            Int            @default(0)
+  /// DRAFT | RECEIVED | COMPLETED | CANCELLED
+  status                String         @default("DRAFT")
+  notes                 String?
+  createdById           String
+  receivedAt            DateTime?
+  receivedById          String?
+  completedAt           DateTime?
+  completedById         String?
+  cancelledAt           DateTime?
+  cancelledById         String?
+  cancelReason          String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  items                 PurchaseItem[]
+
+  @@unique([tenantId, purchaseNumber])
+  @@unique([tenantId, supplierId, supplierInvoiceNumber])
+  @@index([tenantId, status, purchaseDate])
+  @@index([tenantId, supplierId])
+}
+
+model PurchaseItem {
+  id                     String   @id @default(cuid())
+  tenantId               String
+  purchaseId             String
+  purchase               Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  position               Int
+  medicineId             String
+  medicine               Medicine @relation(fields: [medicineId], references: [id])
+  batchNumber            String
+  expiryDate             String
+  manufacturingDate      String?
+  quantity               Int
+  freeQuantity           Int      @default(0)
+  unitPurchasePriceMinor Int
+  sellingPriceMinor      Int
+  taxRateBp              Int      @default(0)
+  discountMinor          Int      @default(0)
+  taxMinor               Int      @default(0)
+  lineTotalMinor         Int
+  /// set when the purchase is received
+  batchId                String?
+  createdAt              DateTime @default(now())
+
+  @@index([tenantId, purchaseId])
+  @@index([tenantId, medicineId])
+}
+
+model MedicineBatch {
+  id                 String             @id @default(cuid())
+  tenantId           String
+  medicineId         String
+  medicine           Medicine           @relation(fields: [medicineId], references: [id])
+  /// supplied by the manufacturer / supplier; never replaced by an internal id
+  batchNumber        String
+  /// YYYY-MM-DD, last valid day
+  expiryDate         String
+  manufacturingDate  String?
+  purchasePriceMinor Int                @default(0)
+  sellingPriceMinor  Int                @default(0)
+  quantityReceived   Int                @default(0)
+  quantityAvailable  Int                @default(0)
+  reservedQuantity   Int                @default(0)
+  dispensedQuantity  Int                @default(0)
+  returnedQuantity   Int                @default(0)
+  damagedQuantity    Int                @default(0)
+  expiredQuantity    Int                @default(0)
+  /// ACTIVE | BLOCKED stored; LOW_STOCK / EXPIRED / DEPLETED are derived from quantity and dates
+  status             String             @default("ACTIVE")
+  blockedReason      String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  transactions       StockTransaction[]
+
+  @@unique([tenantId, medicineId, batchNumber])
+  @@index([tenantId, medicineId, expiryDate])
+  @@index([tenantId, expiryDate])
+}
+
+/// Immutable stock ledger. quantity is signed (+ in, - out); balanceAfter is the batch balance after this row.
+model StockTransaction {
+  id            String        @id @default(cuid())
+  tenantId      String
+  medicineId    String
+  medicine      Medicine      @relation(fields: [medicineId], references: [id])
+  batchId       String
+  batch         MedicineBatch @relation(fields: [batchId], references: [id])
+  /// OPENING | PURCHASE | DISPENSE | RETURN | SALE_RETURN | PURCHASE_RETURN | ADJUSTMENT_IN | ADJUSTMENT_OUT | DAMAGE | EXPIRY | TRANSFER_IN | TRANSFER_OUT | REVERSAL
+  type          String
+  quantity      Int
+  balanceAfter  Int
+  referenceType String?
+  referenceId   String?
+  reason        String?
+  notes         String?
+  createdById   String
+  createdAt     DateTime      @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, medicineId, createdAt])
+  @@index([tenantId, batchId, createdAt])
+  @@index([tenantId, referenceType, referenceId])
+}
+
+model Dispensing {
+  id                  String           @id @default(cuid())
+  tenantId            String
+  patientId           String
+  patient             Patient          @relation(fields: [patientId], references: [id])
+  prescriptionId      String
+  prescription        Prescription     @relation(fields: [prescriptionId], references: [id])
+  prescriptionVersion Int              @default(0)
+  invoiceId           String?
+  /// DSP-2026-000001
+  dispensingNumber    String
+  dispensedById       String
+  /// PARTIALLY_DISPENSED | DISPENSED | CANCELLED   (the prescription's own PENDING state is derived: no dispensing yet)
+  status              String
+  totalMinor          Int              @default(0)
+  dispensedAt         DateTime         @default(now())
+  notes               String?
+  idempotencyKey      String
+  cancelledAt         DateTime?
+  cancelledById       String?
+  cancelReason        String?
+  items               DispensingItem[]
+
+  @@unique([tenantId, dispensingNumber])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, patientId, dispensedAt])
+  @@index([tenantId, prescriptionId])
+  @@index([tenantId, dispensedAt])
+}
+
+model DispensingItem {
+  id                   String     @id @default(cuid())
+  tenantId             String
+  dispensingId         String
+  dispensing           Dispensing @relation(fields: [dispensingId], references: [id], onDelete: Cascade)
+  prescriptionItemId   String
+  /// stable across prescription amendments: normalised name|strength#n
+  itemKey              String
+  medicineId           String
+  batchId              String
+  medicineNameSnapshot String
+  batchNumberSnapshot  String
+  expirySnapshot       String
+  prescribedQuantity   Int
+  dispensedQuantity    Int
+  unitPriceMinor       Int
+  taxName              String?
+  taxRateBp            Int        @default(0)
+  taxMinor             Int        @default(0)
+  discountMinor        Int        @default(0)
+  totalMinor           Int
+  returnedQuantity     Int        @default(0)
+  /// DISPENSED | CANCELLED
+  status               String     @default("DISPENSED")
+  /// why a batch other than the first-expiry one was used / why a different medicine than prescribed was given
+  batchOverrideReason  String?
+  notes                String?
+
+  @@index([tenantId, dispensingId])
+  @@index([tenantId, prescriptionItemId])
+  @@index([tenantId, medicineId])
+  @@index([tenantId, batchId])
+}
+
+model MedicineReturn {
+  id               String   @id @default(cuid())
+  tenantId         String
+  /// RET-2026-000001
+  returnNumber     String
+  /// PATIENT_RETURN | PURCHASE_RETURN | OTHER
+  type             String
+  /// REQUESTED | APPROVED | RECEIVED | RESTOCKED | DISPOSED | REJECTED
+  status           String
+  medicineId       String
+  batchId          String
+  quantity         Int
+  reason           String
+  /// SEALED | OPENED | DAMAGED | EXPIRED (recorded when received)
+  condition        String?
+  patientId        String?
+  dispensingItemId String?
+  supplierId       String?
+  reference        String?
+  notes            String?
+  requestedById    String
+  approvedById     String?
+  receivedById     String?
+  resolvedById     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([tenantId, returnNumber])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, dispensingItemId])
+  @@index([tenantId, batchId])
+}
+
+model StockCount {
+  id          String           @id @default(cuid())
+  tenantId    String
+  /// CNT-2026-000001
+  countNumber String
+  /// OPEN | APPLIED | CANCELLED
+  status      String           @default("OPEN")
+  notes       String?
+  createdById String
+  appliedById String?
+  appliedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  lines       StockCountLine[]
+
+  @@unique([tenantId, countNumber])
+  @@index([tenantId, status])
+}
+
+model StockCountLine {
+  id               String     @id @default(cuid())
+  tenantId         String
+  countId          String
+  count            StockCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+  batchId          String
+  medicineId       String
+  systemQuantity   Int
+  physicalQuantity Int?
+  /// physical - system, set when the count is applied
+  difference       Int?
+  reason           String?
+
+  @@unique([countId, batchId])
+  @@index([tenantId, countId])
+}
+
+/// ---------------------------------------------------------------------------------------------------------------
+/// Phase 10 — patient portal. A portal login is  User (role PATIENT) → PatientAccount → Patient (the Phase 4 record).
+/// The Patient record stays the single source of medical identity: an account never creates a second patient.
+/// The portal identifies the patient ONLY through the session → account → patient chain (never an id from the browser).
+/// ---------------------------------------------------------------------------------------------------------------
+
+model PatientAccount {
+  id                String    @id @default(cuid())
+  tenantId          String
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id])
+  /// ONE portal account per patient record
+  patientId         String    @unique
+  patient           Patient   @relation(fields: [patientId], references: [id])
+  /// what the patient types to sign in (normalised); unique inside the clinic
+  loginEmail        String?
+  loginPhone        String?
+  /// ACTIVE | SUSPENDED | DEACTIVATED
+  status            String    @default("ACTIVE")
+  verifiedAt        DateTime?
+  lastLoginAt       DateTime?
+  /// sessions that were signed in before this moment are rejected (log out everywhere / password change)
+  sessionsValidFrom DateTime  @default(now())
+  passwordChangedAt DateTime?
+  /// JSON: { appointments, followUps, billing, reports, general } -> boolean (in-app notification categories)
+  prefs             String    @default("{}")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([tenantId, loginEmail])
+  @@unique([tenantId, loginPhone])
+  @@index([tenantId, status])
+}
+
+/// Clinic-issued, single-use activation / access-reset code. Only a hash is stored; the code is shown once to the staff member.
+model PatientInvite {
+  id          String    @id @default(cuid())
+  tenantId    String
+  patientId   String
+  codeHash    String    @unique
+  /// ACTIVATION | ACCESS_RESET
+  purpose     String    @default("ACTIVATION")
+  expiresAt   DateTime
+  usedAt      DateTime?
+  revokedAt   DateTime?
+  attempts    Int       @default(0)
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId, patientId, createdAt])
+}
+
+/// A patient's request that clinic staff review: profile / medical-information correction, account deactivation, support.
+model PatientRequest {
+  id             String    @id @default(cuid())
+  tenantId       String
+  /// PRQ-2026-000001
+  requestNumber  String
+  patientId      String
+  /// PROFILE_CORRECTION | MEDICAL_CORRECTION | ACCOUNT_DEACTIVATION | SUPPORT
+  kind           String
+  field          String?
+  currentValue   String?
+  requestedValue String?
+  reason         String
+  /// PENDING | UNDER_REVIEW | APPROVED | REJECTED | CANCELLED
+  status         String    @default("PENDING")
+  reviewedById   String?
+  reviewedAt     DateTime?
+  reviewNote     String?
+  /// true when a reviewer applied an approved demographic correction to the patient record
+  applied        Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([tenantId, requestNumber])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, patientId, createdAt])
+}
+
+/// Clinic-level portal policy. Defaults are conservative (diagnoses hidden from the portal until the clinic opts in).
+model PortalSettings {
+  id                String   @id @default(cuid())
+  tenantId          String   @unique
+  enabled           Boolean  @default(true)
+  allowBooking      Boolean  @default(true)
+  allowCancel       Boolean  @default(true)
+  allowReschedule   Boolean  @default(true)
+  /// patients can't cancel / reschedule closer than this to the appointment
+  changeCutoffHours Int      @default(24)
+  showDiagnoses     Boolean  @default(false)
+  /// JSON array of Patient fields the patient may edit directly
+  editableFields    String   @default("[\"preferredName\",\"email\",\"alternatePhone\",\"addressLine\",\"city\",\"state\",\"country\",\"pincode\",\"emergencyContactName\",\"emergencyContactRelation\",\"emergencyContactPhone\"]")
+  supportNote       String?
+  privacyNotice     String?
+  consentVersion    String   @default("v1")
+  updatedAt         DateTime @updatedAt
+}
+
+/// Phase 11 — outbound patient communication (WhatsApp / SMS / email). Provider CREDENTIALS are never stored here: they come from environment variables only.
+model CommunicationSettings {
+  id                 String   @id @default(cuid())
+  tenantId           String   @unique
+  whatsappEnabled    Boolean  @default(false)
+  smsEnabled         Boolean  @default(false)
+  emailEnabled       Boolean  @default(false)
+  /// JSON array: which channel to try first, in order. Only ONE channel is used per message (no spamming on every channel).
+  channelOrder       String   @default("[\"WHATSAPP\",\"SMS\",\"EMAIL\"]")
+  /// name shown to the patient as the sender (falls back to the clinic name)
+  senderName         String?
+  replyTo            String?
+  defaultLanguage    String   @default("en")
+  /// JSON: { "<EVENT>": true|false } overrides of the built-in per-event defaults
+  eventToggles       String   @default("{}")
+  /// JSON array of minutes before an appointment at which a reminder is sent, e.g. [1440,120]
+  reminderOffsets    String   @default("[1440]")
+  quietEnabled       Boolean  @default(false)
+  /// minutes after local midnight, clinic timezone
+  quietStartMin      Int      @default(1320)
+  quietEndMin        Int      @default(480)
+  /// JSON: { "WHATSAPP": "SMS" } — used only when explicitly configured, and only if the patient allows the fallback channel
+  fallbackRules      String   @default("{}")
+  maxRetries         Int      @default(3)
+  /// per patient per channel per 24 h (security messages excluded)
+  dailyCapPerPatient Int      @default(8)
+  updatedAt          DateTime @updatedAt
+}
+
+model CommunicationTemplate {
+  id                 String   @id @default(cuid())
+  tenantId           String
+  /// WHATSAPP | SMS | EMAIL
+  channel            String
+  eventType          String
+  name               String
+  /// en | hi | pa
+  language           String   @default("en")
+  subject            String?
+  body               String
+  /// WhatsApp: the provider-APPROVED template name; SMS: the operator (DLT) template id. Required before WhatsApp can send.
+  providerTemplateId String?
+  /// JSON array: ordered variable names (WhatsApp positional parameters follow this order)
+  variables          String   @default("[]")
+  /// DRAFT | ACTIVE | INACTIVE | ARCHIVED
+  status             String   @default("DRAFT")
+  isDefault          Boolean  @default(false)
+  createdById        String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([tenantId, channel, eventType, language, name])
+  @@index([tenantId, channel, eventType, status])
+}
+
+model CommunicationMessage {
+  id                String                 @id @default(cuid())
+  tenantId          String
+  patientId         String?
+  /// WHATSAPP | SMS | EMAIL
+  channel           String
+  eventType         String
+  /// TRANSACTIONAL | SECURITY | MARKETING
+  category          String                 @default("TRANSACTIONAL")
+  /// LOW | NORMAL | HIGH | CRITICAL
+  priority          String                 @default("NORMAL")
+  templateId        String?
+  language          String                 @default("en")
+  entityType        String?
+  entityId          String?
+  recipient         String
+  subject           String?
+  /// rendered text actually sent (names, dates and portal links only — never results, diagnoses or secrets)
+  body              String
+  /// the portal link that was included, if any (no medical data in it)
+  link              String?
+  /// JSON { eventKey, vars, linkPath } — the non-sensitive values the text was built from, so a retry / fallback / resend can rebuild it in another channel or language
+  context           String?
+  provider          String?
+  providerMessageId String?
+  /// QUEUED | PROCESSING | RETRYING | SENT | DELIVERED | READ | FAILED | CANCELLED | SKIPPED
+  status            String                 @default("QUEUED")
+  scheduledAt       DateTime               @default(now())
+  nextAttemptAt     DateTime?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  failedAt          DateTime?
+  /// short machine code (PROVIDER_NOT_CONFIGURED, NO_CONSENT, PROVIDER_REJECTED …) — never a stack trace or credential
+  failureCode       String?
+  failureReason     String?
+  attempts          Int                    @default(0)
+  maxAttempts       Int                    @default(3)
+  /// idempotency: the same business event + channel can never create two messages
+  dedupeKey         String
+  fallbackOfId      String?
+  resendOfId        String?
+  createdById       String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  attemptsLog       CommunicationAttempt[]
+
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, status, scheduledAt])
+  @@index([tenantId, patientId, createdAt])
+  @@index([tenantId, channel, eventType, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([entityType, entityId])
+  @@index([provider, providerMessageId])
+  @@index([status, nextAttemptAt])
+}
+
+/// Delivery history of one message: every state change, with the provider's (safe) code.
+model CommunicationAttempt {
+  id        String               @id @default(cuid())
+  tenantId  String
+  messageId String
+  message   CommunicationMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  status    String
+  /// PROVIDER | WEBHOOK | SYSTEM
+  source    String               @default("SYSTEM")
+  code      String?
+  note      String?
+  createdAt DateTime             @default(now())
+
+  @@index([tenantId, messageId, createdAt])
+}
+
+/// Inbound provider callbacks. `eventKey` makes every callback idempotent and replay-proof. Not tenant-scoped: it is written before the message (and so the clinic) is known.
+model CommunicationWebhookEvent {
+  id         String   @id @default(cuid())
+  provider   String
+  eventKey   String   @unique
+  messageId  String?
+  status     String?
+  outcome    String
+  receivedAt DateTime @default(now())
+
+  @@index([provider, receivedAt])
+}
+
+/// Phase 13: per-clinic analytics thresholds (rule-based insights). Defaults apply when no row exists.
+model AnalyticsSettings {
+  id        String   @id @default(cuid())
+  tenantId  String   @unique
+  /// JSON: { noShowRatePct, cancellationRatePct, waitingMinutes, overdueFollowUps, labTurnaroundHours, outstandingOverdueCount, expiryDays }
+  thresholds String  @default("{}")
+  updatedById String?
+  updatedAt DateTime @updatedAt
+}
+
+/// Phase 13: scheduled-report FOUNDATION. Definitions only; nothing is generated or sent externally yet.
+model ScheduledReport {
+  id          String    @id @default(cuid())
+  tenantId    String
+  name        String
+  reportKey   String
+  /// JSON of validated filters (range preset etc.)
+  filters     String    @default("{}")
+  /// DAILY | WEEKLY | MONTHLY
+  frequency   String
+  format      String    @default("CSV")
+  enabled     Boolean   @default(true)
+  createdById String
+  lastRunAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([tenantId, enabled])
+}
+
+/// Phase 14: every clinic lifecycle change (activate / suspend / archive / restore ...) with who, why and when. Never deleted.
+model TenantStatusEvent {
+  id         String   @id @default(cuid())
+  tenantId   String
+  fromStatus String
+  toStatus   String
+  /// ADMINISTRATIVE | SECURITY | TECHNICAL | CONTRACTUAL | OTHER | ONBOARDING
+  category   String
+  notes      String?
+  actorId    String
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+/// Phase 14: per-clinic feature switch. No row = enabled (default). Disabling never deletes data.
+model TenantFeature {
+  id          String   @id @default(cuid())
+  tenantId    String
+  key         String
+  enabled     Boolean  @default(true)
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, key])
+  @@index([tenantId, enabled])
+}
+
+/// Phase 14: per-clinic platform configuration that is not branding/profile: limits (foundation, NOT enforced), retention (foundation, never auto-deletes), maintenance.
+model TenantConfig {
+  id                 String   @id @default(cuid())
+  tenantId           String   @unique
+  /// JSON: { maxDoctors, maxStaff, maxPatients, maxAppointmentsPerMonth, storageLimitMb } (null = unlimited). Configuration only.
+  limits             String   @default("{}")
+  /// JSON: { clinicalYears, documentYears, communicationDays, auditYears } (null = keep). Nothing is deleted automatically.
+  retention          String   @default("{}")
+  maintenanceMode    Boolean  @default(false)
+  maintenanceMessage String?
+  updatedById        String?
+  updatedAt          DateTime @updatedAt
+}
+
+/// Phase 14: an explicit, reasoned, time-limited Super Admin visit to a clinic workspace. The workspace cookie is only honoured while an open row exists.
+model SupportAccess {
+  id        String    @id @default(cuid())
+  tenantId  String
+  actorId   String
+  reason    String
+  startedAt DateTime  @default(now())
+  expiresAt DateTime
+  endedAt   DateTime?
+
+  @@index([actorId, endedAt])
+  @@index([tenantId, startedAt])
+}
+
+/// Phase 14: platform-wide defaults and switches (key/value JSON). Clinic configuration overrides these where appropriate.
+model PlatformSetting {
+  key         String   @id
+  value       String
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
+/// Phase 14: announcements shown as a banner to signed-in staff. Audience ALL | ADMINS | SELECTED (audienceTenants = JSON array of clinic ids).
+model PlatformAnnouncement {
+  id              String    @id @default(cuid())
+  title           String
+  body            String
+  audience        String    @default("ALL")
+  audienceTenants String    @default("[]")
+  startsAt        DateTime  @default(now())
+  endsAt          DateTime?
+  active          Boolean   @default(true)
+  createdById     String
+  createdAt       DateTime  @default(now())
+
+  @@index([active, startsAt])
+}
+
+/// Phase 15: who the clinic is for MECGURA's invoices (legal billing identity, NOT the clinic's patient-facing branding).
+model SubscriptionBillingProfile {
+  id                 String   @id @default(cuid())
+  tenantId           String   @unique
+  legalName          String
+  billingName        String?
+  billingEmail       String
+  billingPhone       String?
+  contactName        String?
+  addressLine        String?
+  city               String?
+  state              String?
+  /// GST state code (two digits) when applicable; decides CGST+SGST vs IGST
+  stateCode          String?
+  country            String   @default("India")
+  pincode            String?
+  gstin              String?
+  taxId              String?
+  updatedById        String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+/// Phase 15: SaaS invoice (clinic -> MECGURA). Entirely separate from the patient Invoice of Phase 8. Immutable once issued except status/paid fields.
+model SaasInvoice {
+  id             String    @id @default(cuid())
+  tenantId       String
+  subscriptionId String
+  invoiceNumber  String    @unique
+  /// NEW | RENEWAL | UPGRADE | OTHER
+  kind           String    @default("RENEWAL")
+  /// DRAFT | ISSUED | PAID | PARTIALLY_PAID | OVERDUE | VOID | REFUNDED | PARTIALLY_REFUNDED
+  status         String    @default("ISSUED")
+  currency       String    @default("INR")
+  periodStart    DateTime
+  periodEnd      DateTime
+  subtotalMinor  Int       @default(0)
+  discountMinor  Int       @default(0)
+  taxMinor       Int       @default(0)
+  totalMinor     Int       @default(0)
+  paidMinor      Int       @default(0)
+  refundedMinor  Int       @default(0)
+  /// EXCLUSIVE | INCLUSIVE and the exact tax lines used (rates are snapshotted, never recomputed later)
+  taxMode        String    @default("EXCLUSIVE")
+  taxSnapshot    String    @default("{}")
+  /// JSON snapshots of the vendor (MECGURA) and the bill-to party at issue time
+  vendorSnapshot String    @default("{}")
+  billToSnapshot String    @default("{}")
+  planName       String?
+  /// prevents duplicate invoices for the same subscription period and purpose
+  dedupeKey      String    @unique
+  /// JSON { planId, billingInterval, planVersion } — the plan/interval this invoice switches the subscription to once it is PAID (renewal at a new plan, or an upgrade)
+  changeJson     String?
+  issuedAt       DateTime?
+  dueAt          DateTime?
+  paidAt         DateTime?
+  voidedAt       DateTime?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  items          SaasInvoiceItem[]
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@index([subscriptionId, periodStart])
+  @@index([status, dueAt])
+}
+
+model SaasInvoiceItem {
+  id          String      @id @default(cuid())
+  tenantId    String
+  invoiceId   String
+  invoice     SaasInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  position    Int         @default(0)
+  description String
+  quantity    Int         @default(1)
+  unitMinor   Int         @default(0)
+  totalMinor  Int         @default(0)
+
+  @@index([invoiceId])
+}
+
+/// Phase 15: SaaS payment (clinic -> MECGURA). Separate from the patient Payment of Phase 8.
+model SaasPayment {
+  id                 String    @id @default(cuid())
+  tenantId           String
+  subscriptionId     String
+  invoiceId          String
+  amountMinor        Int
+  currency           String    @default("INR")
+  /// ONLINE | CARD | UPI | BANK_TRANSFER | OTHER
+  method             String    @default("ONLINE")
+  /// PENDING | SUCCEEDED | FAILED | CANCELLED | REFUNDED | PARTIALLY_REFUNDED
+  status             String    @default("PENDING")
+  provider           String
+  providerPaymentId  String?
+  providerOrderId    String?
+  transactionReference String?
+  receiptNumber      String?   @unique
+  refundedMinor      Int       @default(0)
+  failureReason      String?
+  attempt            Int       @default(1)
+  /// safe provider reference data only (never card numbers, tokens or secrets)
+  metadata           String    @default("{}")
+  idempotencyKey     String    @unique
+  paidAt             DateTime?
+  recordedById       String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([provider, providerPaymentId])
+  @@index([tenantId, createdAt])
+  @@index([invoiceId])
+  @@index([subscriptionId, status])
+}
+
+model SaasRefund {
+  id               String    @id @default(cuid())
+  tenantId         String
+  subscriptionId   String
+  invoiceId        String
+  paymentId        String
+  refundNumber     String    @unique
+  amountMinor      Int
+  currency         String    @default("INR")
+  reason           String
+  /// REQUESTED | APPROVED | PROCESSED | REJECTED | CANCELLED
+  status           String    @default("REQUESTED")
+  providerRefundId String?
+  requestedById    String
+  decidedById      String?
+  decidedAt        DateTime?
+  processedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([tenantId, createdAt])
+  @@index([paymentId])
+}
+
+/// Phase 15: provider events, one row per provider event id => a replayed webhook can never be processed twice. Not tenant-scoped (written before the clinic is known).
+model SubscriptionWebhookEvent {
+  id          String    @id @default(cuid())
+  provider    String
+  eventId     String
+  eventType   String
+  payloadHash String
+  /// RECEIVED | PROCESSED | IGNORED | FAILED
+  status      String    @default("RECEIVED")
+  error       String?
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  @@unique([provider, eventId])
+  @@index([receivedAt])
+}
+
+/// Phase 15: metered usage per limit and billing period. Closed periods stay as history.
+model SubscriptionUsage {
+  id             String   @id @default(cuid())
+  tenantId       String
+  subscriptionId String
+  limitKey       String
+  periodStart    DateTime
+  periodEnd      DateTime
+  used           Int      @default(0)
+  /// the limit that applied (null = unlimited / disabled)
+  limitValue     Int?
+  closed         Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, limitKey, periodStart])
+  @@index([subscriptionId, periodStart])
+}
+
+/// Phase 15: append-only subscription history (status and plan changes). Feeds churn / conversion reporting.
+model SubscriptionEvent {
+  id           String   @id @default(cuid())
+  tenantId     String
+  subscriptionId String
+  type         String
+  fromStatus   String?
+  toStatus     String?
+  fromPlanId   String?
+  toPlanId     String?
+  actorId      String?
+  /// USER | SUPER_ADMIN | SYSTEM | WEBHOOK
+  source       String   @default("SYSTEM")
+  note         String?
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([type, createdAt])
+  @@index([subscriptionId, createdAt])
+}
+
+/// Phase 15: platform-wide atomic counters (invoice / receipt / refund numbers).
+model PlatformCounter {
+  key   String @id
+  value Int    @default(0)
+}
