@@ -143,3 +143,6 @@ Real-data analytics at `/analytics`: Command Center KPIs, patient / appointment 
 
 ## Phase 14 — Super Admin & Platform Management
 A Super Admin console under `/platform`: platform dashboard, clinic lifecycle (pending → active → suspended/inactive → archived, with history), per-clinic users, branding (live preview), domains (real DNS TXT verification), feature switches enforced server-side, platform settings (defaults, maintenance, announcements), system health and a platform-wide audit center. Sensitive actions need a reason and the admin's own password; support access to a clinic is reasoned, time-limited, audited and always visible; there is no impersonation. See [`docs/phase14-platform.md`](docs/phase14-platform.md).
+
+## Phase 15 — Subscription, plans & MECGURA clinic billing
+Clinics subscribe to MECGURA HEALTH: plans with features/limits (one feature system with Phase 14), trials that never auto-charge, server-verified payments (signed webhook + provider re-check, idempotent), invoices/receipts/refunds, renewals with dunning → grace → read-only suspension, upgrade/downgrade with usage safety, usage limits enforced on the server, Super Admin plan & subscription console and analytics. Separate from patient billing (Phase 8). See [docs/phase15-subscriptions.md](docs/phase15-subscriptions.md).

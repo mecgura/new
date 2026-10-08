@@ -130,7 +130,7 @@ export async function setClinicStatus(ctx: RequestContext, id: string, status: T
   if (before.status === status) return { status };
   await db.$transaction([
     db.tenant.update({ where: { id }, data: { status } }),
-    db.subscription.updateMany({ where: { tenantId: id }, data: { status: status === "ACTIVE" ? "ACTIVE" : status === "TRIAL" ? "TRIAL" : "CANCELLED" } }),
+    db.subscription.updateMany({ where: { tenantId: id, managed: false }, data: { status: status === "ACTIVE" ? "ACTIVE" : status === "TRIAL" ? "TRIAL" : "CANCELLED" } }),
   ]);
   await recordAudit({ action: AUDIT_ACTIONS.CLINIC_STATUS_CHANGED, tenantId: id, actorId: ctx.user.id, entityType: "tenant", entityId: id, metadata: { from: before.status, to: status } });
   return { status };

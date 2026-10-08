@@ -12,7 +12,7 @@ export default async function ClinicLayout({ children, params }: { children: Rea
   const ctx = await requirePagePermission("platform.manage"); const { id } = await params;
   const t = await getClinic(ctx, id).catch((e) => { if (e instanceof AppError && e.code === "NOT_FOUND") notFound(); throw e; });
   const base = `/platform/clinics/${id}`;
-  const tabs = [{ href: base, label: "Overview", exact: true }, { href: `${base}/users`, label: "Users" }, { href: `${base}/branding`, label: "Branding" }, { href: `${base}/domains`, label: "Domains" }, { href: `${base}/features`, label: "Features" }, { href: `${base}/settings`, label: "Settings" }, { href: `${base}/communications`, label: "Communications" }, { href: `${base}/notifications`, label: "Notifications" }, { href: `${base}/analytics`, label: "Analytics" }, { href: `${base}/audit`, label: "Audit" }, { href: `${base}/activity`, label: "Activity" }];
+  const tabs = [{ href: base, label: "Overview", exact: true }, { href: `${base}/users`, label: "Users" }, { href: `${base}/branding`, label: "Branding" }, { href: `${base}/domains`, label: "Domains" }, { href: `${base}/features`, label: "Features" }, { href: `${base}/subscription`, label: "Subscription" }, { href: `${base}/settings`, label: "Settings" }, { href: `${base}/communications`, label: "Communications" }, { href: `${base}/notifications`, label: "Notifications" }, { href: `${base}/analytics`, label: "Analytics" }, { href: `${base}/audit`, label: "Audit" }, { href: `${base}/activity`, label: "Activity" }];
   return (
     <div className="space-y-section">
       <div>

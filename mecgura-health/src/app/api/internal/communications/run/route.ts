@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runNotificationJobs } from "@/lib/notifications/jobs";
 import { safeEqual } from "@/lib/communications/providers/verify";
+import { runSubscriptionJobs } from "@/lib/services/sub-jobs";
 import { processDue } from "@/lib/communications/worker";
 import { runScheduler } from "@/lib/communications/triggers";
 import { db } from "@/lib/db";
@@ -21,8 +22,9 @@ async function run(req: Request) {
   const lim = await rateLimit("comm:cron", { limit: 30, windowMs: 60_000 }); if (!lim.allowed) return NextResponse.json({ ok: false }, { status: 429 });
   const scheduled = await runScheduler(); const delivery = await processDue({ limit: 200 });
   const notifications = await runNotificationJobs(); // the notification centre rides the same tick (reminders, stock, escalation, retention, digests)
+  const subscriptions = await runSubscriptionJobs(); // clinic subscription billing clock: trials, renewals, dunning, grace, suspension
   await db.platformSetting.upsert({ where: { key: "scheduler.heartbeat" }, update: { value: JSON.stringify({ at: new Date().toISOString() }) }, create: { key: "scheduler.heartbeat", value: JSON.stringify({ at: new Date().toISOString() }) } }).catch(() => undefined); // lets the Super Admin console show a REAL last-run time
-  return NextResponse.json({ ok: true, scheduled, delivery, notifications }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ ok: true, scheduled, delivery, notifications, subscriptions }, { headers: { "Cache-Control": "no-store" } });
 }
 export const POST = run;
 export const GET = run;

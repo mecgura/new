@@ -114,6 +114,29 @@ model Plan {
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   subscriptions       Subscription[]
+
+  // ---- Phase 15: commercial plan (key = slug). The legacy `modules` list still drives the menu for unmanaged (legacy) subscriptions. ----
+  description         String?
+  /// DRAFT | ACTIVE | INACTIVE | ARCHIVED   (only ACTIVE plans can be chosen for NEW subscriptions)
+  status              String         @default("ACTIVE")
+  currency            String         @default("INR")
+  /// integer minor units (paise). Never a float, never a formatted string.
+  monthlyPriceMinor   Int            @default(0)
+  annualPriceMinor    Int            @default(0)
+  setupFeeMinor       Int            @default(0)
+  trialDays           Int            @default(0)
+  isPublic            Boolean        @default(false)
+  sortOrder           Int            @default(0)
+  /// JSON { featureKey: boolean }
+  features            String         @default("{}")
+  /// JSON { limitKey: { mode: "LIMITED"|"UNLIMITED"|"DISABLED", value?: number } }
+  limits              String         @default("{}")
+  supportLevel        String?
+  /// bumped on every commercial change; subscriptions keep their own snapshot, so old billing never changes
+  version             Int            @default(1)
+  archivedAt          DateTime?
+
+  @@index([status, sortOrder])
 }
 
 /// Which plan a tenant is on. One current subscription per tenant (Phase 0).
@@ -130,7 +153,49 @@ model Subscription {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  // ---- Phase 15 (all defaults keep existing rows behaving exactly as before: managed=false = legacy, no limits, no billing) ----
+  /// false = legacy row (clinic lifecycle drives its status, nothing is metered). true = commercial subscription controlled by the subscription system.
+  managed             Boolean   @default(false)
+  /// MONTHLY | YEARLY
+  billingInterval     String    @default("MONTHLY")
+  currency            String    @default("INR")
+  /// price of the CURRENT term in minor units (a snapshot: later plan edits never change it)
+  priceMinor          Int       @default(0)
+  planVersion         Int       @default(1)
+  /// JSON snapshot of the plan at subscription time: { name, features, limits, setupFeeMinor, trialDays }
+  snapshot            String    @default("{}")
+  trialStart          DateTime?
+  trialEnd            DateTime?
+  trialUsed           Boolean   @default(false)
+  currentPeriodStart  DateTime?
+  currentPeriodEnd    DateTime?
+  nextBillingDate     DateTime?
+  cancelAtPeriodEnd   Boolean   @default(false)
+  cancelledAt         DateTime?
+  cancellationReason  String?
+  cancellationNotes   String?
+  gracePeriodStart    DateTime?
+  gracePeriodEnd      DateTime?
+  pausedAt            DateTime?
+  suspendedAt         DateTime?
+  /// issue the renewal invoice automatically at the end of each paid period (it never charges a card by itself)
+  autoRenew           Boolean   @default(true)
+  /// JSON { planId, billingInterval, effectiveAt } — a downgrade or interval change waiting for the end of the paid period
+  scheduledChange     String?
+  /// number of failed collection attempts for the current invoice and the last dunning step sent
+  failedPaymentCount  Int       @default(0)
+  dunningStage        Int       @default(0)
+  lastPaymentFailedAt DateTime?
+  /// ONLINE | MANUAL | SYSTEM
+  source              String    @default("SYSTEM")
+  provider            String?
+  externalCustomerId     String?
+  externalSubscriptionId String? @unique
+
   @@index([planId])
+  @@index([status, currentPeriodEnd])
+  @@index([nextBillingDate])
+  @@index([status, trialEnd])
 }
 
 /// Role definition. tenantId = null => system role (SUPER_ADMIN, DOCTOR, ...).
@@ -2639,4 +2704,206 @@ model PlatformAnnouncement {
   createdAt       DateTime  @default(now())
 
   @@index([active, startsAt])
+}
+
+/// Phase 15: who the clinic is for MECGURA's invoices (legal billing identity, NOT the clinic's patient-facing branding).
+model SubscriptionBillingProfile {
+  id                 String   @id @default(cuid())
+  tenantId           String   @unique
+  legalName          String
+  billingName        String?
+  billingEmail       String
+  billingPhone       String?
+  contactName        String?
+  addressLine        String?
+  city               String?
+  state              String?
+  /// GST state code (two digits) when applicable; decides CGST+SGST vs IGST
+  stateCode          String?
+  country            String   @default("India")
+  pincode            String?
+  gstin              String?
+  taxId              String?
+  updatedById        String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+/// Phase 15: SaaS invoice (clinic -> MECGURA). Entirely separate from the patient Invoice of Phase 8. Immutable once issued except status/paid fields.
+model SaasInvoice {
+  id             String    @id @default(cuid())
+  tenantId       String
+  subscriptionId String
+  invoiceNumber  String    @unique
+  /// NEW | RENEWAL | UPGRADE | OTHER
+  kind           String    @default("RENEWAL")
+  /// DRAFT | ISSUED | PAID | PARTIALLY_PAID | OVERDUE | VOID | REFUNDED | PARTIALLY_REFUNDED
+  status         String    @default("ISSUED")
+  currency       String    @default("INR")
+  periodStart    DateTime
+  periodEnd      DateTime
+  subtotalMinor  Int       @default(0)
+  discountMinor  Int       @default(0)
+  taxMinor       Int       @default(0)
+  totalMinor     Int       @default(0)
+  paidMinor      Int       @default(0)
+  refundedMinor  Int       @default(0)
+  /// EXCLUSIVE | INCLUSIVE and the exact tax lines used (rates are snapshotted, never recomputed later)
+  taxMode        String    @default("EXCLUSIVE")
+  taxSnapshot    String    @default("{}")
+  /// JSON snapshots of the vendor (MECGURA) and the bill-to party at issue time
+  vendorSnapshot String    @default("{}")
+  billToSnapshot String    @default("{}")
+  planName       String?
+  /// prevents duplicate invoices for the same subscription period and purpose
+  dedupeKey      String    @unique
+  /// JSON { planId, billingInterval, planVersion } — the plan/interval this invoice switches the subscription to once it is PAID (renewal at a new plan, or an upgrade)
+  changeJson     String?
+  issuedAt       DateTime?
+  dueAt          DateTime?
+  paidAt         DateTime?
+  voidedAt       DateTime?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  items          SaasInvoiceItem[]
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@index([subscriptionId, periodStart])
+  @@index([status, dueAt])
+}
+
+model SaasInvoiceItem {
+  id          String      @id @default(cuid())
+  tenantId    String
+  invoiceId   String
+  invoice     SaasInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  position    Int         @default(0)
+  description String
+  quantity    Int         @default(1)
+  unitMinor   Int         @default(0)
+  totalMinor  Int         @default(0)
+
+  @@index([invoiceId])
+}
+
+/// Phase 15: SaaS payment (clinic -> MECGURA). Separate from the patient Payment of Phase 8.
+model SaasPayment {
+  id                 String    @id @default(cuid())
+  tenantId           String
+  subscriptionId     String
+  invoiceId          String
+  amountMinor        Int
+  currency           String    @default("INR")
+  /// ONLINE | CARD | UPI | BANK_TRANSFER | OTHER
+  method             String    @default("ONLINE")
+  /// PENDING | SUCCEEDED | FAILED | CANCELLED | REFUNDED | PARTIALLY_REFUNDED
+  status             String    @default("PENDING")
+  provider           String
+  providerPaymentId  String?
+  providerOrderId    String?
+  transactionReference String?
+  receiptNumber      String?   @unique
+  refundedMinor      Int       @default(0)
+  failureReason      String?
+  attempt            Int       @default(1)
+  /// safe provider reference data only (never card numbers, tokens or secrets)
+  metadata           String    @default("{}")
+  idempotencyKey     String    @unique
+  paidAt             DateTime?
+  recordedById       String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([provider, providerPaymentId])
+  @@index([tenantId, createdAt])
+  @@index([invoiceId])
+  @@index([subscriptionId, status])
+}
+
+model SaasRefund {
+  id               String    @id @default(cuid())
+  tenantId         String
+  subscriptionId   String
+  invoiceId        String
+  paymentId        String
+  refundNumber     String    @unique
+  amountMinor      Int
+  currency         String    @default("INR")
+  reason           String
+  /// REQUESTED | APPROVED | PROCESSED | REJECTED | CANCELLED
+  status           String    @default("REQUESTED")
+  providerRefundId String?
+  requestedById    String
+  decidedById      String?
+  decidedAt        DateTime?
+  processedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([tenantId, createdAt])
+  @@index([paymentId])
+}
+
+/// Phase 15: provider events, one row per provider event id => a replayed webhook can never be processed twice. Not tenant-scoped (written before the clinic is known).
+model SubscriptionWebhookEvent {
+  id          String    @id @default(cuid())
+  provider    String
+  eventId     String
+  eventType   String
+  payloadHash String
+  /// RECEIVED | PROCESSED | IGNORED | FAILED
+  status      String    @default("RECEIVED")
+  error       String?
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  @@unique([provider, eventId])
+  @@index([receivedAt])
+}
+
+/// Phase 15: metered usage per limit and billing period. Closed periods stay as history.
+model SubscriptionUsage {
+  id             String   @id @default(cuid())
+  tenantId       String
+  subscriptionId String
+  limitKey       String
+  periodStart    DateTime
+  periodEnd      DateTime
+  used           Int      @default(0)
+  /// the limit that applied (null = unlimited / disabled)
+  limitValue     Int?
+  closed         Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, limitKey, periodStart])
+  @@index([subscriptionId, periodStart])
+}
+
+/// Phase 15: append-only subscription history (status and plan changes). Feeds churn / conversion reporting.
+model SubscriptionEvent {
+  id           String   @id @default(cuid())
+  tenantId     String
+  subscriptionId String
+  type         String
+  fromStatus   String?
+  toStatus     String?
+  fromPlanId   String?
+  toPlanId     String?
+  actorId      String?
+  /// USER | SUPER_ADMIN | SYSTEM | WEBHOOK
+  source       String   @default("SYSTEM")
+  note         String?
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([type, createdAt])
+  @@index([subscriptionId, createdAt])
+}
+
+/// Phase 15: platform-wide atomic counters (invoice / receipt / refund numbers).
+model PlatformCounter {
+  key   String @id
+  value Int    @default(0)
 }

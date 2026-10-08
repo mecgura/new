@@ -21,7 +21,7 @@ export type PortalBlock = "no_session" | "expired" | "account_unavailable" | "cl
 
 export const getPatientAccess = cache(async (): Promise<{ ctx: PatientContext | null; block: PortalBlock | null }> => {
   const { ctx, blocked } = await getAccess();
-  if (!ctx) return { ctx: null, block: blocked === "tenant_unavailable" || blocked === "maintenance" ? "clinic_unavailable" : "no_session" };
+  if (!ctx) return { ctx: null, block: blocked === "tenant_unavailable" || blocked === "maintenance" || blocked === "subscription_blocked" ? "clinic_unavailable" : "no_session" };
   const session = await auth();
   const portal = session?.portal;
   if (ctx.user.role !== "PATIENT" || !portal || !ctx.tenant) return { ctx: null, block: "no_session" };

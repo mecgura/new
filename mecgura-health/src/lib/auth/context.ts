@@ -12,6 +12,9 @@ import { resolveBrandColors, type BrandColors } from "@/theme/tokens";
 import { WORKSPACE_COOKIE, verifyWorkspaceToken } from "./workspace-cookie";
 import { applyFeatureGates, disabledModules } from "@/lib/platform/features";
 import { SUPER_ADMIN_SESSION_MS, disabledFeaturesOf, maintenanceFor, openSupportAccess } from "@/lib/platform/runtime";
+import { entitlementOf } from "@/lib/services/entitlements";
+import { getPolicy } from "@/lib/services/sub-config";
+import { isReadPermission } from "@/lib/subscriptions/state";
 
 export interface TenantInfo {
   id: string;
@@ -54,12 +57,17 @@ export interface RequestContext {
   support?: { reason: string; expiresAt: Date } | null;
   /** feature switches turned OFF for this clinic; their permissions are already removed from `permissions` */
   disabledFeatures?: readonly string[];
+  /** Phase 15: the clinic's subscription state allows viewing but not changing data (permissions are already reduced accordingly) */
+  readOnly?: boolean;
+  /** Phase 15: only the subscription screens are available (clinic admin of a BLOCKED subscription) */
+  limited?: boolean;
+  subscriptionStatus?: string | null;
 }
 
 /** Context with a guaranteed tenant — pass to `tenantDb(ctx)`. */
 export type TenantRequestContext = RequestContext & { tenant: TenantInfo; tenantId: string };
 
-export type BlockReason = "tenant_unavailable" | "user_unavailable" | "maintenance" | "session_expired";
+export type BlockReason = "tenant_unavailable" | "user_unavailable" | "maintenance" | "session_expired" | "subscription_blocked";
 interface Access { ctx: RequestContext | null; blocked: BlockReason | null }
 
 const tenantInclude = { branding: true, subscription: { include: { plan: true } } } as const;
@@ -131,15 +139,29 @@ export const getAccess = cache(async (): Promise<Access> => {
 
   const grants = row.permissionGrants.map((g) => g.permission);
   const disabledFeatures = tenantRow ? await disabledFeaturesOf(tenantRow.id) : [];
+  // ---- Phase 15: what the clinic's subscription allows (a Super Admin is never restricted by it) ----
+  let permissions = applyFeatureGates(effectivePermissions(role, grants), disabledFeatures);
+  let modules = modulesFor(tenantRow, role).filter((m) => !disabledModulesSet(disabledFeatures).has(m));
+  let readOnly = false, limited = false;
+  const ent = tenantRow && role !== "SUPER_ADMIN" ? await entitlementOf(tenantRow.id) : null;
+  if (ent?.managed && ent.access !== "FULL") {
+    if (role === "PATIENT") {
+      const p = (await getPolicy()).portalDuringSuspension;
+      if (p === "BLOCK") return { ctx: null, blocked: "subscription_blocked" };
+      if (p === "READ_ONLY") readOnly = true;
+    } else if (ent.access === "READ_ONLY") {
+      readOnly = true; permissions = new Set([...permissions].filter((x) => isReadPermission(x) || x.startsWith("subscription.")));
+    } else if (role === "CLINIC_ADMIN") { // BLOCK: the admin can still reach the subscription screens to pay or contact support
+      readOnly = limited = true; permissions = new Set([...permissions].filter((x) => x.startsWith("subscription.") || x === "clinic.view")); modules = ["dashboard", "settings"];
+    } else return { ctx: null, blocked: "subscription_blocked" };
+  }
   return {
     blocked: null,
     ctx: {
       user: { id: row.id, name: row.name, email: row.email, role, tenantId: row.tenantId, avatarUrl: row.avatarUrl },
       tenant: tenantRow ? toTenantInfo(tenantRow) : null,
       // A switched-off feature loses its permissions HERE, so every page, API and service guard denies it server-side.
-      permissions: applyFeatureGates(effectivePermissions(role, grants), disabledFeatures),
-      enabledModules: modulesFor(tenantRow, role).filter((m) => !disabledModulesSet(disabledFeatures).has(m)),
-      viewingAs, support, disabledFeatures,
+      permissions, enabledModules: modules, viewingAs, support, disabledFeatures, readOnly, limited, subscriptionStatus: tenantRow?.subscription?.managed ? tenantRow.subscription.status : null,
     },
   };
 });
@@ -162,7 +184,7 @@ export async function requireContext(): Promise<RequestContext> {
 /** Page-level guard: signed in AND holding the permission, else redirect. */
 export async function requirePagePermission(permission: Permission): Promise<RequestContext> {
   const ctx = await requireContext();
-  if (!ctx.permissions.has(permission)) redirect("/forbidden");
+  if (!ctx.permissions.has(permission)) redirect(ctx.limited && ctx.permissions.has("subscription.view") ? "/subscription" : "/forbidden");
   return ctx;
 }
 

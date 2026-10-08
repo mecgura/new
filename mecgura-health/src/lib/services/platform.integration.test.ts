@@ -138,7 +138,7 @@ describe("feature switches (server-side, non-destructive)", () => {
     expect(await setClinicFeature(SA, A.id, { key: "pharmacy", enabled: true })).toMatchObject({ unchanged: true });
   });
   it("the gate maps every feature to real permission modules", () => {
-    const off = disabledModules(["billing", "lab", "consultation", "liveOPD"]); expect([...off].sort()).toEqual(["billing", "consultations", "opd", "prescriptions", "tests"]);
+    const off = disabledModules(["billing", "lab", "consultation", "liveOPD"]); expect([...off].sort()).toEqual(["billing", "consultations", "opd", "tests"]); expect([...disabledModules(["prescription"])]).toEqual(["prescriptions"]);
     const admin = effectivePermissions("CLINIC_ADMIN"); const g = applyFeatureGates(admin, ["billing"]); expect(g.has("billing.view")).toBe(false); expect(g.has("patients.view")).toBe(true); expect(applyFeatureGates(admin, [])).toBe(admin);
     expect(applyFeatureGates(effectivePermissions("DOCTOR"), ["consultation"]).has("consultation.view")).toBe(false);
   });

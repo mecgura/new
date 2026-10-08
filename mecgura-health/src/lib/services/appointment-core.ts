@@ -1,3 +1,4 @@
+import { checkLimit, noteUsage } from "./entitlements";
 import "server-only";
 import { AppError } from "@/lib/errors";
 import { canTransition, SLOT_HOLDING, type AppointmentStatus } from "@/lib/scheduling/states";
@@ -22,10 +23,15 @@ export const SLOT_TAKEN = "Slot is no longer available. Please choose another ti
  * doctor + slot, however many requests arrive at once; we turn that into a friendly conflict.
  */
 export async function insertAppointment(client: Client, data: Record<string, unknown> & { tenantId: string; doctorUserId: string; startsAt: Date }) {
+  // Plan limit. Callers pass a plain (non-transaction) client, so this separate read cannot deadlock.
+  const lim = await checkLimit(data.tenantId, "maxAppointmentsPerMonth");
+  if (!lim.allowed) throw data.source === "WEBSITE" || data.type === "ONLINE_APPOINTMENT" ? new AppError("CONFLICT", { message: "Online booking is unavailable right now. Please call the clinic." }) : new AppError("LIMIT_REACHED", { message: `${lim.reason} Upgrade your plan to add more.` });
   const slotLock = slotLockKey(data.doctorUserId, data.startsAt);
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      return await client.appointment.create({ data: { ...data, slotLock, publicId: `AP-${randomCode(8)}` } });
+      const created = await client.appointment.create({ data: { ...data, slotLock, publicId: `AP-${randomCode(8)}` } });
+      await noteUsage(data.tenantId, "maxAppointmentsPerMonth");
+      return created;
     } catch (e) {
       if (!isUniqueViolation(e)) throw e;
       // slot taken? (a publicId collision is astronomically unlikely and simply retried)

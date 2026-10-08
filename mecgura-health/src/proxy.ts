@@ -5,7 +5,7 @@ import { isPublicSitePath } from "@/lib/website/paths";
 import { parseTenantHost } from "@/lib/tenant/host";
 
 // Paths reachable without a session.
-const PUBLIC_PATHS = ["/login", "/invite", "/robots.txt"];
+const PUBLIC_PATHS = ["/login", "/invite", "/robots.txt", "/pricing"];
 // Patient portal: only the sign-in / activation screens are reachable without a session; everything else under /portal needs one.
 const PORTAL_PUBLIC = ["/portal/login", "/portal/activate", "/portal/register", "/portal/forgot"];
 const isPortal = (p: string) => p === "/portal" || p.startsWith("/portal/");

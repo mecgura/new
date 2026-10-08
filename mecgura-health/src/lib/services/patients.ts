@@ -1,3 +1,4 @@
+import { assertCanCreate, noteUsage } from "./entitlements";
 import "server-only";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import type { TenantRequestContext } from "@/lib/auth/context";
@@ -73,6 +74,7 @@ export async function createPatient(ctx: TenantRequestContext, input: NewPatient
   if (dupes.length && !opts.allowDuplicate) {
     throw new AppError("CONFLICT", { message: "Possible existing patient found. Review the matches or confirm this is a new patient.", fieldErrors: { _duplicates: dupes.map((d) => `${d.code} · ${d.name}`).join(", ") } });
   }
+  if (!opts.client) await assertCanCreate(ctx.tenantId, "maxPatients"); // plan limit (skipped when the caller already holds a transaction)
   const tdb = opts.client ?? tenantDb(ctx);
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -85,6 +87,7 @@ export async function createPatient(ctx: TenantRequestContext, input: NewPatient
       };
       const p = opts.client ? await create(opts.client) : await tdb.$transaction(create);
       await recordAudit({ action: AUDIT_ACTIONS.PATIENT_REGISTERED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "patient", entityId: p.id, metadata: { code: p.code, duplicateConfirmed: dupes.length > 0 } });
+      if (!opts.client) await noteUsage(ctx.tenantId, "maxPatients");
       return p as Awaited<ReturnType<typeof create>>;
     } catch (e) {
       if (!isUniqueViolation(e) || attempt === 4) throw e;

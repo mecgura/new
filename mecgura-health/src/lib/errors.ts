@@ -10,6 +10,7 @@ export const ERROR_CODES = {
   UNAUTHENTICATED: { status: 401, message: "Please sign in to continue." },
   FORBIDDEN: { status: 403, message: "You don't have permission to do this." },
   NOT_FOUND: { status: 404, message: "We couldn't find what you were looking for." },
+  LIMIT_REACHED: { status: 403, message: "Your plan limit has been reached. Upgrade your plan to add more." },
   CONFLICT: { status: 409, message: "This conflicts with existing data." },
   RATE_LIMITED: { status: 429, message: "Too many attempts. Please wait a moment and try again." },
   NETWORK_ERROR: { status: 0, message: "Can't reach the server. Check your internet connection and try again." },

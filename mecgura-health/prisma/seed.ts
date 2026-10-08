@@ -183,6 +183,18 @@ async function main() {
 
   // Plans
   const demoPlan = await db.plan.upsert({ where: { key: "demo-all-modules" }, update: { modules: JSON.stringify(MODULE_KEYS) }, create: { key: "demo-all-modules", name: "Demo (all modules)", modules: JSON.stringify(MODULE_KEYS) } });
+  // ---- Phase 15: DEVELOPMENT-ONLY sample plans (this script refuses to run in production). Clearly labelled "Sample"; real plans and prices are created by the Super Admin. ----
+  const ALL_FEATURES = ["appointments", "liveOPD", "patientCRM", "consultation", "prescription", "lab", "followUp", "billing", "pharmacy", "patientPortal", "whatsapp", "sms", "email", "analytics", "reports", "publicWebsite", "customDomain"];
+  const featureMap = (on: string[]) => JSON.stringify(Object.fromEntries(ALL_FEATURES.map((k) => [k, on.includes(k)])));
+  const CORE_ON = ["appointments", "liveOPD", "patientCRM", "consultation", "prescription", "followUp", "billing", "email", "publicWebsite"];
+  const sample = [
+    { key: "sample-starter", name: "Sample Starter", sortOrder: 1, monthlyPriceMinor: 99900, annualPriceMinor: 999000, trialDays: 14, features: featureMap(CORE_ON), limits: JSON.stringify({ maxDoctors: { mode: "LIMITED", value: 2 }, maxStaff: { mode: "LIMITED", value: 5 }, maxPatients: { mode: "LIMITED", value: 1000 }, maxAppointmentsPerMonth: { mode: "LIMITED", value: 500 } }) },
+    { key: "sample-growth", name: "Sample Growth", sortOrder: 2, monthlyPriceMinor: 249900, annualPriceMinor: 2499000, trialDays: 14, features: featureMap([...CORE_ON, "lab", "pharmacy", "patientPortal", "analytics", "reports", "whatsapp", "sms"]), limits: JSON.stringify({ maxDoctors: { mode: "LIMITED", value: 10 }, maxPatients: { mode: "UNLIMITED" } }) },
+  ];
+  for (const p of sample) {
+    const data = { name: p.name, description: "Sample plan for development and demos only.", status: "ACTIVE", isActive: true, isPublic: true, sortOrder: p.sortOrder, monthlyPriceMinor: p.monthlyPriceMinor, annualPriceMinor: p.annualPriceMinor, trialDays: p.trialDays, features: p.features, limits: p.limits, modules: "[]" };
+    await db.plan.upsert({ where: { key: p.key }, update: {}, create: { key: p.key, ...data } });
+  }
   await db.plan.upsert({ where: { key: "foundation" }, update: {}, create: { key: "foundation", name: "Foundation", modules: JSON.stringify(["dashboard", "settings", "team"]) } });
 
   const generated = !process.env.SEED_DEMO_PASSWORD;

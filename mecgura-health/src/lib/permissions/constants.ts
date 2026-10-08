@@ -167,6 +167,9 @@ export const PERMISSIONS = {
   "users.disable": { module: "team", description: "Suspend, disable or re-activate staff accounts" },
   "audit.view": { module: "settings", description: "View the audit log" },
 
+  "subscription.view": { module: "settings", description: "View the clinic's MECGURA subscription, usage, invoices and payments" },
+  "subscription.manage": { module: "settings", description: "Change plan, pay invoices, edit billing details, cancel or resume the clinic's subscription" },
+
   "platform.manage": { module: "platform", description: "Manage tenants and plans (platform only)" },
 } as const;
 
@@ -178,6 +181,6 @@ export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
  * the role (admin/platform powers). Everything else may be granted to e.g. a STAFF member.
  */
 export const NON_GRANTABLE_PERMISSIONS: readonly Permission[] = [
-  "platform.manage", "website.publish", "schedule.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view", "patients.archive", "patients.export", "consultation.finalize", "prescription.finalize", "lab.configure", "followups.configure", "portal.configure", "communications.templates", "communications.configure", "notifications.configure", "pharmacy.configure", "pharmacy.adjust", "pharmacy.return_approve", "pharmacy.purchase", "pharmacy.medicines", "pharmacy.suppliers", "billing.configure", "billing.refund_approve", "analytics.configure", "reports.export_patient",
+  "platform.manage", "website.publish", "schedule.manage", "clinic.edit", "clinic.settings", "settings.edit", "users.view", "users.create", "users.edit", "users.disable", "audit.view", "patients.archive", "patients.export", "consultation.finalize", "prescription.finalize", "lab.configure", "followups.configure", "portal.configure", "communications.templates", "communications.configure", "notifications.configure", "pharmacy.configure", "pharmacy.adjust", "pharmacy.return_approve", "pharmacy.purchase", "pharmacy.medicines", "pharmacy.suppliers", "billing.configure", "billing.refund_approve", "analytics.configure", "reports.export_patient", "subscription.manage",
 ];
 export const GRANTABLE_PERMISSIONS = ALL_PERMISSIONS.filter((p) => !NON_GRANTABLE_PERMISSIONS.includes(p));

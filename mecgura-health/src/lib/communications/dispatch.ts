@@ -7,6 +7,7 @@ import { utcToZoned, zonedToUtc, addDays } from "@/lib/scheduling/time";
 import { EVENTS, LANGUAGES, type Channel, type EventType, type Language, type VarName } from "./catalog";
 import { builtinText } from "./defaults";
 import { loadTenantProfile, portalLink, type TenantProfile } from "./links";
+import { checkLimit, entitlementOf, noteUsage } from "@/lib/services/entitlements";
 import { providerFor, configuredProvider } from "./providers/registry";
 import { channelEnabled, eventEnabled, loadSettings, type CommSettings } from "./settings";
 import { renderTemplate } from "./template-engine";
@@ -21,11 +22,12 @@ export interface EmitInput {
 }
 export interface EmitResult { queued: string[]; skipped: string | null; duplicate: boolean; reason?: string }
 
+const MESSAGE_LIMIT: Record<Channel, string> = { WHATSAPP: "maxWhatsAppMessages", SMS: "maxSmsMessages", EMAIL: "maxEmailMessages" };
 const SKIP_REASON: Record<string, string> = {
   CHANNEL_DISABLED: "This channel is switched off for the clinic.", PROVIDER_NOT_CONFIGURED: "The provider is not configured on the server.", NO_CONTACT: "The patient has no number / email for this channel.",
   CHANNEL_OPT_OUT: "The patient opted out of this channel.", WHATSAPP_NOT_OPTED_IN: "The patient has not agreed to WhatsApp messages.", NO_CONSENT: "The patient has not given (or has withdrawn) consent.",
   CATEGORY_OFF: "The patient switched this kind of notification off.", NO_TEMPLATE: "No active template for this channel / language.", RATE_LIMITED: "Daily message limit for this patient reached.", PATIENT_UNAVAILABLE: "The patient record is not available.",
-  EVENT_DISABLED: "This notification is switched off for the clinic.", NO_CHANNEL_ENABLED: "No channel is enabled.",
+  EVENT_DISABLED: "This notification is switched off for the clinic.", SUBSCRIPTION_INACTIVE: "The clinic's subscription is inactive.", PLAN_LIMIT: "The clinic's plan message allowance for this period is used up.", NO_CHANNEL_ENABLED: "No channel is enabled.",
 };
 export const skipReasonText = (code: string | null | undefined) => (code ? SKIP_REASON[code] ?? "Not sent." : "");
 
@@ -95,6 +97,7 @@ export async function emitCommunication(i: EmitInput): Promise<EmitResult> {
   if (!enabled.length) return { queued: [], skipped: "NO_CHANNEL_ENABLED", duplicate: false };
   if (!i.ignoreToggle && !eventEnabled(s, i.event)) return { queued: [], skipped: "EVENT_DISABLED", duplicate: false };
   const t = await loadTenantProfile(i.tenantId); if (!t || !["ACTIVE", "TRIAL"].includes(t.status)) return { queued: [], skipped: "PATIENT_UNAVAILABLE", duplicate: false };
+  if ((await entitlementOf(i.tenantId)).access === "BLOCK") return { queued: [], skipped: "SUBSCRIPTION_INACTIVE", duplicate: false }; // paused workspace: no new automated patient messages
   const f = i.patientId ? await loadPatientFacts(i.tenantId, i.patientId) : null;
   if (!f) return { queued: [], skipped: "PATIENT_UNAVAILABLE", duplicate: false };
   const langs = [...new Set([f.language, s.defaultLanguage, "en"].filter((x): x is Language => !!x))];
@@ -105,6 +108,8 @@ export async function emitCommunication(i: EmitInput): Promise<EmitResult> {
     if (blocked) { reasons.push(blocked); continue; }
     const tpl = await resolveTemplate(i.tenantId, channel, i.event, langs); if (!tpl) { reasons.push("NO_TEMPLATE"); continue; }
     if ((ev.priority as string) !== "CRITICAL" && ev.category !== "SECURITY" && (await dailyCount(i.tenantId, f.id, channel)) >= s.dailyCapPerPatient) { reasons.push("RATE_LIMITED"); continue; }
+    const msgLimit = MESSAGE_LIMIT[channel];
+    if ((ev.priority as string) !== "CRITICAL" && ev.category !== "SECURITY" && !(await checkLimit(i.tenantId, msgLimit)).allowed) { reasons.push("PLAN_LIMIT"); continue; } // plan message allowance (security messages are never blocked)
     const vars = baseVars(t, f, i.vars, link);
     const body = renderTemplate(tpl.body, vars); const subject = tpl.subject ? renderTemplate(tpl.subject, vars) : null;
     const scheduledAt = applyQuietHours(s, t.timezone, i.scheduledAt ?? new Date(), ev.priority);
@@ -116,6 +121,7 @@ export async function emitCommunication(i: EmitInput): Promise<EmitResult> {
       } });
       await db.communicationAttempt.create({ data: { tenantId: i.tenantId, messageId: m.id, status: "QUEUED", source: "SYSTEM" } });
       await recordAudit({ action: AUDIT_ACTIONS.COMM_MESSAGE_QUEUED, tenantId: i.tenantId, actorId: i.createdById ?? undefined, entityType: "communication_message", entityId: m.id, metadata: { event: i.event, channel, priority: ev.priority } });
+      await noteUsage(i.tenantId, msgLimit);
       return { queued: [m.id], skipped: null, duplicate: false };
     } catch (e) {
       if ((e as { code?: string })?.code === "P2002") return { queued: [], skipped: null, duplicate: true };

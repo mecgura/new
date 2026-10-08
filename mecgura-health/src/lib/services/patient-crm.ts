@@ -1,3 +1,4 @@
+import { assertCanCreate, noteUsage } from "./entitlements";
 import { billingTimeline } from "./billing-docs";
 import { notifyPatientRegistered } from "@/lib/notifications/events";
 import { pharmacyTimeline } from "./pharmacy-dispensing";
@@ -145,6 +146,7 @@ export async function registerPatient(ctx: TenantRequestContext, raw: unknown) {
   const input = parseOrThrow(patientRegisterSchema, raw);
   const dupes = await findDuplicates(ctx, { phone: input.phone, email: input.email, name: input.name, dateOfBirth: input.dateOfBirth });
   if (dupes.length && !input.allowDuplicate) throw new AppError("CONFLICT", { message: "Possible existing patient found. Use the existing patient, or confirm this is a new patient.", fieldErrors: { _duplicates: dupes.map((d) => `${d.code}`).join(", ") } });
+  await assertCanCreate(ctx.tenantId, "maxPatients");
   const tdb = tenantDb(ctx);
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -156,6 +158,7 @@ export async function registerPatient(ctx: TenantRequestContext, raw: unknown) {
       });
       await recordAudit({ action: AUDIT_ACTIONS.PATIENT_REGISTERED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "patient", entityId: p.id, metadata: { code: p.code, duplicateConfirmed: dupes.length > 0, privacyAcknowledged: input.privacyAcknowledged } });
       if (input.privacyAcknowledged) await recordAudit({ action: AUDIT_ACTIONS.PATIENT_CONSENT_RECORDED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "patient", entityId: p.id, metadata: { type: "PRIVACY", status: "GRANTED" } });
+      await noteUsage(ctx.tenantId, "maxPatients");
       await notifyPatientRegistered(ctx.tenantId, p.id, ctx.user.id);
       return { id: p.id, code: p.code as string };
     } catch (e) {

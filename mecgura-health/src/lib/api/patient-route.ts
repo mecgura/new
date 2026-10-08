@@ -17,6 +17,7 @@ export function patientRoute(handler: (args: { req: Request; ctx: PatientContext
     try {
       if (!SAFE_METHODS.has(req.method) && !isSameOrigin(req) && getEnv().isProd) throw new AppError("FORBIDDEN", { message: "Cross-site request blocked." });
       const ctx = await requirePatientApiContext();
+      if (!SAFE_METHODS.has(req.method) && ctx.readOnly) throw new AppError("FORBIDDEN", { message: "This clinic's portal is temporarily read-only. You can still view your records." });
       const data = await handler({ req, ctx, params: (await routeCtx?.params) ?? {} });
       const body: ApiResult<unknown> = { ok: true, data };
       return NextResponse.json(body, { headers: { "Cache-Control": "no-store", "X-Request-Id": requestId } });

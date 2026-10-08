@@ -1,3 +1,4 @@
+import { assertFeature } from "./entitlements";
 import "server-only";
 import { db } from "@/lib/db";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
@@ -72,6 +73,7 @@ export function domainStatus(o: { customDomain: string | null; verified: boolean
 export async function requestDomain(ctx: TenantRequestContext, input: unknown) {
   assertPermission(ctx.permissions, "clinic.settings");
   const { domain } = parseOrThrow(domainRequestSchema, input);
+  await assertFeature(ctx.tenantId, "customDomain", "A custom domain is not included in your plan. Upgrade your plan to use your own domain.");
   const taken = await db.tenant.findFirst({ where: { customDomain: domain, id: { not: ctx.tenantId } }, select: { id: true } });
   if (taken) throw new AppError("CONFLICT", { fieldErrors: { domain: "This domain is already in use." } });
   const w = await ensureWebsite(ctx);

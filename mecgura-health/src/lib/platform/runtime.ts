@@ -16,10 +16,15 @@ export async function getPlatformSetting<T>(key: string, fallback: T): Promise<T
 export interface Maintenance { enabled: boolean; message: string }
 export const DEFAULT_MAINTENANCE: Maintenance = { enabled: false, message: "MECGURA HEALTH is undergoing scheduled maintenance. Please try again shortly." };
 
-/** Feature keys switched OFF for a clinic (no row = on). One query per request. */
-export const disabledFeaturesOf = cache(async (tenantId: string): Promise<string[]> => {
+/** Feature keys the SUPER ADMIN switched off for a clinic (no row = on). One query per request. Used by the feature-switch screens. */
+export const tenantSwitchedOff = cache(async (tenantId: string): Promise<string[]> => {
   const rows = await db.tenantFeature.findMany({ where: { tenantId, enabled: false }, select: { key: true } });
   return rows.map((r) => r.key);
+});
+/** Feature keys NOT available to a clinic = switched off by the Super Admin ∪ not included in its plan (Phase 15). Every enforcement point uses this one answer. */
+export const disabledFeaturesOf = cache(async (tenantId: string): Promise<string[]> => {
+  const [off, ent] = await Promise.all([tenantSwitchedOff(tenantId), import("@/lib/services/entitlements").then((m) => m.entitlementOf(tenantId))]);
+  return [...new Set([...off, ...ent.disabledFeatures])];
 });
 
 export const maintenanceFor = cache(async (tenantId: string | null): Promise<{ on: boolean; message: string; scope: "global" | "clinic" | null }> => {

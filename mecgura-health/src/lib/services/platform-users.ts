@@ -1,3 +1,4 @@
+import { assertCanCreate, seatKey } from "./entitlements";
 import "server-only";
 import { db } from "@/lib/db";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
@@ -95,6 +96,7 @@ export async function inviteClinicUser(ctx: RequestContext, tenantId: string, in
   if (Object.keys(fe).length) throw new AppError("VALIDATION_ERROR", { message: "Check the details.", fieldErrors: fe });
   const dupe = await db.user.findFirst({ where: { OR: [{ email }, ...(phone ? [{ phone }] : [])] }, select: { email: true } });
   if (dupe) throw new AppError("CONFLICT", { message: "This email or phone is already registered.", fieldErrors: dupe.email === email ? { email: "This email is already registered." } : { phone: "This phone number is already registered." } });
+  await assertCanCreate(tenantId, seatKey(input.role));
   const invite = newInviteToken();
   try {
     const user = await db.user.create({ data: { name, email, phone, tenantId, roleId: await getRoleId(input.role), status: "INVITED", ...(input.role === "DOCTOR" ? { doctorProfile: { create: { tenantId } } } : { staffProfile: { create: { tenantId } } }), invitations: { create: { tenantId, tokenHash: invite.tokenHash, expiresAt: invite.expiresAt, createdById: ctx.user.id } } }, select: { id: true } });

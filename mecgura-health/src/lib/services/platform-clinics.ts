@@ -10,7 +10,7 @@ import { FEATURES, applyFeatureGates, isFeatureKey } from "@/lib/platform/featur
 import { isClaimableHost, newDomainToken, txtMatches, txtRecordName, txtRecordValue } from "@/lib/platform/domain";
 import { REASON_CATEGORIES, planTransition, setupChecklist, type SetupFacts } from "@/lib/platform/lifecycle";
 import { limitsSchema, parseJson, retentionSchema, type Limits, type Retention } from "@/lib/platform/limits";
-import { disabledFeaturesOf } from "@/lib/platform/runtime";
+import { tenantSwitchedOff as disabledFeaturesOf } from "@/lib/platform/runtime";
 import { brandContrastIssues } from "@/theme/contrast";
 import { resolveBrandColors } from "@/theme/tokens";
 import { brandingSchema, hostname } from "@/lib/validation/clinic";
@@ -169,7 +169,7 @@ export async function changeLifecycle(ctx: RequestContext, id: string, input: Li
   }
   await db.$transaction([
     db.tenant.update({ where: { id }, data: { status: to } }),
-    db.subscription.updateMany({ where: { tenantId: id }, data: { status: SUBSCRIPTION_FOR[to] ?? "CANCELLED" } }),
+    db.subscription.updateMany({ where: { tenantId: id, managed: false }, data: { status: SUBSCRIPTION_FOR[to] ?? "CANCELLED" } }),
     db.tenantStatusEvent.create({ data: { tenantId: id, fromStatus: t.status, toStatus: to, category: input.action === "activate" && t.status === "PENDING" ? "ONBOARDING" : category, notes: notes || null, actorId: ctx.user.id } }),
   ]);
   await recordAudit({ action: AUDIT_ACTIONS.CLINIC_STATUS_CHANGED, tenantId: id, actorId: ctx.user.id, entityType: "tenant", entityId: id, metadata: { action: input.action, from: t.status, to, category, reasonProvided: !!notes } });

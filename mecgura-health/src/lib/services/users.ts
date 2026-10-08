@@ -1,3 +1,4 @@
+import { assertCanCreate, noteUsage, seatKey } from "./entitlements";
 import "server-only";
 import { notifyStaffSecurity } from "@/lib/notifications/events";
 import bcrypt from "bcryptjs";
@@ -78,6 +79,7 @@ export async function createUser(ctx: TenantRequestContext, input: UserCreateInp
   assertPermission(ctx.permissions, "users.create");
   if (!(TENANT_ASSIGNABLE_ROLES as readonly string[]).includes(input.role)) throw new AppError("FORBIDDEN");
   await assertNoDuplicate(input.email, input.phone);
+  await assertCanCreate(ctx.tenantId, seatKey(input.role)); // plan limit (checked before any transaction)
   const tdb = tenantDb(ctx);
   const invite = newInviteToken();
   const grants = cleanGrants(input.role, input.grants);
@@ -95,6 +97,7 @@ export async function createUser(ctx: TenantRequestContext, input: UserCreateInp
     });
     await recordAudit({ action: AUDIT_ACTIONS.USER_CREATED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "user", entityId: user.id, metadata: { role: input.role, viaSuperAdmin: ctx.viewingAs } });
     await recordAudit({ action: AUDIT_ACTIONS.USER_INVITED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "user", entityId: user.id });
+    await noteUsage(ctx.tenantId, seatKey(input.role));
     return { id: user.id, inviteToken: invite.token, inviteExpiresAt: invite.expiresAt };
   } catch (e) {
     if (uniqueViolation(e)) throw new AppError("CONFLICT", { message: "Email or phone is already registered." });
@@ -121,6 +124,7 @@ export async function updateUser(ctx: TenantRequestContext, id: string, input: U
     }
   }
   const newRole = (input.role ?? current.role.key) as RoleKey;
+  if (roleChanged && ["ACTIVE", "INVITED"].includes(current.status) && seatKey(newRole) !== seatKey(current.role.key)) await assertCanCreate(ctx.tenantId, seatKey(newRole));
   const p = profileData(input);
 
   await tdb.user.update({ where: { id }, data: { ...(input.name ? { name: input.name } : {}), ...(input.phone !== undefined ? { phone: input.phone } : {}), ...(roleChanged ? { roleId: await getRoleId(newRole) } : {}) } });
@@ -154,6 +158,7 @@ export async function setUserStatus(ctx: TenantRequestContext, id: string, statu
   if (status !== "ACTIVE" && u.role.key === "CLINIC_ADMIN" && u.status === "ACTIVE" && (await activeAdminCountExcluding(ctx, id)) === 0) {
     throw new AppError("CONFLICT", { message: "A clinic needs at least one active Clinic Admin." });
   }
+  if (status === "ACTIVE" && !["ACTIVE", "INVITED"].includes(u.status)) await assertCanCreate(ctx.tenantId, seatKey(u.role.key)); // re-activating takes a seat again
   // A user who never set a password goes back to INVITED, not ACTIVE.
   const next = status === "ACTIVE" && !u.passwordHash ? "INVITED" : status;
   await tdb.user.update({ where: { id }, data: { status: next, ...(status === "ACTIVE" ? { failedLoginCount: 0, lockedUntil: null } : {}) } });

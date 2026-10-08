@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/shell/app-shell";
 import { ViewingAsBanner } from "@/components/clinic/viewing-as-banner";
+import { SubscriptionBanner } from "@/components/subscription/subscription-banner";
 import { AnnouncementBanner } from "@/components/shell/announcement-banner";
 import { announcementsFor } from "@/lib/services/platform-admin";
 import { requireContext } from "@/lib/auth/context";
@@ -24,6 +25,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       workspace={ctx.tenant ? { name: ctx.tenant.name, isDemo: ctx.tenant.isDemo, logoUrl: ctx.tenant.logoUrl } : null}
     >
       {ctx.viewingAs && ctx.tenant && <ViewingAsBanner clinicName={ctx.tenant.name} reason={ctx.support?.reason ?? null} expiresAt={ctx.support?.expiresAt.toISOString() ?? null} />}
+      <SubscriptionBanner status={ctx.subscriptionStatus} readOnly={ctx.readOnly} canManage={ctx.permissions.has("subscription.manage")} />
       <AnnouncementBanner items={announcements} />
       {children}
     </AppShell>

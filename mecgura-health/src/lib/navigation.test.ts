@@ -43,6 +43,6 @@ describe("getVisibleNav", () => {
   });
   it("respects the plan's enabled modules", () => {
     const nav = getVisibleNav({ permissions: effectivePermissions("CLINIC_ADMIN"), enabledModules: ["dashboard", "settings"], showPlanned: true });
-    expect(labels(nav)).toEqual(["Dashboard", "Settings"]);
+    expect(labels(nav)).toEqual(["Dashboard", "Subscription", "Settings"]);
   });
 });
