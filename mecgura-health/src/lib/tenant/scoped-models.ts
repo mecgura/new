@@ -122,6 +122,7 @@ export const TENANT_ID_EXEMPT_MODELS: Record<string, string> = {
   Role: "tenantId null = system role shared by all tenants; custom roles arrive later",
   UserMfa: "keyed by userId; only the security services read it, always for the signed-in or an explicitly targeted user",
   ApiKey: "tenantId null = platform key; always queried with an explicit tenantId (null for platform) in sec-apikeys.ts",
+  ErrorEvent: "operations log; tenantId is informational; read only by Super Admin monitoring",
   SecurityEvent: "platform security log (tenantId is informational); readable only by Super Admin services",
   SecurityIncident: "platform incident register; Super Admin only",
   LegalHold: "created/released through sec-audit.ts which checks the caller's own tenant; platform holds have no tenant",

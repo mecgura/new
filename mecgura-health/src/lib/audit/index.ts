@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
+import { TENANT_CACHE_ACTION, invalidateTenantCaches } from "@/lib/cache/tenant-cache";
 import { hmacHex } from "@/lib/security/crypto";
 import { logger, redact } from "@/lib/logger";
 import { getRequestMeta } from "@/lib/security/request";
@@ -46,6 +47,7 @@ export async function recordAudit(input: AuditInput): Promise<void> {
     const row = { id: randomUUID(), action: input.action as string, tenantId: input.tenantId, actorId: input.actorId ?? null, entityType: input.entityType ?? null, entityId: input.entityId ?? null, metadata: serializeMetadata(input.metadata), ip: meta.ip, userAgent: meta.userAgent, createdAt: new Date(), reason: input.reason?.slice(0, 300) ?? null };
     const sig = hmacHex("audit", auditCanonical(row));
     await db.auditLog.create({ data: { ...row, hash: sig.hmac, hashKeyId: sig.keyId } });
+    if (row.tenantId && TENANT_CACHE_ACTION.test(row.action)) invalidateTenantCaches(row.tenantId); // configuration changed: drop cached public-site / host data for this clinic
   } catch (err) {
     logger.error("audit write failed", { action: input.action, error: err });
   }

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { TENANT_ACCESS_STATUSES } from "@/lib/domain/constants";
 import { disabledFeaturesOf } from "@/lib/platform/runtime";
+import { tenantCache } from "@/lib/cache/tenant-cache";
 import { parseTenantHost } from "./host";
 
 /**
@@ -12,9 +13,14 @@ import { parseTenantHost } from "./host";
  * Unverified custom domains never resolve (prevents a mistyped/hijacked domain from serving a clinic).
  * Returns null for the platform host, localhost and unknown hosts.
  */
+const hostCache = tenantCache<Awaited<ReturnType<typeof resolveUncached>> | "none">(30_000, 2000);
 export async function findTenantByHost(hostHeader: string | null | undefined) {
   const match = parseTenantHost(hostHeader, getEnv().TENANT_ROOT_DOMAIN);
   if (!match) return null;
+  const key = `${match.kind}:${match.value}`; const hit = hostCache.get(key); if (hit && hit !== "none") return hit;
+  const t = await resolveUncached(match); if (t) hostCache.set(key, t.id, t); return t; // misses are never cached, so a newly attached domain works at once
+}
+async function resolveUncached(match: NonNullable<ReturnType<typeof parseTenantHost>>) {
   const where =
     match.kind === "subdomain"
       ? { subdomain: match.value }

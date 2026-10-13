@@ -8,7 +8,9 @@ import { requireApiContext, requireTenantApiContext, type RequestContext, type T
 import { SAFE_METHODS, isSameOrigin } from "@/lib/security/origin";
 import { getEnv } from "@/lib/env";
 import { requestStore } from "./request-store";
-import { onAuthzDenied } from "@/lib/services/sec-events";
+import { onAuthzDenied, securityEvent } from "@/lib/services/sec-events";
+import { recordServerError } from "@/lib/ops/errors";
+import { rateLimit } from "@/lib/security/rate-limit";
 
 type Options = { permission?: Permission; auth?: boolean; tenant?: boolean };
 
@@ -37,12 +39,14 @@ export function apiRoute<C extends RequestContext | TenantRequestContext | null 
         try { ctx = options.tenant ? await requireTenantApiContext(options.permission) : await requireApiContext(options.permission); }
         catch (e) { if (e instanceof AppError && e.code === "FORBIDDEN") { const c = await import("@/lib/auth/context").then((m) => m.getContext()).catch(() => null); if (c) { denied.id = c.user.id; denied.tenantId = c.tenant?.id ?? null; } } throw e; }
       }
+      // Abuse guard for every signed-in API call: generous for people, tight enough to stop scripted hammering (per user, per instance).
+      if (ctx) { const writes = !SAFE_METHODS.has(req.method); const lim = await rateLimit(`api:${writes ? "w" : "r"}:${ctx.user.id}`, writes ? { limit: Number(process.env.API_WRITE_LIMIT_PER_MIN) || 240, windowMs: 60_000 } : { limit: Number(process.env.API_READ_LIMIT_PER_MIN) || 1200, windowMs: 60_000 }); if (!lim.allowed) { void securityEvent({ severity: "LOW", category: "API", type: "API_RATE_LIMITED", summary: `${writes ? "Write" : "Read"} rate limit hit`, actorId: ctx.user.id, tenantId: ctx.tenant?.id ?? null }); throw new AppError("RATE_LIMITED"); } }
       const data = await handler({ req, ctx: ctx as C, params: (await routeCtx?.params) ?? {} });
       const body: ApiResult<unknown> = { ok: true, data };
       return NextResponse.json(body, { headers: { "Cache-Control": "no-store", "X-Request-Id": requestId } });
     } catch (err) {
       const { failure, status, unexpected } = toFailure(err, requestId);
-      if (unexpected) logger.error("api error", { requestId, path: new URL(req.url).pathname, error: err });
+      if (unexpected) { logger.error("api error", { requestId, path: new URL(req.url).pathname, error: err }); void recordServerError({ route: new URL(req.url).pathname.replace(/[0-9a-z]{20,}/gi, ":id"), method: req.method, status, code: failure.error.code, requestId, message: err instanceof Error ? err.message : "error" }); }
       if (denied.id) void onAuthzDenied({ actorId: denied.id, tenantId: denied.tenantId ?? null, path: new URL(req.url).pathname.replace(/[0-9a-z]{20,}/gi, ":id"), code: "FORBIDDEN" });
       return NextResponse.json(failure, {
         status,

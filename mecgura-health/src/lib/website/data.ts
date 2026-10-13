@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { tenantCache } from "@/lib/cache/tenant-cache";
 import { TENANT_ACCESS_STATUSES } from "@/lib/domain/constants";
 import { resolveBrandColors } from "@/theme/tokens";
 import { parseContent } from "./content";
@@ -16,7 +17,14 @@ const arr = (json: string): string[] => { try { const v = JSON.parse(json); retu
 
 export type SiteLoad = { kind: "ok"; site: SiteData } | { kind: "unpublished"; name: string; brand: SiteData["brand"]; logoUrl: string | null } | { kind: "missing" };
 
+const siteCache = tenantCache<SiteLoad>(30_000, 500);
+/** Published site content is cached for 30 s per clinic (preview/draft is never cached). Any website/branding/domain/feature/subscription change invalidates it immediately. */
 export async function loadSite(tenantId: string, mode: SiteMode): Promise<SiteLoad> {
+  if (mode !== "public") return loadSiteUncached(tenantId, mode);
+  const hit = siteCache.get(tenantId); if (hit) return hit;
+  const fresh = await loadSiteUncached(tenantId, mode); siteCache.set(tenantId, tenantId, fresh); return fresh;
+}
+async function loadSiteUncached(tenantId: string, mode: SiteMode): Promise<SiteLoad> {
   const tenant = await db.tenant.findFirst({
     where: { id: tenantId, deletedAt: null, status: { in: [...TENANT_ACCESS_STATUSES] } },
     select: {

@@ -16,7 +16,10 @@
     "db:sync-schema": "node scripts/sync-pg-schema.mjs",
     "db:check-schema": "node scripts/sync-pg-schema.mjs --check",
     "security:scan": "node scripts/security-scan.mjs",
-    "security:audit": "npm audit --omit=dev"
+    "security:audit": "npm audit --omit=dev",
+    "perf": "vitest run --config vitest.perf.config.ts",
+    "backup": "node scripts/backup.mjs",
+    "backup:verify": "node scripts/restore-verify.mjs"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.10.0",

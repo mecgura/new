@@ -3095,3 +3095,68 @@ model LegalHold {
   @@index([tenantId, releasedAt])
   @@index([scopeType, scopeId, releasedAt])
 }
+
+/* =====================================================================================================================
+ * Phase 17 — operations: job history, error store, backup register
+ * ===================================================================================================================== */
+
+/// One execution of a scheduled job (scheduler tick parts, notification jobs, subscription billing clock…). Written by the cron endpoint.
+model JobRun {
+  id         String    @id @default(cuid())
+  name       String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  durationMs Int?
+  /// OK | PARTIAL | FAILED
+  status     String    @default("OK")
+  /// JSON of counters — never patient data
+  summary    String?
+  error      String?
+
+  @@index([name, startedAt])
+  @@index([status, startedAt])
+}
+
+/// Server errors (5xx / unexpected exceptions) with a request id so a user report can be traced. Messages are sanitised; no bodies, tokens or patient data.
+model ErrorEvent {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  route     String
+  method    String
+  status    Int
+  code      String
+  requestId String
+  message   String
+  env       String
+  tenantId  String?
+
+  @@index([createdAt])
+  @@index([route, createdAt])
+  @@index([requestId])
+}
+
+/// Register of backup and restore-test runs, written by scripts/backup.mjs and scripts/restore-verify.mjs. The app only READS it to show status.
+model BackupRun {
+  id                String    @id @default(cuid())
+  /// DATABASE | FILES
+  kind              String    @default("DATABASE")
+  startedAt         DateTime  @default(now())
+  finishedAt        DateTime?
+  /// SUCCESS | FAILED
+  status            String    @default("SUCCESS")
+  driver            String    @default("sqlite")
+  sizeBytes         Int?
+  checksum          String?
+  encrypted         Boolean   @default(false)
+  /// label of the destination (a folder name / bucket alias) — never a credential
+  location          String?
+  rowCounts         String?
+  verifiedAt        DateTime?
+  restoreTestedAt   DateTime?
+  restoreOk         Boolean?
+  restoreDurationMs Int?
+  note              String?
+
+  @@index([startedAt])
+  @@index([kind, status, startedAt])
+}

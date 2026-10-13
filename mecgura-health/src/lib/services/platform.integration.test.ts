@@ -364,7 +364,7 @@ describe("monitoring (real data only)", () => {
   });
   it("system health is honest: unknown where nothing is recorded, no secrets", async () => {
     process.env.CRON_SECRET = "super-secret-cron-value-0123456789"; const h = await systemHealth(SA); const c = Object.fromEntries(h.components.map((x) => [x.key, x]));
-    expect(c.database.status).toBe("ok"); expect(c.database.detail).toMatch(/ms/); expect(c.errors.status).toBe("unknown"); expect(c.backups.status).toBe("unknown"); expect(c.scheduler.status).toBe("warn"); expect(c.scheduler.detail).toMatch(/No tick/);
+    expect(c.database.status).toBe("ok"); expect(c.database.detail).toMatch(/ms/); expect(c.errors.status).toBe("ok"); expect(c.backups.status).toBe("warn"); expect(c.backups.detail).toMatch(/No backup/); expect(c.jobs).toBeTruthy(); expect(c.scheduler.status).toBe("warn"); expect(c.scheduler.detail).toMatch(/No tick/);
     expect(JSON.stringify(h)).not.toContain("super-secret-cron-value"); await db.platformSetting.upsert({ where: { key: "scheduler.heartbeat" }, update: { value: JSON.stringify({ at: new Date().toISOString() }) }, create: { key: "scheduler.heartbeat", value: JSON.stringify({ at: new Date().toISOString() }) } });
     expect(Object.fromEntries((await systemHealth(SA)).components.map((x) => [x.key, x])).scheduler.status).toBe("ok"); delete process.env.CRON_SECRET;
     expect(Object.fromEntries((await systemHealth(SA)).components.map((x) => [x.key, x])).scheduler.status).toBe("unknown");

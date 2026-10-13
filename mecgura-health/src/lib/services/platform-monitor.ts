@@ -9,7 +9,7 @@ import { platformCommOverview } from "./comms-platform";
 
 /**
  * Super Admin monitoring. Everything here is a count / timestamp / configuration flag read from the real tables.
- * Where nothing is recorded (error store, backups, provider health probes) the answer is "unavailable", never a made-up number.
+ * Where nothing is recorded (provider health probes) the answer is "unavailable", never a made-up number.
  */
 export async function platformDashboard(ctx: RequestContext) {
   guard(ctx);
@@ -70,6 +70,13 @@ export async function systemHealth(ctx: RequestContext) {
   const oldestAgeMin = oldest ? Math.round((Date.now() - (oldest as { scheduledAt: Date }).scheduledAt.getTime()) / 60000) : null;
   const schedulerConfigured = !!process.env.CRON_SECRET && process.env.CRON_SECRET.length >= 16;
   const stale = schedulerConfigured && (!heartbeat || Date.now() - heartbeat.getTime() > 15 * 60_000);
+  const h1 = new Date(Date.now() - 3_600_000); const h24 = new Date(Date.now() - 86_400_000);
+  const [errors1h, errors24h, jobsFailed24, lastJob, lastBackup] = dbOk ? await Promise.all([
+    db.errorEvent.count({ where: { createdAt: { gte: h1 } } }), db.errorEvent.count({ where: { createdAt: { gte: h24 } } }),
+    db.jobRun.count({ where: { status: "FAILED", startedAt: { gte: h24 } } }), db.jobRun.findFirst({ orderBy: { startedAt: "desc" }, select: { name: true, status: true, startedAt: true } }),
+    db.backupRun.findFirst({ where: { status: "SUCCESS" }, orderBy: { startedAt: "desc" }, select: { startedAt: true, encrypted: true, restoreTestedAt: true, restoreOk: true } }),
+  ]) : [0, 0, 0, null, null] as never[];
+  const backupAgeH = lastBackup ? Math.round((Date.now() - lastBackup.startedAt.getTime()) / 3_600_000) : 0;
   const components = [
     { key: "application", label: "Application", status: "ok" as const, detail: `Running (Node ${process.version}, ${process.env.NODE_ENV ?? "unknown"} mode, up ${Math.round(process.uptime() / 60)} min)` },
     { key: "database", label: "Database", status: dbOk ? ("ok" as const) : ("down" as const), detail: dbOk ? `Responding in ${dbMs} ms` : "The database did not respond." },
@@ -77,8 +84,9 @@ export async function systemHealth(ctx: RequestContext) {
     { key: "scheduler", label: "Scheduler", status: !schedulerConfigured ? ("unknown" as const) : stale ? ("warn" as const) : ("ok" as const), detail: !schedulerConfigured ? "Not configured (CRON_SECRET is not set), so reminders and delivery retries do not run on a schedule." : heartbeat ? `Last tick ${heartbeat.toISOString()}` : "No tick has been recorded yet." },
     { key: "webhooks", label: "Provider webhooks", status: !dbOk ? ("unknown" as const) : (webhookBad as number) > 0 ? ("warn" as const) : ("ok" as const), detail: lastWebhook ? `Last event ${(lastWebhook as { receivedAt: Date }).receivedAt.toISOString()} (${(lastWebhook as { provider: string }).provider}); ${webhookBad} for unknown messages in 24 h` : "No webhook has been received yet." },
     { key: "storage", label: "Storage", status: "ok" as const, detail: `${(assets as { _count: { _all: number } })._count._all} stored branding file(s), ${Math.round((((assets as { _sum: { size: number | null } })._sum.size ?? 0) / 1024))} KB. Disk and object-storage capacity are not monitored here.` },
-    { key: "errors", label: "Error monitoring", status: "unknown" as const, detail: "Not connected. Errors are written to the server log only; no error store exists to summarise." },
-    { key: "backups", label: "Backups", status: "unknown" as const, detail: "Backup status is not available. Backup and recovery are handled in a later phase." },
+    { key: "errors", label: "Error monitoring", status: !dbOk ? ("unknown" as const) : errors1h >= 20 ? ("warn" as const) : ("ok" as const), detail: `${errors1h} server error(s) in the last hour, ${errors24h} in 24 h (own error store; no external tracker is connected).` },
+    { key: "jobs", label: "Background jobs", status: !dbOk ? ("unknown" as const) : jobsFailed24 > 0 ? ("warn" as const) : ("ok" as const), detail: lastJob ? `${jobsFailed24} failed run(s) in 24 h; last run ${lastJob.name} at ${lastJob.startedAt.toISOString()} (${lastJob.status})` : "No job run has been recorded yet." },
+    { key: "backups", label: "Backups", status: !dbOk ? ("unknown" as const) : !lastBackup ? ("warn" as const) : backupAgeH > 36 || lastBackup.restoreOk === false ? ("warn" as const) : ("ok" as const), detail: lastBackup ? `Last successful backup ${lastBackup.startedAt.toISOString()} (${backupAgeH} h ago, ${lastBackup.encrypted ? "encrypted" : "NOT encrypted"}); ${lastBackup.restoreTestedAt ? `restore test ${lastBackup.restoreOk ? "passed" : "FAILED"} on ${lastBackup.restoreTestedAt.toISOString()}` : "restore never tested"}` : "No backup has been recorded. Run npm run backup (see docs/BACKUP_DR.md)." },
   ];
   const alerts = components.filter((c) => c.status === "warn" || c.status === "down").map((c) => `${c.label}: ${c.detail}`);
   return { overall: components.some((c) => c.status === "down") ? "down" : components.some((c) => c.status === "warn") ? "degraded" : "ok", components, alerts, lastDeliveryActivity: (lastAttempt as { createdAt: Date } | null)?.createdAt ?? null, generatedAt: new Date().toISOString() };
