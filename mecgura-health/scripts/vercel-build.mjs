@@ -38,5 +38,7 @@ if (prod) {
   console.log(`[vercel-build] running migrations over the ${direct ? "direct (unpooled)" : "DATABASE_URL"} connection`);
   // Advisory locking is switched off: on serverless Postgres (Neon) the lock can time out (P1002). Only one deploy migrates at a time here.
   run("npx", ["prisma", "migrate", "deploy"], { ...env, ...(direct ? { DATABASE_URL: direct } : {}), PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK: "1" });
+  // System data (permissions, roles) is refreshed on every production deploy; the first Super Admin is created only if BOOTSTRAP_SUPERADMIN_* are set and none exists.
+  run("npx", ["tsx", "prisma/seed-production.ts"], { ...env, NODE_ENV: "production" });
 } else console.log("[vercel-build] preview/dev deploy: skipping database migrations");
 run("npx", ["next", "build"]);
