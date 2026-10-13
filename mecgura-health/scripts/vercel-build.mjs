@@ -11,6 +11,7 @@ if (prod) {
   // Migrations need a direct connection: pooled (pgbouncer) URLs cannot hold the advisory lock Prisma Migrate uses.
   const direct = env.DATABASE_URL_UNPOOLED || env.POSTGRES_URL_NON_POOLING;
   console.log(`[vercel-build] running migrations over the ${direct ? "direct (unpooled)" : "DATABASE_URL"} connection`);
-  run("npx", ["prisma", "migrate", "deploy"], direct ? { ...env, DATABASE_URL: direct } : env);
+  // Advisory locking is switched off: on serverless Postgres (Neon) the lock can time out (P1002). Only one deploy migrates at a time here.
+  run("npx", ["prisma", "migrate", "deploy"], { ...env, ...(direct ? { DATABASE_URL: direct } : {}), PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK: "1" });
 } else console.log("[vercel-build] preview/dev deploy: skipping database migrations");
 run("npx", ["next", "build"]);
