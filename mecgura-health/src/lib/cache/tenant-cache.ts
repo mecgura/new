@@ -17,7 +17,9 @@ export class TenantCache<T> {
   clear() { this.map.clear(); }
   get size() { return this.map.size; }
 }
-const registry: TenantCache<unknown>[] = [];
+// Held on globalThis: Next bundles API routes and pages separately, so a plain module-level array would be a different copy in each and invalidations from a route handler would never reach the page's cache.
+const g = globalThis as unknown as { __tenantCaches?: TenantCache<unknown>[] };
+const registry: TenantCache<unknown>[] = (g.__tenantCaches ??= []);
 export function tenantCache<T>(ttlMs: number, max?: number): TenantCache<T> { const c = new TenantCache<T>(ttlMs, max); registry.push(c as TenantCache<unknown>); return c; }
 export const invalidateTenantCaches = (tenantId: string) => { for (const c of registry) c.invalidateTenant(tenantId); };
 export const TENANT_CACHE_ACTION = /^(website|service|doctor_profile|testimonial|faq|article|branding|domain|clinic|tenant|platform\.(feature|branding|domain|clinic|settings)|subscription|user\.(role|status))/;
