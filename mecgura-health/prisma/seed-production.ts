@@ -35,7 +35,15 @@ async function main() {
 
   const email = (process.env.BOOTSTRAP_SUPERADMIN_EMAIL ?? "").trim().toLowerCase(); const password = process.env.BOOTSTRAP_SUPERADMIN_PASSWORD ?? "";
   const existingAdmin = await db.user.count({ where: { roleId: roleIds.get("SUPER_ADMIN")!, deletedAt: null } });
-  if (existingAdmin > 0) console.log("A Super Admin already exists — none created.");
+  const adminEmails = (await db.user.findMany({ where: { roleId: roleIds.get("SUPER_ADMIN")!, deletedAt: null }, select: { email: true } })).map((u) => u.email);
+  if (existingAdmin > 0) {
+    console.log(`A Super Admin already exists — none created. (${adminEmails.join(", ")})`);
+    // Recovery: BOOTSTRAP_SUPERADMIN_RESET=yes + email + password (>=16 chars) resets that Super Admin's password and unlocks it. Remove the variables afterwards.
+    if (process.env.BOOTSTRAP_SUPERADMIN_RESET === "yes" && email && password.length >= 16 && !/demo|password/i.test(password)) {
+      const r = await db.user.updateMany({ where: { email, roleId: roleIds.get("SUPER_ADMIN")!, deletedAt: null }, data: { passwordHash: await bcrypt.hash(password, 12), failedLoginCount: 0, lockedUntil: null, status: "ACTIVE" } });
+      console.log(r.count ? `Super Admin password reset: ${email}` : `No Super Admin with email ${email} — nothing reset.`);
+    }
+  }
   else if (!email && !password) console.log("No BOOTSTRAP_SUPERADMIN_* variables set — no Super Admin created. Set them and run again to create the first one.");
   else {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { console.error("BOOTSTRAP_SUPERADMIN_EMAIL is not a valid email."); process.exit(1); }
