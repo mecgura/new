@@ -6,12 +6,11 @@ import { logoutAction } from "@/app/actions/auth";
 export function UserMenu({ name, email, roleLabel, avatarUrl }: { name: string; email: string; roleLabel: string; avatarUrl?: string | null }) {
   return (
     <Dropdown
-      triggerLabel={`Account menu for ${name}`}
       triggerClassName="flex min-h-control items-center gap-2 rounded-lg px-1.5 hover:bg-surface-muted"
       trigger={<>
         <Avatar name={name} src={avatarUrl} size="sm" />
         <span className="hidden text-left leading-tight lg:block"><span className="block max-w-36 truncate text-sm font-semibold">{name}</span><span className="type-caption block">{roleLabel}</span></span>
-        <ChevronDown aria-hidden className="hidden size-4 text-muted lg:block" />
+        <ChevronDown aria-hidden className="hidden size-4 text-muted lg:block" /><span className="sr-only">Account menu</span>
       </>}
       items={[
         { type: "label", label: email },

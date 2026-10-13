@@ -9,7 +9,7 @@ export type DropdownItem =
   | { type: "label"; label: string };
 
 /** Menu button with full keyboard support: Enter/Space/↓ open, ↑↓ Home End move, Esc closes + restores focus. */
-export function Dropdown({ trigger, items, align = "right", triggerLabel, triggerClassName }: { trigger: React.ReactNode; items: DropdownItem[]; align?: "left" | "right"; triggerLabel: string; triggerClassName?: string }) {
+export function Dropdown({ trigger, items, align = "right", triggerLabel, triggerClassName }: { trigger: React.ReactNode; items: DropdownItem[]; align?: "left" | "right"; triggerLabel?: string; triggerClassName?: string }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const btn = useRef<HTMLButtonElement>(null);
@@ -47,7 +47,7 @@ export function Dropdown({ trigger, items, align = "right", triggerLabel, trigge
         {trigger}
       </button>
       {open && (
-        <div id={menuId} role="menu" aria-label={triggerLabel} className={cn("absolute z-40 mt-2 min-w-56 rounded-lg border border-line bg-surface p-1.5 shadow-pop", align === "right" ? "right-0" : "left-0")}>
+        <div id={menuId} role="menu" aria-label={triggerLabel ?? "Menu"} className={cn("absolute z-40 mt-2 min-w-56 rounded-lg border border-line bg-surface p-1.5 shadow-pop", align === "right" ? "right-0" : "left-0")}>
           {items.map((it, idx) => {
             if (it.type === "separator") return <div key={idx} role="separator" className="my-1 h-px bg-line" />;
             if (it.type === "label") return <p key={idx} className="type-caption px-3 py-1.5">{it.label}</p>;

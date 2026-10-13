@@ -13,12 +13,17 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:production": "tsx prisma/seed-production.ts",
     "db:sync-schema": "node scripts/sync-pg-schema.mjs",
     "db:check-schema": "node scripts/sync-pg-schema.mjs --check",
     "security:scan": "node scripts/security-scan.mjs",
     "security:audit": "npm audit --omit=dev",
     "perf": "vitest run --config vitest.perf.config.ts",
     "backup": "node scripts/backup.mjs",
+    "docs:api": "node scripts/gen-api-docs.mjs",
+    "env:check": "node scripts/check-env.mjs",
+    "smoke": "node scripts/smoke-test.mjs",
+    "qa:integrity": "node scripts/data-integrity.mjs",
     "backup:verify": "node scripts/restore-verify.mjs"
   },
   "dependencies": {

@@ -90,9 +90,15 @@ storage is configured (`/api/assets/:id`; logo/favicon public, avatars same-clin
 * On a clinic's host, only that clinic's users (and Super Admin) can sign in.
 
 ### Migrations
-SQLite (dev): `prisma/migrations/`. PostgreSQL: `prisma/migrations-postgres/` (generated with `prisma migrate diff`; **not yet
-executed against a real PostgreSQL server** — run `PRISMA_SCHEMA=prisma/schema.postgres.prisma npx prisma migrate deploy`
-on staging first).
+SQLite (dev): `prisma/migrations/`. PostgreSQL: `prisma/migrations-postgres/` (generated with `prisma migrate diff`). Both sets apply cleanly from an empty database
+(PostgreSQL 16 verified in Phase 16/17). Production flow: `PRISMA_SCHEMA=prisma/schema.postgres.prisma npx prisma migrate deploy` — see `docs/DEPLOYMENT.md`.
+
+### Documentation index
+Operations: `docs/DEPLOYMENT.md` · `docs/ENVIRONMENT.md` · `docs/BACKUP_DR.md` · `docs/TROUBLESHOOTING.md` · `docs/INCIDENT_RESPONSE.md` · `docs/SUPPORT_WORKFLOW.md` · `PRODUCTION_LAUNCH_CHECKLIST.md`
+Technical: `docs/ARCHITECTURE.md` · `docs/DATABASE.md` · `docs/AUTHORIZATION.md` · `docs/TENANCY.md` · `docs/SECURITY.md` · `docs/API.md` (generated) · `docs/INTEGRATIONS.md` · `security-review/`
+User guides: `docs/roles/`
+Reports: `FINAL_QA_REPORT.md` · `PRODUCTION_READINESS_REPORT.md` · per-phase notes `docs/phase*.md`
+Scripts: `npm run env:check` · `npm run smoke` · `npm run backup` / `backup:verify` · `npm run qa:integrity` · `npm run security:scan` · `npm run docs:api` · `npm run db:seed:production`
 
 
 ---

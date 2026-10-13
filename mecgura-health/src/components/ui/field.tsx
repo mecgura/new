@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useId } from "react";
+import { Children, cloneElement, createContext, isValidElement, useContext, useId } from "react";
 import { cn } from "@/lib/cn";
 
 export const controlClass =
@@ -17,7 +17,7 @@ export function useFieldProps() {
 }
 
 /**
- * Label + control + hint + error. Wrap any input/select/textarea:
+ * Label + control + hint + error. Wrap any input/select/textarea (a plain native control is wired up automatically; custom ones use useFieldProps):
  *   <Field label="Email" error={errors.email}><TextInput type="email" name="email" /></Field>
  */
 export function Field({ label, hint, error, required, className, children }: { label: string; hint?: string; error?: string; required?: boolean; className?: string; children: React.ReactNode }) {
@@ -32,7 +32,7 @@ export function Field({ label, hint, error, required, className, children }: { l
           {label}
           {required && <span aria-hidden className="ml-0.5 text-danger">*</span>}
         </label>
-        {children}
+        {Children.map(children, (c) => (isValidElement<Record<string, unknown>>(c) && typeof c.type === "string" && ["input", "select", "textarea"].includes(c.type) && c.props.id === undefined ? cloneElement(c, { id, "aria-describedby": describedBy, "aria-invalid": error ? true : undefined, required: required || c.props.required }) : c))}
         {hint && !error && <p id={hintId} className="type-caption">{hint}</p>}
         {error && <p id={errId} className="type-caption !text-danger" role="alert">{error}</p>}
       </div>

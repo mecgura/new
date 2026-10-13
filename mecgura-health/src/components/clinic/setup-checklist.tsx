@@ -20,10 +20,10 @@ export function SetupChecklist({ items, later }: { items: Item[]; later: string[
             </li>
           ))}
           {later.map((l) => (
-            <li key={l} className="flex items-center gap-3 py-2.5 opacity-70">
+            <li key={l} className="flex items-center gap-3 py-2.5">
               <Clock aria-hidden className="size-5 shrink-0 text-muted" />
               <span className="type-body min-w-0 flex-1">{l}<span className="sr-only"> — not available yet</span></span>
-              <span className="type-caption shrink-0">Coming later</span>
+              <span className="type-caption shrink-0 italic">Coming later</span>
             </li>
           ))}
         </ul>
