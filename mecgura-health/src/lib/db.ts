@@ -10,8 +10,9 @@ function createClient() {
   if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL && process.env.NEXT_PHASE !== "phase-production-build") {
     throw new Error("DATABASE_URL is not set. Add the PostgreSQL URL in the hosting environment variables and redeploy.");
   }
+  // DATABASE_SCHEMA keeps this app in its own PostgreSQL schema when the database is shared with another application.
   const adapter = url.startsWith("postgres")
-    ? new PrismaPg({ connectionString: url })
+    ? new PrismaPg({ connectionString: url }, process.env.DATABASE_SCHEMA ? { schema: process.env.DATABASE_SCHEMA } : undefined)
     : new PrismaBetterSqlite3({ url });
   return new PrismaClient({ adapter });
 }

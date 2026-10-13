@@ -17,7 +17,7 @@ import { PERMISSIONS, ROLES, ROLE_LABELS, ROLE_PERMISSIONS } from "../src/lib/pe
 
 const url = process.env.DATABASE_URL;
 if (!url) { console.error("DATABASE_URL is required."); process.exit(1); }
-const db = new PrismaClient({ adapter: url.startsWith("postgres") ? new PrismaPg({ connectionString: url }) : new PrismaBetterSqlite3({ url }) });
+const db = new PrismaClient({ adapter: url.startsWith("postgres") ? new PrismaPg({ connectionString: url }, process.env.DATABASE_SCHEMA ? { schema: process.env.DATABASE_SCHEMA } : undefined) : new PrismaBetterSqlite3({ url }) });
 
 async function main() {
   for (const [key, meta] of Object.entries(PERMISSIONS)) await db.permission.upsert({ where: { key }, update: { module: meta.module, description: meta.description }, create: { key, module: meta.module, description: meta.description } });

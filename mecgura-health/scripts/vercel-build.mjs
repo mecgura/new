@@ -7,6 +7,7 @@ const env = process.env; const prod = env.VERCEL_ENV === "production"; const pro
  * A database that is already migrated, or holds any clinic data, is never touched and the flag is simply ignored.
  */
 async function resetEmptyDatabase(url) {
+  if (env.DATABASE_SCHEMA) { console.log("[vercel-build] RESET_EMPTY_DATABASE ignored: DATABASE_SCHEMA is set (a dedicated schema is never reset automatically)"); return; }
   const { default: pg } = await import("pg"); const c = new pg.Client({ connectionString: url, ssl: /sslmode=disable/.test(url) || /localhost|127\.0\.0\.1/.test(url) ? false : { rejectUnauthorized: false } }); await c.connect();
   try {
     const t = (await c.query("select table_name from information_schema.tables where table_schema='public'")).rows.map((r) => r.table_name);
@@ -17,6 +18,12 @@ async function resetEmptyDatabase(url) {
     await c.query("DROP SCHEMA public CASCADE"); await c.query("CREATE SCHEMA public");
   } finally { await c.end(); }
 }
+/** When DATABASE_SCHEMA is set (database shared with another app), create that schema if needed. Never touches other schemas. */
+async function ensureSchema(url, schema) {
+  if (!/^[a-z_][a-z0-9_]*$/.test(schema) || schema === "public") { console.error(`[vercel-build] DATABASE_SCHEMA must be a lowercase name other than "public" (got "${schema}")`); process.exit(1); }
+  const { default: pg } = await import("pg"); const c = new pg.Client({ connectionString: url }); await c.connect();
+  try { await c.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`); console.log(`[vercel-build] using PostgreSQL schema "${schema}"`); } finally { await c.end(); }
+}
 const present = (k) => (env[k] ? "set" : "MISSING");
 console.log(`[vercel-build] VERCEL_ENV=${env.VERCEL_ENV ?? "?"} PRISMA_SCHEMA=${present("PRISMA_SCHEMA")} DATABASE_URL=${present("DATABASE_URL")} DATABASE_URL_UNPOOLED=${present("DATABASE_URL_UNPOOLED")} AUTH_SECRET=${present("AUTH_SECRET")} SECURITY_KEYS=${present("SECURITY_KEYS")} CRON_SECRET=${present("CRON_SECRET")} APP_URL=${present("APP_URL")}`);
 if (!/schema\.postgres\.prisma$/.test(env.PRISMA_SCHEMA ?? "")) problems.push("PRISMA_SCHEMA must be set to prisma/schema.postgres.prisma (Vercel → Settings → Environment Variables, ALL environments), then Redeploy WITHOUT build cache.");
@@ -26,6 +33,7 @@ const run = (cmd, args, e = env) => { const r = spawnSync(cmd, args, { stdio: "i
 if (prod) {
   // Migrations need a direct connection: pooled (pgbouncer) URLs cannot hold the advisory lock Prisma Migrate uses.
   const direct = env.DATABASE_URL_UNPOOLED || env.POSTGRES_URL_NON_POOLING;
+  if (env.DATABASE_SCHEMA) await ensureSchema(direct || env.DATABASE_URL, env.DATABASE_SCHEMA);
   if (env.RESET_EMPTY_DATABASE === "yes") await resetEmptyDatabase(direct || env.DATABASE_URL);
   console.log(`[vercel-build] running migrations over the ${direct ? "direct (unpooled)" : "DATABASE_URL"} connection`);
   // Advisory locking is switched off: on serverless Postgres (Neon) the lock can time out (P1002). Only one deploy migrates at a time here.
