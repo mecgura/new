@@ -6,10 +6,16 @@ export type HostMatch = { kind: "subdomain"; value: string } | { kind: "custom";
  *   drsharma.com                                            -> custom domain
  *   health.example.com / localhost                          -> null (platform / no tenant)
  */
+/** The platform's own host(s) come from APP_URL (e.g. https://health.example.com): never a clinic, even without TENANT_ROOT_DOMAIN. */
+function platformHosts(): string[] {
+  try { const h = new URL(process.env.APP_URL ?? "").hostname.toLowerCase(); return h ? [h, `www.${h}`] : []; } catch { return []; }
+}
+
 export function parseTenantHost(hostHeader: string | null | undefined, rootDomain?: string): HostMatch {
   if (!hostHeader) return null;
   const host = hostHeader.toLowerCase().split(":")[0].trim();
   if (!host || host === "localhost" || /^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return null;
+  if (platformHosts().includes(host)) return null;
   const root = rootDomain?.toLowerCase().trim();
   if (root) {
     if (host === root || host === `www.${root}`) return null;

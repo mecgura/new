@@ -39,4 +39,12 @@ describe("parseTenantHost", () => {
     expect(parseTenantHost("localhost:3000")).toBeNull();
     expect(parseTenantHost("127.0.0.1:3000")).toBeNull();
   });
+  it("treats the APP_URL host as the platform even without a root domain (not a clinic custom domain)", () => {
+    const prev = process.env.APP_URL; process.env.APP_URL = "https://health.example.com";
+    try {
+      expect(parseTenantHost("health.example.com")).toBeNull();
+      expect(parseTenantHost("www.health.example.com")).toBeNull();
+      expect(parseTenantHost("drsharma.com")).toEqual({ kind: "custom", value: "drsharma.com" });
+    } finally { if (prev === undefined) delete process.env.APP_URL; else process.env.APP_URL = prev; }
+  });
 });
