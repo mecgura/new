@@ -32,6 +32,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
   { module: "platform", label: "Communications", href: "/platform/communications", icon: "communications", permission: "platform.manage" },
   { module: "platform", label: "Platform alerts", href: "/platform/notifications", icon: "communications", permission: "platform.manage" },
   { module: "platform", label: "Analytics", href: "/platform/analytics", icon: "analytics", permission: "platform.manage" },
+  { module: "platform", label: "Security", href: "/platform/security", icon: "audit", permission: "platform.manage" },
   { module: "platform", label: "Audit logs", href: "/platform/audit", icon: "audit", permission: "platform.manage" },
   { module: "platform", label: "System health", href: "/platform/system", icon: "system", permission: "platform.manage" },
   { module: "platform", label: "Platform settings", href: "/platform/settings", icon: "settings", permission: "platform.manage" },

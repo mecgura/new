@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import type { RequestContext } from "@/lib/auth/context";
 import { AppError } from "@/lib/errors";
+import { currentMfaCode } from "@/lib/api/request-store";
+import { hasMfa, verifySecondFactor } from "./sec-mfa";
 
 /**
  * Shared guards for the Super Admin console.
@@ -19,6 +21,10 @@ const failures = new Map<string, { count: number; reset: number }>(); const MAX_
 export const resetStepUpFailures = () => failures.clear();
 export async function stepUp(ctx: RequestContext, password: unknown, purpose: string) {
   guard(ctx);
+  return reauth(ctx, password, purpose);
+}
+/** Re-authentication for ANY signed-in user (clinic admins too): own password, plus the authenticator code when two-factor is on. Failures are rate limited and audited. */
+export async function reauth(ctx: RequestContext, password: unknown, purpose: string) {
   const f = failures.get(ctx.user.id);
   if (f && f.reset > Date.now() && f.count >= MAX_FAILS) throw new AppError("RATE_LIMITED", { message: "Too many failed confirmations. Wait a few minutes and try again." });
   const row = await db.user.findFirst({ where: { id: ctx.user.id, deletedAt: null }, select: { passwordHash: true } });
@@ -29,6 +35,11 @@ export async function stepUp(ctx: RequestContext, password: unknown, purpose: st
     throw new AppError("FORBIDDEN", { message: "Your password wasn't accepted, so nothing was changed.", fieldErrors: { confirmPassword: "Enter your own password to confirm." } });
   }
   failures.delete(ctx.user.id);
+  // Phase 16: a Super Admin who turned on two-factor must ALSO give a current code for sensitive actions.
+  if (await hasMfa(ctx.user.id)) {
+    const f = await verifySecondFactor(ctx.user.id, currentMfaCode());
+    if (!f.ok) throw new AppError("FORBIDDEN", { message: "This action also needs the code from your authenticator app.", fieldErrors: { mfaCode: f.reason === "missing" ? "Enter your authenticator code." : "Wrong or already used code." } });
+  }
 }
 
 export const cleanNotes = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");

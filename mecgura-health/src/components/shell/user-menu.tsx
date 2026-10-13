@@ -1,5 +1,5 @@
 "use client";
-import { ChevronDown, LogOut, Settings, UserRound } from "lucide-react";
+import { ChevronDown, LogOut, Settings, ShieldCheck, UserRound } from "lucide-react";
 import { Avatar, Dropdown } from "@/components/ui";
 import { logoutAction } from "@/app/actions/auth";
 
@@ -17,6 +17,7 @@ export function UserMenu({ name, email, roleLabel, avatarUrl }: { name: string; 
         { type: "label", label: email },
         { label: "Profile & workspace", href: "/settings", icon: <UserRound aria-hidden className="size-4" /> },
         { label: "Settings", href: "/settings", icon: <Settings aria-hidden className="size-4" /> },
+        { label: "Account security", href: "/account/security", icon: <ShieldCheck aria-hidden className="size-4" /> },
         { type: "separator" },
         { label: "Sign out", tone: "danger", icon: <LogOut aria-hidden className="size-4" />, onSelect: () => { void logoutAction(); } },
       ]}

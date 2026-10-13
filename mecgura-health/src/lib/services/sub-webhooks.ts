@@ -1,3 +1,4 @@
+import { securityEvent } from "./sec-events";
 import "server-only";
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
@@ -22,7 +23,7 @@ export async function handleSubscriptionWebhook(providerKey: string, rawBody: st
   const provider = providerByKey(providerKey); if (!provider || provider.key === "manual") return { status: 404, body: { ok: false, reason: "unknown_provider" } };
   if (rawBody.length > MAX_WEBHOOK_BYTES) return { status: 413, body: { ok: false, reason: "too_large" } };
   if (!provider.webhookReady()) return { status: 503, body: { ok: false, reason: "not_configured" } };
-  const v = provider.verifyWebhook(rawBody, headers); if (!v.ok) { logger.warn("subscription webhook rejected", { provider: providerKey, reason: v.reason }); return { status: 401, body: { ok: false, reason: "invalid_signature" } }; }
+  const v = provider.verifyWebhook(rawBody, headers); if (!v.ok) { logger.warn("subscription webhook rejected", { provider: providerKey, reason: v.reason }); await securityEvent({ severity: "MEDIUM", category: "WEBHOOK", type: "WEBHOOK_SIGNATURE_FAILED", summary: `Payment webhook rejected (${providerKey})`, metadata: { provider: providerKey, reason: v.reason } }); return { status: 401, body: { ok: false, reason: "invalid_signature" } }; }
   const ev = provider.parseWebhook(rawBody, headers); if (!ev) return { status: 400, body: { ok: false, reason: "unreadable" } };
 
   const hash = createHash("sha256").update(rawBody).digest("hex"); let row;

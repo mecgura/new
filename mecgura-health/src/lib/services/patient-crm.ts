@@ -1,3 +1,4 @@
+import { onExport } from "./sec-events";
 import { assertCanCreate, noteUsage } from "./entitlements";
 import { billingTimeline } from "./billing-docs";
 import { notifyPatientRegistered } from "@/lib/notifications/events";
@@ -350,6 +351,7 @@ export async function patientTimeline(ctx: TenantRequestContext, id: string, raw
 export async function exportPatient(ctx: TenantRequestContext, id: string) {
   if (!ctx.permissions.has("patients.export")) throw new AppError("FORBIDDEN");
   const profile = await getPatientProfile(ctx, id);
+  await onExport({ actorId: ctx.user.id, tenantId: ctx.tenantId, kind: "patient-record" });
   const tdb = tenantDb(ctx);
   const clinical = hasClinical(ctx);
   const [visits, appointments, allergies, medications, history, familyHistory] = await Promise.all([

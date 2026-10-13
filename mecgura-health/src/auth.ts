@@ -10,11 +10,14 @@ import { findTenantByHost } from "@/lib/tenant/resolve-core";
 import { loginSchema, normalizeIdentifier } from "@/lib/validation/schemas";
 import { STAFF_APP_ROLES, type RoleKey } from "@/lib/permissions";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
+import { hasMfa, verifySecondFactor } from "@/lib/services/sec-mfa";
+import { onLoginFailure, onLoginSuccess, securityEvent } from "@/lib/services/sec-events";
 import { authorizePatient, PATIENT_SESSION_MS } from "@/lib/portal/patient-login";
 
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MINUTES = 15;
 // Compared against when the account doesn't exist so response time doesn't reveal it.
+const failuresAfter = (n: number, reason: string) => (reason === "bad_password" ? n + 1 : 0);
 const DUMMY_HASH = bcrypt.hashSync(randomUUID(), 12);
 
 /**
@@ -31,7 +34,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // Patient portal sign-in: a separate provider so a staff credential form can never produce a patient session or the reverse.
     Credentials({ id: "patient", name: "Patient portal", credentials: { clinic: {}, identifier: {}, password: {} }, authorize: (credentials) => authorizePatient(credentials) }),
     Credentials({
-      credentials: { identifier: {}, password: {} },
+      credentials: { identifier: {}, password: {}, code: {} },
       async authorize(credentials) {
         const parsed = loginSchema.safeParse(credentials);
         if (!parsed.success) return null;
@@ -72,10 +75,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const reason = !user ? "unknown_account" : locked ? "locked" : !passwordOk || !user.passwordHash ? "bad_password" : user.status !== "ACTIVE" ? `status_${user.status.toLowerCase()}` : !tenantOk ? "tenant_unavailable" : !hostOk ? "wrong_clinic_host" : "not_allowed";
           await recordAudit({ action: AUDIT_ACTIONS.LOGIN_FAILED, tenantId: user?.tenantId ?? null, actorId: user?.id, metadata: { reason } });
           logger.warn("login rejected", { userKnown: !!user, reason });
+          await onLoginFailure({ identifierKnown: !!user, userId: user?.id, tenantId: user?.tenantId, reason });
+          if (reason === "locked" || (user && failuresAfter(user.failedLoginCount, reason) >= MAX_FAILED_LOGINS)) await securityEvent({ severity: "MEDIUM", category: "AUTH", type: "ACCOUNT_LOCKED", summary: "Account locked after repeated failed sign-ins", tenantId: user?.tenantId ?? null, actorId: user?.id });
           return null;
         }
 
+        // Second factor: enforced HERE (the only place a staff session is created), so no other entry point can skip it.
+        if (await hasMfa(user.id)) {
+          const f = await verifySecondFactor(user.id, typeof credentials?.code === "string" ? credentials.code : "");
+          if (!f.ok) { await recordAudit({ action: AUDIT_ACTIONS.LOGIN_FAILED, tenantId: user.tenantId, actorId: user.id, metadata: { reason: `mfa_${f.reason ?? "failed"}` } }); await onLoginFailure({ identifierKnown: true, userId: user.id, tenantId: user.tenantId, reason: `mfa_${f.reason ?? "failed"}` }); return null; }
+        }
         await db.user.update({ where: { id: user.id }, data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: now } });
+        await onLoginSuccess({ userId: user.id, tenantId: user.tenantId });
         await recordAudit({ action: AUDIT_ACTIONS.LOGIN_SUCCEEDED, tenantId: user.tenantId, actorId: user.id, metadata: { role: user.role.key as RoleKey } });
         return { id: user.id, name: user.name, email: user.email };
       },

@@ -1,3 +1,4 @@
+import { securityEvent } from "@/lib/services/sec-events";
 import "server-only";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
@@ -23,6 +24,7 @@ export async function handleWebhook(path: string, req: WebhookRequest, ip: strin
   if (req.rawBody.length > MAX_BODY) return { status: 413, body: { ok: false } };
   const parsed = provider.parseWebhook(req);
   if (!parsed.verified) {
+    await securityEvent({ severity: "MEDIUM", category: "WEBHOOK", type: "WEBHOOK_SIGNATURE_FAILED", summary: `Messaging webhook rejected (${channel})`, metadata: { channel, reason: parsed.reason ?? "unverified" }, ip });
     await recordAudit({ action: AUDIT_ACTIONS.COMM_WEBHOOK_REJECTED, tenantId: null, entityType: "communication_webhook", metadata: { channel, reason: parsed.reason ?? "unverified" } });
     logger.warn("webhook rejected", { channel, reason: parsed.reason });
     return { status: 401, body: { ok: false } };

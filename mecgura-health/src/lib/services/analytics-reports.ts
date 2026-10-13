@@ -1,3 +1,4 @@
+import { onExport } from "./sec-events";
 import "server-only";
 import { z } from "zod";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
@@ -212,6 +213,7 @@ export async function exportReport(ctx: TenantRequestContext, key: string, raw: 
   if (!(EXPORT_FORMATS as readonly string[]).includes(format)) throw new AppError("VALIDATION_ERROR", { message: "Choose CSV, XLSX or PDF." });
   const r = await build(ctx, key, raw, "export"); const f = format as ExportFormat;
   const base = `${key}-${r.env.range.from}_${r.env.range.to}`;
+  await onExport({ actorId: ctx.user.id, tenantId: ctx.tenantId, kind: `analytics:${key}:${format}` });
   await recordAudit({ action: AUDIT_ACTIONS.ANALYTICS_REPORT_EXPORTED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "analytics_report", entityId: key, metadata: { report: key, format: f, from: r.env.range.from, to: r.env.range.to, rows: r.rows.length, truncated: r.truncated, identityIncluded: r.identity, financial: !!r.d.financial, doctorScoped: !!r.env.doctorId } });
   if (f === "csv") return { filename: `${base}.csv`, contentType: "text/csv; charset=utf-8", chunks: csvChunks(r.meta, r.cols, r.rows) as (string | Uint8Array)[] };
   if (f === "xlsx") return { filename: `${base}.xlsx`, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", chunks: [toXlsx(r.meta, r.cols, r.rows)] as (string | Uint8Array)[] };

@@ -1,3 +1,4 @@
+import { onExport } from "./sec-events";
 import "server-only";
 import type { TenantRequestContext } from "@/lib/auth/context";
 import { minorToInput } from "@/lib/billing/money";
@@ -114,6 +115,7 @@ export async function pharmacyReport(ctx: TenantRequestContext, kind: string, f:
 const csvCell = (v: unknown) => { let s = String(v ?? ""); if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`; return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 export async function exportPharmacyReport(ctx: TenantRequestContext, kind: string, f: ReportFilters = {}) {
   const rep = await pharmacyReport(ctx, kind, f);
+  await onExport({ actorId: ctx.user.id, tenantId: ctx.tenantId, kind: `pharmacy:${kind}` });
   const rows = rep.rows.map((row) => rep.columns.map((c) => (c.type === "money" ? minorToInput(Number(row[c.key] ?? 0)) : row[c.key] ?? "")));
   const csv = [rep.columns.map((c) => c.label), ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
   await audit(ctx, AUDIT_ACTIONS.PHARMACY_EXPORTED, "pharmacy_report", kind, { kind, from: rep.from, to: rep.to });

@@ -14,6 +14,8 @@ const TABS = [
   { href: "/settings/communications", label: "Communications" },
   { href: "/settings/notifications", label: "Notifications" },
   { href: "/settings/integrations", label: "Integrations" },
+  { href: "/settings/security", label: "Security" },
+  { href: "/settings/privacy", label: "Privacy & consent" },
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {

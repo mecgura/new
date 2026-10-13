@@ -1,3 +1,4 @@
+import { securityEvent } from "./sec-events";
 import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -111,6 +112,7 @@ export async function startSupportAccess(ctx: RequestContext, tenantId: string, 
   const row = await db.supportAccess.create({ data: { tenantId, actorId: ctx.user.id, reason, expiresAt: new Date(Date.now() + SUPPORT_ACCESS_MS) } });
   await recordAudit({ action: AUDIT_ACTIONS.PLATFORM_SUPPORT_STARTED, tenantId, actorId: ctx.user.id, entityType: "support_access", entityId: row.id, metadata: { expiresAt: row.expiresAt.toISOString(), clinicStatus: t.status } });
   await recordAudit({ action: AUDIT_ACTIONS.TENANT_ENTERED, tenantId, actorId: ctx.user.id, entityType: "tenant", entityId: tenantId });
+  await securityEvent({ severity: "MEDIUM", category: "SUPPORT", type: "SUPPORT_ACCESS_STARTED", summary: `Support access to a clinic workspace started: ${reason.slice(0, 120)}`, tenantId, actorId: ctx.user.id });
   return { id: row.id, expiresAt: row.expiresAt };
 }
 export async function endSupportAccess(ctx: RequestContext) {

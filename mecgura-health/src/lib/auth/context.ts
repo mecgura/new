@@ -14,6 +14,8 @@ import { applyFeatureGates, disabledModules } from "@/lib/platform/features";
 import { SUPER_ADMIN_SESSION_MS, disabledFeaturesOf, maintenanceFor, openSupportAccess } from "@/lib/platform/runtime";
 import { entitlementOf } from "@/lib/services/entitlements";
 import { getPolicy } from "@/lib/services/sub-config";
+import { hasMfa } from "@/lib/services/sec-mfa";
+import { mfaRequiredFor } from "@/lib/services/sec-policy";
 import { isReadPermission } from "@/lib/subscriptions/state";
 
 export interface TenantInfo {
@@ -61,6 +63,8 @@ export interface RequestContext {
   readOnly?: boolean;
   /** Phase 15: only the subscription screens are available (clinic admin of a BLOCKED subscription) */
   limited?: boolean;
+  /** Phase 16: policy requires two-factor for this user's role and they have not enrolled yet */
+  mfaEnrollRequired?: boolean;
   subscriptionStatus?: string | null;
 }
 
@@ -112,6 +116,8 @@ export const getAccess = cache(async (): Promise<Access> => {
     include: { role: { select: { key: true } }, permissionGrants: { select: { permission: true } } },
   });
   if (!row || row.status !== "ACTIVE") return { ctx: null, blocked: "user_unavailable" };
+  // Phase 16: "sign out everywhere" / password change / reset — a session that started before the cut-off is dead.
+  if (row.sessionsValidFrom && typeof session.signedInAt === "number" && session.signedInAt < row.sessionsValidFrom.getTime()) return { ctx: null, blocked: "session_expired" };
   const role = row.role.key as RoleKey;
   if (!(ROLES as readonly string[]).includes(role)) return { ctx: null, blocked: "user_unavailable" };
   // Platform admins have a shorter absolute session than clinic staff (sign-in time is stamped on the token at login).
@@ -142,7 +148,9 @@ export const getAccess = cache(async (): Promise<Access> => {
   // ---- Phase 15: what the clinic's subscription allows (a Super Admin is never restricted by it) ----
   let permissions = applyFeatureGates(effectivePermissions(role, grants), disabledFeatures);
   let modules = modulesFor(tenantRow, role).filter((m) => !disabledModulesSet(disabledFeatures).has(m));
-  let readOnly = false, limited = false;
+  let readOnly = false, limited = false, mfaEnrollRequired = false;
+  // Phase 16: a role that policy says must use two-factor, but hasn't set it up yet, may only reach the security page until it has.
+  if (role !== "PATIENT" && (await mfaRequiredFor(role, row.tenantId)) && !(await hasMfa(row.id))) { mfaEnrollRequired = true; permissions = new Set(); modules = []; }
   const ent = tenantRow && role !== "SUPER_ADMIN" ? await entitlementOf(tenantRow.id) : null;
   if (ent?.managed && ent.access !== "FULL") {
     if (role === "PATIENT") {
@@ -161,7 +169,7 @@ export const getAccess = cache(async (): Promise<Access> => {
       user: { id: row.id, name: row.name, email: row.email, role, tenantId: row.tenantId, avatarUrl: row.avatarUrl },
       tenant: tenantRow ? toTenantInfo(tenantRow) : null,
       // A switched-off feature loses its permissions HERE, so every page, API and service guard denies it server-side.
-      permissions, enabledModules: modules, viewingAs, support, disabledFeatures, readOnly, limited, subscriptionStatus: tenantRow?.subscription?.managed ? tenantRow.subscription.status : null,
+      permissions, enabledModules: modules, viewingAs, support, disabledFeatures, readOnly, limited, mfaEnrollRequired, subscriptionStatus: tenantRow?.subscription?.managed ? tenantRow.subscription.status : null,
     },
   };
 });
@@ -184,7 +192,7 @@ export async function requireContext(): Promise<RequestContext> {
 /** Page-level guard: signed in AND holding the permission, else redirect. */
 export async function requirePagePermission(permission: Permission): Promise<RequestContext> {
   const ctx = await requireContext();
-  if (!ctx.permissions.has(permission)) redirect(ctx.limited && ctx.permissions.has("subscription.view") ? "/subscription" : "/forbidden");
+  if (!ctx.permissions.has(permission)) redirect(ctx.mfaEnrollRequired ? "/account/security" : ctx.limited && ctx.permissions.has("subscription.view") ? "/subscription" : "/forbidden");
   return ctx;
 }
 

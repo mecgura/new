@@ -253,6 +253,9 @@ model User {
   lastLoginAt      DateTime?
   failedLoginCount Int             @default(0)
   lockedUntil      DateTime?
+  /// Phase 16: sessions signed in before this instant are rejected ("sign out everywhere", password change)
+  sessionsValidFrom DateTime?
+  mfa              UserMfa?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   deletedAt        DateTime?
@@ -292,6 +295,13 @@ model AuditLog {
   ip         String?
   userAgent  String?
   createdAt  DateTime @default(now())
+  /// Phase 16: HMAC-SHA256 over the canonical record (tamper evidence). Null = written before Phase 16.
+  hash       String?
+  /// key id used for `hash` (so the integrity key can be rotated)
+  hashKeyId  String?
+  /// reason given for a privileged action
+  reason     String?
+  requestId  String?
 
   @@index([tenantId, createdAt])
   @@index([tenantId, action, createdAt])
@@ -748,6 +758,11 @@ model PatientConsent {
   note         String?
   recordedById String?
   recordedAt   DateTime @default(now())
+  /// Phase 16: where the consent was captured (STAFF | PORTAL | WEBSITE | IMPORT) and from which address
+  source       String?
+  ip           String?
+  /// COMMUNICATION consents: TRANSACTIONAL | MARKETING (marketing is never implied by transactional)
+  purpose      String?
 
   @@index([tenantId, patientId, type, recordedAt])
 }
@@ -2428,6 +2443,11 @@ model PatientRequest {
   reviewNote     String?
   /// true when a reviewer applied an approved demographic correction to the patient record
   applied        Boolean   @default(false)
+  /// Phase 16 (data-rights workflow): statutory-style due date, how it ended, and when
+  dueAt          DateTime?
+  /// FULFILLED | PARTIALLY_FULFILLED | RETENTION_EXCEPTION | LEGAL_HOLD | NOT_APPLICABLE
+  outcome        String?
+  resolvedAt     DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -2906,4 +2926,172 @@ model SubscriptionEvent {
 model PlatformCounter {
   key   String @id
   value Int    @default(0)
+}
+
+
+/* =====================================================================================================================
+ * Phase 16 — security, privacy & compliance
+ * ===================================================================================================================== */
+
+/// TOTP second factor. The secret is stored ENCRYPTED (AES-256-GCM, keyed by security key id); backup codes only as hashes.
+model UserMfa {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId      String?
+  secretEnc     String
+  keyId         String
+  /// null while enrolment is pending (secret issued, first code not yet confirmed)
+  enabledAt     DateTime?
+  /// JSON array of sha256 hashes of unused backup codes
+  backupHashes  String    @default("[]")
+  /// last accepted 30-second step: a code can be used once
+  lastStep      Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  ip        String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+/// Integration API key. Only a hash of the secret is stored; the full key is shown once at creation.
+model ApiKey {
+  id          String    @id @default(cuid())
+  /// null = platform key (Super Admin)
+  tenantId    String?
+  name        String
+  /// public lookup part, e.g. "mh_live_ab12cd34"
+  prefix      String    @unique
+  secretHash  String
+  /// JSON array of scopes, e.g. ["appointments.read"]
+  scopes      String    @default("[]")
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  revokedById String?
+  lastUsedAt  DateTime?
+  lastUsedIp  String?
+  /// JSON array of allowed IPv4/IPv6 addresses (empty = any)
+  allowedIps  String    @default("[]")
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+model SecurityEvent {
+  id        String   @id @default(cuid())
+  tenantId  String?
+  actorId   String?
+  /// INFO | LOW | MEDIUM | HIGH | CRITICAL
+  severity  String
+  /// AUTH | ACCESS | API | WEBHOOK | PROVIDER | EXPORT | SUPPORT | API_KEY | CONFIG | PRIVACY | INTEGRITY
+  category  String
+  type      String
+  summary   String
+  ip        String?
+  userAgent String?
+  /// JSON, redacted + size-capped; never secrets or patient content
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([severity, createdAt])
+  @@index([category, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([type, ip, createdAt])
+}
+
+model SecurityIncident {
+  id               String   @id @default(cuid())
+  /// SEC-2026-0001
+  incidentNumber   String   @unique
+  tenantId         String?
+  severity         String
+  category         String
+  title            String
+  description      String
+  /// OPEN | INVESTIGATING | CONTAINED | RESOLVED | CLOSED
+  status           String   @default("OPEN")
+  detectedAt       DateTime @default(now())
+  detectedById     String?
+  assignedToId     String?
+  affectedResource String?
+  evidence         String?
+  actionsTaken     String?
+  resolution       String?
+  resolvedAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  events           SecurityIncidentEvent[]
+
+  @@index([status, severity, detectedAt])
+  @@index([tenantId, detectedAt])
+}
+
+model SecurityIncidentEvent {
+  id         String           @id @default(cuid())
+  incidentId String
+  incident   SecurityIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  /// CREATED | STATUS | NOTE | ASSIGNED | EVIDENCE | ACTION | RESOLUTION
+  type       String
+  note       String
+  actorId    String?
+  createdAt  DateTime         @default(now())
+
+  @@index([incidentId, createdAt])
+}
+
+/// Periodic seal over a range of audit rows: count + rolling hash of the row hashes, signed with the integrity key. Detects deletions.
+model AuditSeal {
+  id         String   @id @default(cuid())
+  fromAt     DateTime
+  toAt       DateTime
+  count      Int
+  chainHash  String
+  hmac       String
+  keyId      String
+  sealedById String?
+  createdAt  DateTime @default(now())
+
+  @@index([toAt])
+}
+
+/// Retention rule per data class. tenantKey = tenant id or "platform". action ARCHIVE keeps the data but marks it for archival; nothing is auto-deleted.
+model RetentionPolicy {
+  id          String   @id @default(cuid())
+  tenantKey   String
+  dataClass   String
+  retainDays  Int?
+  action      String   @default("ARCHIVE")
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantKey, dataClass])
+}
+
+/// A legal hold freezes purge / anonymisation of everything in its scope until released.
+model LegalHold {
+  id           String    @id @default(cuid())
+  tenantId     String?
+  /// TENANT | PATIENT | AUDIT
+  scopeType    String
+  scopeId      String?
+  reason       String
+  placedById   String
+  placedAt     DateTime  @default(now())
+  releasedAt   DateTime?
+  releasedById String?
+  releaseNote  String?
+
+  @@index([tenantId, releasedAt])
+  @@index([scopeType, scopeId, releasedAt])
 }

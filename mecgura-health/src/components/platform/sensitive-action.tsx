@@ -30,7 +30,7 @@ export function SensitiveAction({ label, variant = "outline", size = "sm", icon,
     e.preventDefault(); const f = new FormData(e.currentTarget); const values: Record<string, unknown> = {};
     for (const fld of fields) values[fld.name] = String(f.get(fld.name) ?? "").trim();
     setBusy(true); setErr(null);
-    const res = await apiFetch<{ inviteToken?: string | null; inviteExpiresAt?: string | null }>(endpoint, { method, body: method === "DELETE" && !password && !fields.length ? undefined : JSON.stringify({ ...(body ?? {}), ...values, ...(password ? { password: String(f.get("confirmPassword") ?? "") } : {}) }) });
+    const res = await apiFetch<{ inviteToken?: string | null; inviteExpiresAt?: string | null }>(endpoint, { method, body: method === "DELETE" && !password && !fields.length ? undefined : JSON.stringify({ ...(body ?? {}), ...values, ...(password ? { password: String(f.get("confirmPassword") ?? ""), mfaCode: String(f.get("mfaCode") ?? "") } : {}) }) });
     setBusy(false);
     if (!res.ok) { setErr({ message: res.error.message, fields: res.error.fieldErrors ?? {} }); return; }
     toast({ tone: "success", title: successMessage ?? "Done" });
@@ -67,6 +67,9 @@ export function SensitiveAction({ label, variant = "outline", size = "sm", icon,
                 <label htmlFor={`${uid}-pw`} className="type-label block">Confirm with your password <span aria-hidden className="text-danger">*</span></label>
                 <input id={`${uid}-pw`} name="confirmPassword" type="password" autoComplete="current-password" required className={input} aria-invalid={!!err?.fields.confirmPassword} />
                 <p className="type-caption mt-1">Re-entering your own password protects against someone using an unattended session.</p>
+                <label htmlFor={`${uid}-mfa`} className="type-label mt-3 block">Authenticator code <span className="type-caption">(only if you turned on two-factor)</span></label>
+                <input id={`${uid}-mfa`} name="mfaCode" inputMode="numeric" autoComplete="one-time-code" className={input} aria-invalid={!!err?.fields.mfaCode} />
+                {err?.fields.mfaCode && <p role="alert" className="type-caption mt-1 text-danger">{err.fields.mfaCode}</p>}
               </div>
             )}
             {err && <p role="alert" className="type-secondary flex items-start gap-2 rounded-md bg-danger-soft p-3 text-danger"><AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0" />{err.message}</p>}

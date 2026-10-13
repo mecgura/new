@@ -1,3 +1,4 @@
+import { onExport } from "./sec-events";
 import "server-only";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import type { TenantRequestContext } from "@/lib/auth/context";
@@ -103,6 +104,7 @@ const toCsv = (head: string[], rows: unknown[][]) => [head, ...rows].map((r) => 
 /** CSV for finance users only: financial columns, no clinical fields. */
 export async function exportReport(ctx: TenantRequestContext, kind: string, f: ReportFilters) {
   reportGuard(ctx); if (!ctx.permissions.has("billing.export")) throw new AppError("FORBIDDEN", { message: "You can't export financial data." });
+  await onExport({ actorId: ctx.user.id, tenantId: ctx.tenantId, kind: `billing:${kind}` });
   const rep = await financialReport(ctx, f); let csv: string;
   const m = (x: number) => minorToInput(x);
   switch (kind) {

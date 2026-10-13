@@ -1,3 +1,4 @@
+import { securityEvent } from "./sec-events";
 import { assertCanCreate, seatKey } from "./entitlements";
 import "server-only";
 import { db } from "@/lib/db";
@@ -67,6 +68,7 @@ export async function changeUserRole(ctx: RequestContext, id: string, input: { r
     else await tx.staffProfile.upsert({ where: { userId: id }, update: {}, create: { tenantId: u.tenantId, userId: id } });
   });
   await recordAudit({ action: AUDIT_ACTIONS.PLATFORM_USER_ROLE_CHANGED, tenantId: u.tenantId, actorId: ctx.user.id, entityType: "user", entityId: id, metadata: { from: u.role.key, to: input.role } });
+  await securityEvent({ severity: "MEDIUM", category: "CONFIG", type: "ROLE_CHANGED", summary: `User role changed ${u.role.key} → ${input.role}`, tenantId: u.tenantId, actorId: ctx.user.id, metadata: { userId: id } });
   return { role: input.role };
 }
 

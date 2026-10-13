@@ -321,7 +321,9 @@ describe("audit center", () => {
   it("is append-only: no route or service can edit or delete an audit row", async () => {
     const fs = await import("node:fs"); const path = await import("node:path");
     const files: string[] = []; const walk = (d: string) => { for (const f of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, f.name); if (f.isDirectory()) walk(p); else if (/\.(ts|tsx)$/.test(f.name) && !/\.test\./.test(f.name)) files.push(p); } }; walk("src");
-    const offenders = files.filter((f) => /auditLog\.(update|updateMany|delete|deleteMany|upsert)\(/.test(fs.readFileSync(f, "utf8"))); expect(offenders).toEqual([]);
+    // The ONLY place that may delete audit rows is the restricted retention purge (needs the admin's password, honours legal holds, leaves a signed PURGE seal). Nothing may update them (the database trigger also refuses it).
+    const offenders = files.filter((f) => /auditLog\.(update|updateMany|delete|deleteMany|upsert)\(/.test(fs.readFileSync(f, "utf8")) && !f.endsWith("sec-audit.ts")); expect(offenders).toEqual([]);
+    expect(/auditLog\.(update|updateMany|upsert)\(/.test(fs.readFileSync("src/lib/services/sec-audit.ts", "utf8"))).toBe(false);
   });
 });
 
