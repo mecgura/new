@@ -243,6 +243,8 @@ export const AUDIT_ACTIONS = {
   COMM_WEBHOOK_REJECTED: "comm.webhook_rejected",
   COMM_SCHEDULER_RUN: "comm.scheduler_run",
   PORTAL_CONFIG_CHANGED: "portal.config_changed",
+  DATA_IMPORTED: "data.imported",
+  DATA_EXPORTED: "data.exported",
   MEDICINE_CREATED: "pharmacy.medicine_created",
   MEDICINE_EDITED: "pharmacy.medicine_edited",
   MEDICINE_PRICE_CHANGED: "pharmacy.price_changed",
