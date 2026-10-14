@@ -3,6 +3,7 @@ import { getToken } from "next-auth/jwt";
 import { buildCsp } from "@/lib/security/csp";
 import { isPublicSitePath } from "@/lib/website/paths";
 import { parseTenantHost } from "@/lib/tenant/host";
+import { isSecureRequest } from "@/lib/auth/secure-request";
 
 // Paths reachable without a session.
 const PUBLIC_PATHS = ["/login", "/invite", "/robots.txt", "/pricing", "/forgot-password", "/reset-password", "/health", "/ready", "/version", "/terms", "/privacy"];
@@ -42,7 +43,10 @@ export async function proxy(req: NextRequest) {
   const isPublic = portal ? PORTAL_PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`)) : PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   if (!isPublic) {
-    const token = await getToken({ req, secret: process.env.AUTH_SECRET });
+    // On https (Vercel) Auth.js names the cookie `__Secure-authjs.session-token`; getToken only looks for that name when told the request is secure,
+    // otherwise it finds no session, bounces to /login, and /login (which does see the session) bounces back: an endless redirect loop.
+    const secure = isSecureRequest(req.url, req.headers.get("x-forwarded-proto"));
+    const token = await getToken({ req, secret: process.env.AUTH_SECRET, secureCookie: secure });
     if (!token) {
       const url = new URL(portal ? "/portal/login" : "/login", req.nextUrl.origin);
       if (pathname !== "/") url.searchParams.set("callbackUrl", pathname + req.nextUrl.search);
