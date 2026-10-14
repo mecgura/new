@@ -160,6 +160,7 @@
   --spacing-header: var(--size-header);
   --spacing-bottom-nav: var(--size-bottom-nav);
   --spacing-control: var(--size-control);
+  --spacing-btn: var(--space-btn-x);
 
   --radius-sm: var(--r-sm);
   --radius-md: var(--r-md);

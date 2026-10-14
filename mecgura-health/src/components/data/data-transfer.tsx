@@ -111,7 +111,7 @@ export function ImportButton({ kind, label = "Import", title, description, onDon
                   <table className="type-table w-full text-left"><caption className="sr-only">Rows that need attention</caption>
                     <thead><tr className="border-b border-line"><th scope="col" className="px-3 py-2">Row</th><th scope="col" className="px-3 py-2">Record</th><th scope="col" className="px-3 py-2">Problem</th></tr></thead>
                     <tbody>{report.rows.filter((r) => r.status === "error" || r.status === "duplicate").slice(0, 100).map((r) => (
-                      <tr key={r.row} className="border-b border-line/60 last:border-0 align-top"><td className="px-3 py-2 tabular-nums">{r.row}</td><td className="px-3 py-2">{r.summary || "—"}</td><td className="px-3 py-2"><span className="font-semibold">{STATUS_TEXT[r.status]}:</span> {r.messages.join("; ")}</td></tr>
+                      <tr key={r.row} className="border-b border-line/60 last:border-0 align-top"><td className="px-3 py-2 tabular-nums">{r.row}</td><td className="px-3 py-2">{r.summary || "—"}</td><td className="px-3 py-2">{r.status === "error" && <span className="font-semibold">{STATUS_TEXT[r.status]}: </span>}{r.messages.join("; ")}</td></tr>
                     ))}</tbody></table>
                 </div>
               )}

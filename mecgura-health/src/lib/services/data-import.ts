@@ -41,6 +41,8 @@ async function createOne(ctx: TenantRequestContext, kind: ImportKind, input: Rec
   if (kind.key === "lab-tests") return saveInvestigation(ctx, null, input);
   return registerPatient(ctx, { ...input, allowDuplicate: false, privacyAcknowledged: false });
 }
+const ALIAS_KEY: Record<string, string> = { purchasePriceMinor: "purchasePrice", sellingPriceMinor: "sellingPrice", taxRateBp: "taxRate" };
+const labelFor = (kind: ImportKind, key: string) => (kind.fields.find((f) => f.key === (ALIAS_KEY[key] ?? key))?.label ?? key).replace(/\s*\(.*\)$/, "");
 const summarise = (kind: ImportKind, i: Record<string, unknown>) => kind.key === "patients" ? `${i.name ?? ""} · ${i.phone ?? ""}` : kind.key === "medicines" ? [i.brandName ?? i.genericName, i.strength].filter(Boolean).join(" ") : kind.key === "suppliers" ? String(i.supplierName ?? "") : `${i.testCode ?? ""} ${i.testName ?? ""}`.trim();
 const csvCell = (v: string) => { const s = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v; return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 
@@ -67,7 +69,7 @@ export async function runImport(ctx: TenantRequestContext, kindKey: string, file
     const input = kind.build(values);
     const parsed = kind.schema.safeParse(input);
     if (!parsed.success) {
-      errors++; add({ row: rowNo, status: "error", messages: [...new Set(parsed.error.issues.map((x) => (x.path.length ? `${String(x.path[0])}: ` : "") + x.message))], summary: summarise(kind, input) }, cells); continue;
+      errors++; add({ row: rowNo, status: "error", messages: [...new Set(parsed.error.issues.map((x) => (x.path.length ? `${labelFor(kind, String(x.path[0]))}: ` : "") + x.message))], summary: summarise(kind, input) }, cells); continue;
     }
     const keys = kind.key === "patients" ? patientKeys(input) : [kind.dupeKey?.(input) ?? ""].filter(Boolean);
     if (keys.some((k) => known.has(k) || seen.has(k))) { duplicates++; add({ row: rowNo, status: "duplicate", messages: [keys.some((k) => seen.has(k)) ? "Repeated in this file" : "Already exists, skipped"], summary: summarise(kind, input) }, cells); continue; }

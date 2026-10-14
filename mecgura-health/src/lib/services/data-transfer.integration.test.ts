@@ -41,8 +41,8 @@ describe("import: medicines", () => {
   it("preview checks every row and writes nothing", async () => {
     const r = await runImport(A, "medicines", { name: "m.csv", bytes: enc(MED_CSV) }, "preview");
     expect({ total: r.total, ok: r.ok, errors: r.errors, duplicates: r.duplicates, created: r.created }).toEqual({ total: 5, ok: 2, errors: 2, duplicates: 1, created: 0 });
-    expect(r.rows.find((x) => x.row === 4)?.messages.join(" ")).toMatch(/generic/i);
-    expect(r.rows.find((x) => x.row === 5)?.messages.join(" ")).toMatch(/purchase/i);
+    expect(r.rows.find((x) => x.row === 4)?.messages.join(" ")).toMatch(/^Generic name/);
+    expect(r.rows.find((x) => x.row === 5)?.messages.join(" ")).toMatch(/^Purchase price/);
     expect(r.problemsCsv).toContain("Problem"); expect(await db.medicine.count({ where: { tenantId: aId } })).toBe(0);
   });
   it("commit creates only the valid rows, with prices in paise, audited, and a second run skips them", async () => {
