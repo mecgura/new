@@ -226,3 +226,24 @@ Add scheduled-report generation (Phase 13) or hide the feature; patient merge; s
 ---
 
 **Final classification: READY FOR STAGING. NOT READY FOR PRODUCTION** (and therefore not ready for a controlled production launch with real patients). Reason: functionality and automated verification are strong, but production-grade operations (backups and a proven restore, real communications, a scheduler that matches the product, distributed rate limiting, monitoring), the exposed admin credential and live debug code, and the absence of any independent security test mean the risk to real patient data is not yet acceptable.
+
+---
+
+## Remediation update (2026-10-14, after approval)
+
+Fixed in code (commit `1812d8c` in `mecgura/new`, `da83b29` in `mecgura/health`; deployment `dpl_C1mGGmfk5yF3ZzNRMSKdv9bP4n43` READY; migration `20261201090000_rate_limit_buckets` applied on Neon):
+
+| Finding | Status |
+|---|---|
+| H1 TEMP-DEBUG script | **Fixed** — removed; live `/login` HTML no longer contains it |
+| H3 per-instance rate limiter / TOTP lockout | **Fixed** — shared database store in production (`RateLimitBucket`), covers the 2FA code limit; 3 new tests; e2e suites 1, 4, 5, 10, 14, 15, 16 re-run against a production build with the DB store: all pass |
+| M1 Super Admin clinical access/export | **Fixed** — excluded from clinical tier and patient export; new test |
+| L1 `requireApiContext` accepted PATIENT sessions | **Fixed** |
+| M7 public `/ready` detail | **Fixed** — public answer is `{status}` only; detail needs `READINESS_TOKEN` or `CRON_SECRET` bearer |
+| Scheduler cadence | **Prepared, needs user action** — `.github/workflows/scheduler.yml` (every 5 min) needs secrets `APP_URL`, `CRON_SECRET` |
+| H4 backups | **Prepared, needs user action** — `.github/workflows/backup.yml` (daily dump + scratch restore check + AES-256 artifact) needs secrets `DATABASE_URL_UNPOOLED`, `BACKUP_PASSPHRASE`; Neon PITR still to be enabled/confirmed by the owner |
+| No CI | **Fixed** — `.github/workflows/ci.yml` |
+| H2 Super Admin password | **Rotated** (new value delivered to the owner out of band, old one invalid); `BOOTSTRAP_*` variables neutralised. **TOTP enrolment is still the owner's action.** |
+| Flaky e2e (phases 12, 13) | **Fixed** — explicit waits; both pass |
+
+Still open (cannot be done from the repository): live provider credentials and tests (email/SMS/WhatsApp/Razorpay), restore drill on the real Neon project, independent penetration test, legal review of terms/privacy, external alerting, dependency-advisory decision (Prisma tooling), medicine/ICD/interaction data source. Classification therefore stays **READY FOR STAGING / NOT READY FOR PRODUCTION** until those are closed.
