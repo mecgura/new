@@ -121,7 +121,7 @@ check("admin restores", (await api(adminA, "POST", `/api/patients/${tmp.id}/rest
   await page.getByRole("button", { name: "More actions" }).click();
   check("admin More menu has export + archive", await page.getByRole("menuitem", { name: "Archive patient" }).isVisible() && await page.getByRole("menuitem", { name: "Export patient data" }).isVisible());
   await page.keyboard.press("Escape");
-  await page.goto(`http://${LOCAL}/patients/${pB.id}`);
+  await page.goto(`http://${LOCAL}/patients/${pB.id}`, { waitUntil: "networkidle" });
   check("direct URL to the other clinic's patient -> 404 page", (await page.locator("body").innerText()).includes("not found") || (await page.title()).toLowerCase().includes("not found") || (await page.locator("body").innerText()).toLowerCase().includes("404"));
   const resp = await page.request.get(`http://${LOCAL}/patients/${pB.id}`, { failOnStatusCode: false });
   const html = await resp.text();
