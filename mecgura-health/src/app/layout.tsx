@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { DoctorBackdrop } from "@/components/brand/doctor-backdrop";
 import { ToastProvider } from "@/components/ui";
 import { getContext } from "@/lib/auth/context";
 import { resolvePublicTenant } from "@/lib/tenant/resolve";
@@ -23,6 +24,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" className={inter.variable} style={brandToCssVars(brand) as React.CSSProperties}>
       <body>
+        <DoctorBackdrop variant={ctx?.tenant?.clinicType === "DIAGNOSTIC" ? "lab" : "doctor"} />
         <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
