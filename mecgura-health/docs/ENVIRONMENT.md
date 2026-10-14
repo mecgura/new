@@ -30,7 +30,7 @@ Three environments, same code, different configuration. **No secret is ever comm
 `BACKUP_ENCRYPTION_KEY` (32 bytes, base64; **store outside the database and outside the backup location**), `BACKUP_DIR`, `BACKUP_RETENTION_DAYS`, `BACKUP_LOCATION_LABEL`.
 
 ### Communication providers — all optional, each off until fully configured
-- Email: `EMAIL_PROVIDER=resend`, `RESEND_API_KEY` (or `EMAIL_API_KEY`), `EMAIL_FROM`, `EMAIL_REPLY_TO`, `EMAIL_WEBHOOK_SECRET`
+- Email: `EMAIL_PROVIDER=resend`, `RESEND_API_KEY` (or `EMAIL_API_KEY`), `EMAIL_FROM` (bare address, e.g. `noreply@yourdomain.com`; the app adds the display name), `EMAIL_REPLY_TO`, `EMAIL_WEBHOOK_SECRET`
 - SMS: `SMS_PROVIDER`, `SMS_API_KEY`, `SMS_ACCOUNT_SID`, `SMS_SENDER_ID`
 - WhatsApp: `WHATSAPP_PROVIDER`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`
 

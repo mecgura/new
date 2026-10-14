@@ -9,13 +9,16 @@ import type { EmailProvider, ParsedWebhook, SendResult, StatusUpdate, WebhookReq
 const base = () => (process.env.EMAIL_API_URL || "https://api.resend.com").replace(/\/$/, "");
 const TYPE: Record<string, StatusUpdate["status"]> = { "email.sent": "SENT", "email.delivered": "DELIVERED", "email.bounced": "FAILED", "email.failed": "FAILED", "email.complained": "FAILED" };
 
+/** EMAIL_FROM is the bare address (noreply@example.com). If someone enters the display form `Name <noreply@example.com>`, use just the address so the sender is not wrapped twice (Resend answers 422). */
+export const fromAddress = (raw: string | undefined) => { const v = (raw ?? "").trim(); const m = v.match(/<([^<>\s]+)>\s*$/); return (m ? m[1] : v).replace(/[<>"\r\n]/g, ""); };
+
 export const resendEmail: EmailProvider = {
   name: "resend", channel: "EMAIL",
   isConfigured: () => process.env.EMAIL_PROVIDER === "resend" && !!process.env.EMAIL_API_KEY && !!process.env.EMAIL_FROM,
   webhookReady: () => !!process.env.EMAIL_WEBHOOK_SECRET,
   async sendEmail({ to, fromName, replyTo, subject, html, text }): Promise<SendResult> {
     const safeName = fromName.replace(/[<>"\r\n]/g, "").slice(0, 80) || "Clinic";
-    const r = await callProvider(`${base()}/emails`, { method: "POST", headers: { authorization: `Bearer ${process.env.EMAIL_API_KEY}`, "content-type": "application/json" }, body: JSON.stringify({ from: `${safeName} <${process.env.EMAIL_FROM}>`, to: [to], subject, html, text, ...((replyTo || process.env.EMAIL_REPLY_TO) ? { reply_to: replyTo || process.env.EMAIL_REPLY_TO } : {}) }) });
+    const r = await callProvider(`${base()}/emails`, { method: "POST", headers: { authorization: `Bearer ${process.env.EMAIL_API_KEY}`, "content-type": "application/json" }, body: JSON.stringify({ from: `${safeName} <${fromAddress(process.env.EMAIL_FROM)}>`, to: [to], subject, html, text, ...((replyTo || process.env.EMAIL_REPLY_TO) ? { reply_to: replyTo || process.env.EMAIL_REPLY_TO } : {}) }) });
     if (!r.ok) return r.result;
     const id = (r.json as { id?: string } | null)?.id;
     return id ? { ok: true, providerMessageId: id } : { ok: false, retryable: false, code: "NO_MESSAGE_ID", message: "The provider answered without a message id." };
