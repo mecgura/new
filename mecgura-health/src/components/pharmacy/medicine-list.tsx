@@ -7,6 +7,7 @@ import { Alert, Button, Card, CardHeader, DataTable, ErrorState, Field, Modal, N
 import { apiFetch } from "@/lib/api/client";
 import { bpToInput, minorToInput, moneyToMinor, percentToBp } from "@/lib/billing/money";
 import { useApi } from "@/components/patients/use-api";
+import { ExportMenu, ImportButton } from "@/components/data/data-transfer";
 import type { MedicineRow } from "@/lib/services/pharmacy-master";
 import { STOCK_LABEL, STOCK_TONE, useMoney, usePharmacy } from "./pharmacy-ui";
 
@@ -24,7 +25,7 @@ export function MedicineList() {
   return (
     <div className="space-y-section">
       <Card>
-        <CardHeader title="Medicines" description="The clinic's inventory reference. It never prescribes anything." action={perms.medicines ? <Button size="sm" onClick={() => setOpen(true)}><Plus aria-hidden className="size-4" />Add medicine</Button> : undefined} />
+        <CardHeader title="Medicines" description="The clinic's inventory reference. It never prescribes anything." action={<div className="flex flex-wrap items-center gap-2"><ExportMenu kind="medicines" label="Download list" />{perms.medicines && <ImportButton kind="medicines" label="Import from Excel" title="Import medicines" description="Add many medicines at once from an Excel or CSV file." onDone={reload} />}{perms.medicines && <Button size="sm" onClick={() => setOpen(true)}><Plus aria-hidden className="size-4" />Add medicine</Button>}</div>} />
         <div className="grid gap-3 border-b border-line p-card sm:grid-cols-[1fr_12rem_12rem]">
           <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, code, strength, manufacturer or barcode" aria-label="Search medicines" />
           <Select aria-label="Stock filter" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} options={FILTERS.map(([value, label]) => ({ value, label }))} />

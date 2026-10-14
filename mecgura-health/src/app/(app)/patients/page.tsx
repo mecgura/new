@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Button, ButtonLink, Card, DataTable, Field, Pagination, SearchInput, Select, StatusBadge, type Column } from "@/components/ui";
+import { ExportMenu, ImportButton } from "@/components/data/data-transfer";
 import { requireTenantPagePermission } from "@/lib/auth/context";
+import { IMPORT_KINDS } from "@/lib/import/kinds";
+import { canExport } from "@/lib/services/data-export";
 import { listPatients } from "@/lib/services/patient-crm";
 
 export const metadata: Metadata = { title: "Patients" };
@@ -15,6 +18,7 @@ export default async function PatientsPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const data = await listPatients(ctx, { q: sp.q, status: sp.status || "ACTIVE", recent: sp.recent === "1" ? "true" : undefined, page: sp.page ?? "1" }).catch(() => null);
   const canCreate = ctx.permissions.has("patients.create");
+  const canDownload = canExport(ctx, "patients"); const canImport = IMPORT_KINDS.patients.allowed(ctx);
   const href = (p: number) => `/patients?${new URLSearchParams({ ...(sp.q ? { q: sp.q } : {}), ...(sp.status ? { status: sp.status } : {}), ...(sp.recent ? { recent: sp.recent } : {}), page: String(p) })}`;
   const filtered = !!(sp.q || (sp.status && sp.status !== "ACTIVE") || sp.recent);
 
@@ -33,7 +37,7 @@ export default async function PatientsPage({ searchParams }: { searchParams: Pro
     <div className="space-y-section">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div><h1 className="type-page-title">Patients</h1><p className="type-secondary mt-1">{ctx.tenant.name}{data ? ` · ${data.total} ${filtered ? "matching" : ""} patient${data.total === 1 ? "" : "s"}` : ""}</p></div>
-        {canCreate && <ButtonLink href="/patients/new"><Plus aria-hidden className="size-4" />Register patient</ButtonLink>}
+        <div className="flex flex-wrap items-center gap-2">{canDownload && <ExportMenu kind="patients" label="Download list" sensitive size="md" />}{canImport && <ImportButton kind="patients" label="Import from Excel" title="Import patients" description="Register many patients at once from an Excel or CSV file. Patients who already exist are skipped." />}{canCreate && <ButtonLink href="/patients/new"><Plus aria-hidden className="size-4" />Register patient</ButtonLink>}</div>
       </div>
       <Card className="p-card">
         <form method="get" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_12rem_12rem_auto] lg:items-end">

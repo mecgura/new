@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { Alert, Button, Card, CardBody, CardHeader, DataTable, ErrorState, Field, LoadingState, Modal, NumberInput, Pagination, SearchInput, Select, StatusBadge, TextInput, useToast } from "@/components/ui";
 import { useApi } from "@/components/patients/use-api";
+import { ExportMenu } from "@/components/data/data-transfer";
 import { apiFetch } from "@/lib/api/client";
 import type { BatchRow, LedgerRow } from "@/lib/services/pharmacy-inventory";
 import { BatchTable } from "./batch-table";
@@ -22,7 +23,7 @@ export function StockView() {
   const { data, error, loading, reload } = useApi<BatchPage>(`/api/pharmacy/batches?${new URLSearchParams({ q: dq, state, page: String(page) })}`);
   return (
     <Card>
-      <CardHeader title="Stock by batch" description="Every batch with its expiry. Only valid, unblocked batches with stock can be dispensed." action={perms.configure ? <Button size="sm" onClick={() => setOpening(true)}><Plus aria-hidden className="size-4" />Opening stock</Button> : undefined} />
+      <CardHeader title="Stock by batch" description="Every batch with its expiry. Only valid, unblocked batches with stock can be dispensed." action={<div className="flex flex-wrap items-center gap-2"><ExportMenu kind="stock" label="Download stock" />{perms.configure && <Button size="sm" onClick={() => setOpening(true)}><Plus aria-hidden className="size-4" />Opening stock</Button>}</div>} />
       <div className="grid gap-3 border-b border-line p-card sm:grid-cols-[1fr_14rem]">
         <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by medicine, code or batch number" aria-label="Search stock" />
         <Select aria-label="Batch state" value={state} onChange={(e) => { setState(e.target.value); setPage(1); }} options={[{ value: "", label: "With stock" }, { value: "available", label: "Available to dispense" }, { value: "near", label: "Near expiry" }, { value: "expired", label: "Expired" }, { value: "blocked", label: "Blocked" }, { value: "depleted", label: "Depleted (history)" }]} />

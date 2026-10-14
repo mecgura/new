@@ -35,3 +35,14 @@ describe("XLSX", () => {
     expect(() => parseUpload("a.pdf", new TextEncoder().encode("x"))).toThrow(/Excel \(\.xlsx\) or CSV/);
   });
 });
+
+import { csvToXlsx } from "@/lib/export/csv-to-xlsx";
+describe("report CSV -> Excel", () => {
+  it("keeps ids/phones/leading zeros as text, makes plain numbers numeric, and is readable again", () => {
+    const csv = "Invoice,Patient ID,Amount,Mobile,Note\r\nINV-001,P-000123,1250.50,9876543210,hello\r\nINV-002,P-000124,300,0123456789,\"a,b\"\r\n";
+    const out = csvToXlsx(csv, "test");
+    expect(parseXlsx(out)).toEqual([["Invoice", "Patient ID", "Amount", "Mobile", "Note"], ["INV-001", "P-000123", "1250.50", "9876543210", "hello"], ["INV-002", "P-000124", "300", "0123456789", "a,b"]]);
+    const sheet = new TextDecoder().decode((require("fflate") as typeof import("fflate")).unzipSync(out)["xl/worksheets/sheet1.xml"]);
+    expect(sheet).toContain('<c r="C2"><v>1250.50</v></c>'); expect(sheet).toContain('t="inlineStr"');
+  });
+});

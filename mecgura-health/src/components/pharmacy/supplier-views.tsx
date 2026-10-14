@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
+import { ExportMenu, ImportButton } from "@/components/data/data-transfer";
 import { Alert, Badge, Button, Card, CardBody, CardHeader, DataTable, ErrorState, Field, LoadingState, Modal, Pagination, SearchInput, StatusBadge, TextInput, Textarea, Toggle, useToast } from "@/components/ui";
 import { useApi } from "@/components/patients/use-api";
 import { apiFetch } from "@/lib/api/client";
@@ -14,7 +15,7 @@ export function SupplierList() {
   useEffect(() => { const t = setTimeout(() => { setDq(q); setPage(1); }, 300); return () => clearTimeout(t); }, [q]);
   const { data, error, loading, reload } = useApi<Page>(`/api/pharmacy/suppliers?${new URLSearchParams({ q: dq, all: "1", page: String(page) })}`);
   return (
-    <Card><CardHeader title="Suppliers" description="Who you buy stock from. Purchase history only — this is not supplier accounting." action={perms.suppliers ? <Button size="sm" onClick={() => setEdit("new")}><Plus aria-hidden className="size-4" />Add supplier</Button> : undefined} />
+    <Card><CardHeader title="Suppliers" description="Who you buy stock from. Purchase history only — this is not supplier accounting." action={<div className="flex flex-wrap items-center gap-2"><ExportMenu kind="suppliers" label="Download list" />{perms.suppliers && <ImportButton kind="suppliers" label="Import from Excel" title="Import suppliers" description="Add many suppliers at once from an Excel or CSV file." onDone={reload} />}{perms.suppliers && <Button size="sm" onClick={() => setEdit("new")}><Plus aria-hidden className="size-4" />Add supplier</Button>}</div>} />
       <div className="border-b border-line p-card"><SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, code or phone" aria-label="Search suppliers" /></div>
       {error ? <ErrorState description={error.message} action={<Button onClick={reload}>Try again</Button>} /> : <DataTable caption="Suppliers" loading={loading && !data} rows={data?.rows ?? []} rowKey={(r) => r.id} empty={{ title: "No suppliers." }} columns={[
         { key: "c", header: "Code", cell: (r) => <span className="tabular-nums">{r.supplierCode}</span> }, { key: "n", header: "Supplier", cell: (r) => <Link href={`/pharmacy/suppliers/${r.id}`} className="type-label">{r.supplierName}</Link> }, { key: "p", header: "Contact", cell: (r) => [r.contactPerson, r.phone].filter(Boolean).join(" · ") || "—", hideOnMobile: true },

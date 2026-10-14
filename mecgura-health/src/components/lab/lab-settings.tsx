@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { ExportMenu, ImportButton } from "@/components/data/data-transfer";
 import { Alert, Badge, Button, Card, CardBody, CardHeader, EmptyState, ErrorState, Field, LoadingState, Modal, NumberInput, SearchInput, Select, StatusBadge, TextInput, Textarea, Toggle, useToast } from "@/components/ui";
 import { apiFetch } from "@/lib/api/client";
 import { CONFIG_KINDS, FLAGS, RESULT_TYPES } from "@/lib/lab/core";
@@ -38,7 +39,7 @@ export function LabSettings({ canConfigure }: { canConfigure: boolean }) {
     <div className="space-y-section">
       {!canConfigure && <Alert tone="info">You can view the laboratory setup. Only a clinic admin can change it.</Alert>}
       <Card>
-        <CardHeader title="Investigations" description="The tests your clinic offers. Reference ranges you enter here are the only source of result flags." action={canConfigure ? <Button size="sm" onClick={() => setEdit("new")}><Plus aria-hidden className="size-4" />Add test</Button> : undefined} />
+        <CardHeader title="Investigations" description="The tests your clinic offers. Reference ranges you enter here are the only source of result flags." action={canConfigure ? <div className="flex flex-wrap items-center gap-2"><ExportMenu kind="lab-tests" label="Download list" /><ImportButton kind="lab-tests" label="Import from Excel" title="Import lab tests" description="Add many tests at once from an Excel or CSV file." onDone={loadTests} /><Button size="sm" onClick={() => setEdit("new")}><Plus aria-hidden className="size-4" />Add test</Button></div> : undefined} />
         <CardBody className="space-y-3">
           <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or code" aria-label="Search investigations" />
           {tests === null ? <LoadingState /> : !tests.length ? <EmptyState title="No investigations" description={canConfigure ? "Add the first test your clinic offers." : "None configured yet."} /> : (
