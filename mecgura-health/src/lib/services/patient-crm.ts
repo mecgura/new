@@ -29,7 +29,8 @@ import { changedKeys, containsCI } from "./shared";
 export const PAGE = 20;
 const hasView = (ctx: TenantRequestContext) => ctx.permissions.has("patients.view");
 const hasIdentity = (ctx: TenantRequestContext) => hasView(ctx) || ctx.permissions.has("patients.identity");
-export const hasClinical = (ctx: TenantRequestContext) => ctx.permissions.has("patients.clinical");
+/** Clinical tier is for clinic staff only: a Super Admin in support access never reads allergies, history or notes. */
+export const hasClinical = (ctx: TenantRequestContext) => ctx.permissions.has("patients.clinical") && ctx.user.role !== "SUPER_ADMIN";
 
 export function accessFor(ctx: TenantRequestContext) {
   return {
@@ -349,7 +350,7 @@ export async function patientTimeline(ctx: TenantRequestContext, id: string, raw
 /* ---------------------------------- export ---------------------------------- */
 /** Basic export of the patient's file. Admin permission, tenant scoped, audited. Returned to the browser as a download (no stored file, no URL). */
 export async function exportPatient(ctx: TenantRequestContext, id: string) {
-  if (!ctx.permissions.has("patients.export")) throw new AppError("FORBIDDEN");
+  if (!ctx.permissions.has("patients.export") || ctx.user.role === "SUPER_ADMIN") throw new AppError("FORBIDDEN");
   const profile = await getPatientProfile(ctx, id);
   await onExport({ actorId: ctx.user.id, tenantId: ctx.tenantId, kind: "patient-record" });
   const tdb = tenantDb(ctx);

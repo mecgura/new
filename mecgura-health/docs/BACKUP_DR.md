@@ -69,3 +69,6 @@ Note: the audit log is append-only and hash-chained; restoring an old backup rem
 
 - Point-in-time recovery, cross-region replication, automatic failover: depend on the database host; **not configured here**.
 - Automatic off-site upload and a backup-failure pager: not built in; the in-app alert (System health / Security events) is the only alerting.
+
+## Automated backup (GitHub Actions) — added after the independent audit
+`.github/workflows/backup.yml` runs daily (20:17 UTC): `pg_dump` of the `health` schema from Neon, a restore into a scratch Postgres 17 with a row-count check (this is the restore drill, repeated every day), AES-256 encryption with `BACKUP_PASSPHRASE`, and a private workflow artifact kept 30 days. Required secrets: `DATABASE_URL_UNPOOLED`, `BACKUP_PASSPHRASE` (store the passphrase somewhere other than GitHub). The repository must stay private. This gives a 24-hour RPO for logical backups; **also enable Neon point-in-time recovery** in the Neon console for a smaller RPO, and note it has not been confirmed from this repository. A restore into the real Neon project is still a manual, approved action (`Restoring for real` above).

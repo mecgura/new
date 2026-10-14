@@ -58,3 +58,12 @@ A channel with missing variables shows **Not configured** (Settings → Integrat
 npm run env:check -- --file .env.production     # or with the variables already exported
 ```
 Exit code 1 if any **required** item fails (PostgreSQL + TLS, schema selection, secrets present and long enough, https URL, key ring valid, scheduler secret, backup key, no demo/test variables). Optional items print as warnings. It never prints secret values.
+
+## Added after the independent audit (2026-10)
+
+| Variable | Purpose |
+|---|---|
+| `READINESS_TOKEN` (optional) | Bearer token that unlocks the detailed `/ready` report (providers, migrations, scheduler lag). Falls back to `CRON_SECRET`. Without it `/ready` answers only `{status}`. |
+| `RATE_LIMIT_STORE` (optional) | `memory` forces the per-instance rate limiter; default in production is the shared database store. |
+
+GitHub repository secrets used by `.github/workflows/*` (Settings → Secrets and variables → Actions): `APP_URL`, `CRON_SECRET` (scheduler, every 5 minutes), `DATABASE_URL_UNPOOLED`, `BACKUP_PASSPHRASE` (daily encrypted backup + restore check). Keep the repository private.

@@ -22,7 +22,7 @@ Compliance-**ready controls**, not a certification. Nothing here claims HIPAA/GD
 
 ## Known limitations (be upfront with clients)
 1. **No column-level encryption of patient records** — rely on the host's encryption at rest + TLS to the database.
-2. **Rate limiter is per instance** (in-memory). Several instances multiply the limits; a shared store needs a Redis-backed `setRateLimitStore`.
+2. **Rate limiter**: in production the counters live in the database (`RateLimitBucket`, `DbStore` in `src/lib/security/rate-limit.ts`), so limits — including the two-factor code limit — hold across serverless instances. Set `RATE_LIMIT_STORE=memory` to force the per-instance store; if the database is unreachable a hit falls back to per-instance counting. Expired counters are pruned by the scheduled job. A Redis store can still be plugged in with `setRateLimitStore`.
 3. **No bundled malware scanner** — images only; register a scanner before allowing documents.
 4. **Alerts are in-app only** — no e-mail/SMS/pager alerting is built in.
 5. **No break-glass access**; support access is reasoned, time-boxed (60 min) and audited.

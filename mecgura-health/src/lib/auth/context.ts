@@ -208,6 +208,7 @@ export async function requireTenantPagePermission(permission: Permission): Promi
 export async function requireApiContext(permission?: Permission): Promise<RequestContext> {
   const ctx = await getContext();
   if (!ctx) throw new AppError("UNAUTHENTICATED");
+  if (ctx.user.role === "PATIENT") throw new AppError("FORBIDDEN"); // portal sessions use the portal API only
   if (permission && !ctx.permissions.has(permission)) throw new AppError("FORBIDDEN");
   return ctx;
 }

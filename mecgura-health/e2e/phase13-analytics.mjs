@@ -90,7 +90,7 @@ for (const [p, h] of [["patients", /Patient analytics/], ["appointments", /Appoi
   await adminA.page.goto(`/analytics/${p}?preset=last30`); await adminA.page.waitForSelector("main h2"); const t = await adminA.page.innerText("body");
   check(`/analytics/${p} renders with freshness and no error state`, h.test(t) && /Last updated/.test(t) && !/Analytics couldn't load|Something went wrong/.test(t));
 }
-await adminA.page.goto("/analytics/billing?preset=last30"); check("billing page states what its figures mean (not profit)", /Not profit|not profit/.test(await adminA.page.innerText("body")));
+await adminA.page.goto("/analytics/billing?preset=last30"); await adminA.page.waitForLoadState("networkidle").catch(() => {}); check("billing page states what its figures mean (not profit)", /Not profit|not profit/.test(await adminA.page.innerText("body")));
 await adminA.page.goto("/analytics/opd?preset=today&compare=1"); await adminA.page.waitForSelector("main h2"); check("comparison shows the previous period (or N/A)", /Compared with/.test(await adminA.page.innerText("body")));
 check("charts have text alternatives", (await adminA.page.locator('[role=img][aria-label]').count()) + (await adminA.page.locator("table.sr-only").count()) >= 1);
 await adminA.page.goto("/analytics/appointments"); await adminA.page.selectOption('select[name=preset]', "custom"); await adminA.page.fill('input[name=from]', "2026-01-01"); await adminA.page.fill('input[name=to]', "2026-01-31"); await adminA.page.check('input[name=compare]'); await adminA.page.click('button[type=submit]:has-text("Apply")');

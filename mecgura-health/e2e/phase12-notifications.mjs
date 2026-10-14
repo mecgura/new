@@ -58,7 +58,7 @@ if (emN) {
 await docA.page.goto("/dashboard"); await docA.page.waitForTimeout(1500);
 const bell = docA.page.getByRole("button", { name: /^Notifications,/ });
 check("the bell shows the unread count in its accessible name", /\d+ unread/.test((await bell.getAttribute("aria-label")) ?? ""), await bell.getAttribute("aria-label"));
-await bell.click(); await docA.page.waitForSelector('[role=dialog][aria-label="Notifications"]');
+await bell.click(); await docA.page.waitForSelector('[role=dialog][aria-label="Notifications"]'); await docA.page.waitForSelector('[role=dialog][aria-label="Notifications"] li', { timeout: 10000 }).catch(() => {}); // the list is fetched after the panel opens
 check("the bell panel lists notifications with a View all link", (await docA.page.locator('[role=dialog][aria-label="Notifications"] li').count()) >= 2 && (await docA.page.locator('[role=dialog][aria-label="Notifications"]').getByRole("link", { name: /View all/ }).count()) === 1);
 check("priority is shown in words, not colour only", /Urgent|High|Normal/.test(await docA.page.locator('[role=dialog][aria-label="Notifications"]').innerText()));
 await docA.page.keyboard.press("Escape"); check("Escape closes the panel", (await docA.page.locator('[role=dialog][aria-label="Notifications"]').count()) === 0);

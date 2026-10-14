@@ -3160,3 +3160,12 @@ model BackupRun {
   @@index([startedAt])
   @@index([kind, status, startedAt])
 }
+
+/// Shared rate-limit counters (production): one row per limiter key and window, so limits hold across serverless instances.
+model RateLimitBucket {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+
+  @@index([resetAt])
+}

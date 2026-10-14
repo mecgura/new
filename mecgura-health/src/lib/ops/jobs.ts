@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { pruneRateLimits } from "@/lib/security/rate-limit";
 
 /**
  * Runs one scheduled job and keeps its history (JobRun): start/finish, duration, counters, and the error if it threw.
@@ -27,5 +28,6 @@ export async function recordJob<T>(name: string, fn: () => Promise<T>): Promise<
 export async function pruneOps(now = new Date()) {
   const j = await db.jobRun.deleteMany({ where: { startedAt: { lt: new Date(now.getTime() - 60 * 86_400_000) } } });
   const e = await db.errorEvent.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 30 * 86_400_000) } } });
-  return { jobRuns: j.count, errors: e.count };
+  const r = await pruneRateLimits(now);
+  return { jobRuns: j.count, errors: e.count, rateLimits: r };
 }
