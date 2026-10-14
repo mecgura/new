@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { unzipSync } from "fflate";
 import { toXlsx } from "@/lib/analytics/export";
 import { ImportFileError, parseCsv, parseUpload, parseXlsx } from "./table";
 
@@ -42,7 +43,7 @@ describe("report CSV -> Excel", () => {
     const csv = "Invoice,Patient ID,Amount,Mobile,Note\r\nINV-001,P-000123,1250.50,9876543210,hello\r\nINV-002,P-000124,300,0123456789,\"a,b\"\r\n";
     const out = csvToXlsx(csv, "test");
     expect(parseXlsx(out)).toEqual([["Invoice", "Patient ID", "Amount", "Mobile", "Note"], ["INV-001", "P-000123", "1250.50", "9876543210", "hello"], ["INV-002", "P-000124", "300", "0123456789", "a,b"]]);
-    const sheet = new TextDecoder().decode((require("fflate") as typeof import("fflate")).unzipSync(out)["xl/worksheets/sheet1.xml"]);
+    const sheet = new TextDecoder().decode(unzipSync(out)["xl/worksheets/sheet1.xml"]);
     expect(sheet).toContain('<c r="C2"><v>1250.50</v></c>'); expect(sheet).toContain('t="inlineStr"');
   });
 });

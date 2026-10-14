@@ -8,6 +8,7 @@ import { apiFetch } from "@/lib/api/client";
 import { bpToInput, minorToInput, moneyToMinor, percentToBp } from "@/lib/billing/money";
 import { useApi } from "@/components/patients/use-api";
 import { ExportMenu, ImportButton } from "@/components/data/data-transfer";
+import { OnlineMedicineSearch } from "./online-medicine-search";
 import type { MedicineRow } from "@/lib/services/pharmacy-master";
 import { STOCK_LABEL, STOCK_TONE, useMoney, usePharmacy } from "./pharmacy-ui";
 
@@ -73,6 +74,7 @@ export function MedicineModal({ medicine, config, onClose, onSaved }: { medicine
     <Modal open onClose={onClose} title={medicine?.id ? "Edit medicine" : "Add medicine"} description="The medicine code is created automatically and never changes." footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save} loading={busy}>Save medicine</Button></>}>
       <div className="space-y-3">
         {msg && <Alert tone="danger">{msg}</Alert>}
+        {!medicine?.id && <OnlineMedicineSearch onPick={(h) => { const form = (config?.dosageForms ?? []).filter((x) => x.active).find((x) => h.form && h.form.toLowerCase().includes(x.name.toLowerCase())); setF((cur) => ({ ...cur, genericName: h.genericName ?? cur.genericName, brandName: h.brandName ?? "", strength: h.strength ?? "", dosageForm: form?.name ?? cur.dosageForm })); }} />}
         <div className="grid gap-3 sm:grid-cols-2"><Field label="Generic name" required error={errors.genericName}><TextInput value={f.genericName} maxLength={120} onChange={set("genericName")} /></Field><Field label="Brand name" error={errors.brandName}><TextInput value={f.brandName} maxLength={120} onChange={set("brandName")} /></Field></div>
         <div className="grid gap-3 sm:grid-cols-3"><Field label="Strength" error={errors.strength}><TextInput value={f.strength} maxLength={60} onChange={set("strength")} placeholder="e.g. 500 mg" /></Field><Field label="Dosage form" error={errors.dosageForm}><Select value={f.dosageForm} placeholder="Choose" onChange={set("dosageForm")} options={opt(config?.dosageForms)} /></Field><Field label="Route" error={errors.route}><TextInput value={f.route} maxLength={40} onChange={set("route")} placeholder="e.g. Oral" /></Field></div>
         <div className="grid gap-3 sm:grid-cols-2"><Field label="Manufacturer" error={errors.manufacturer}><TextInput value={f.manufacturer} maxLength={120} onChange={set("manufacturer")} /></Field><Field label="Category" error={errors.category}><Select value={f.category} placeholder="Choose" onChange={set("category")} options={opt(config?.categories)} /></Field></div>

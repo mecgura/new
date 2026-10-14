@@ -2,6 +2,7 @@ import "server-only";
 import { AUDIT_ACTIONS, recordAudit } from "@/lib/audit";
 import type { TenantRequestContext } from "@/lib/auth/context";
 import { externalMedicineSource, type MedicineHit } from "@/lib/integrations/medicines";
+import { RXNORM_ATTRIBUTION } from "@/lib/integrations/medicine-sources/rxnorm";
 import { AppError } from "@/lib/errors";
 import { rateLimit } from "@/lib/security/rate-limit";
 import { tenantDb } from "@/lib/tenant/db";
@@ -36,4 +37,18 @@ export async function addMedicine(ctx: TenantRequestContext, raw: unknown) {
   const row = await db(ctx).medicineReference.create({ data: { tenantId: ctx.tenantId, name: m.name, genericName: m.genericName ?? null, brandName: m.brandName ?? null, strength: m.strength ?? null, form: m.form ?? null } });
   await recordAudit({ action: AUDIT_ACTIONS.MEDICINE_LIST_CHANGED, tenantId: ctx.tenantId, actorId: ctx.user.id, entityType: "medicine_reference", entityId: row.id, metadata: { change: "added" } });
   return { id: row.id as string };
+}
+
+/**
+ * Online suggestions for the "Add medicine" form (pharmacy staff). Returns names only; the user reviews them, adds prices and saves through the normal form.
+ * Disabled unless the platform owner set MEDICINE_ONLINE_SEARCH. Only the typed text is sent to the provider.
+ */
+export async function searchOnlineMedicines(ctx: TenantRequestContext, q: string) {
+  if (ctx.user.role === "SUPER_ADMIN" || !(ctx.permissions.has("pharmacy.medicines") || ctx.permissions.has("medicines.manage"))) throw new AppError("FORBIDDEN");
+  if (!externalMedicineSource) return { enabled: false as const, source: null, attribution: null, items: [] as MedicineHit[] };
+  const lim = await rateLimit(`monline:${ctx.user.id}`, { limit: 60, windowMs: 60_000 });
+  if (!lim.allowed) throw new AppError("RATE_LIMITED");
+  const text = q.trim().slice(0, 60); if (text.length < 2) return { enabled: true as const, source: externalMedicineSource.name, attribution: RXNORM_ATTRIBUTION, items: [] as MedicineHit[] };
+  try { return { enabled: true as const, source: externalMedicineSource.name, attribution: RXNORM_ATTRIBUTION, items: await externalMedicineSource.search(text, 20) }; }
+  catch { throw new AppError("INTERNAL", { message: "The online medicine database isn't reachable right now. You can still type the medicine in yourself." }); }
 }
