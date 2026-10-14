@@ -28,7 +28,7 @@ function BaseDialog({ open, onClose, title, description, children, variant, foot
       onClick={(e) => { if (e.target === ref.current) onClose(); }}
       className={cn(variant === "modal" ? "m-auto w-[calc(100vw-2rem)] max-w-lg" : "m-0 h-dvh w-[min(20rem,88vw)]")}
     >
-      <div className={cn("flex flex-col bg-surface shadow-modal", variant === "modal" ? "max-h-[calc(100dvh-2rem)] rounded-modal" : "h-full animate-[drawer-in_.2s_ease-out]")}>
+      <div className={cn("glass-strong flex flex-col shadow-modal", variant === "modal" ? "max-h-[calc(100dvh-2rem)] rounded-modal" : "h-full animate-[drawer-in_.2s_ease-out]")}>
         <div className="flex items-start justify-between gap-3 border-b border-line p-card">
           <div className="min-w-0">
             <h2 id={`${id}-t`} className="type-section">{title}</h2>

@@ -54,7 +54,7 @@ export function AppShell({ nav, user, workspace, children }: ShellProps) {
       <a href="#main" className="sr-only z-[70] rounded-md bg-surface px-3 py-2 focus:not-sr-only focus:fixed focus:left-3 focus:top-3">Skip to content</a>
 
       {/* Sidebar (md and up) */}
-      <aside className={cn("fixed inset-y-0 left-0 z-30 hidden flex-col bg-sidebar transition-[width] duration-200 md:flex", collapsed ? "w-sidebar-collapsed" : "w-sidebar")}>
+      <aside className={cn("fixed inset-y-3 left-3 z-30 hidden flex-col overflow-hidden rounded-[1.75rem] border border-white/15 bg-sidebar shadow-pop backdrop-blur-xl transition-[width] duration-200 md:flex", collapsed ? "w-sidebar-collapsed" : "w-sidebar")}>
         <div className={cn("flex h-header shrink-0 items-center border-b border-white/10", collapsed ? "justify-center" : "px-5")}>
           <Logo inverted iconOnly={collapsed} name={workspace?.name ?? "MECGURA"} sub={workspace ? "MECGURA HEALTH" : "HEALTH"} logoUrl={workspace?.logoUrl} />
         </div>
@@ -74,8 +74,8 @@ export function AppShell({ nav, user, workspace, children }: ShellProps) {
         </div>
       </Drawer>
 
-      <div className={cn("flex min-h-dvh flex-col transition-[padding] duration-200", collapsed ? "md:pl-sidebar-collapsed" : "md:pl-sidebar")}>
-        <header className="sticky top-0 z-20 flex h-header items-center gap-2 border-b border-line bg-surface/95 px-3 backdrop-blur md:gap-3 md:px-page">
+      <div className={cn("flex min-h-dvh flex-col transition-[padding] duration-200", collapsed ? "md:pl-[calc(var(--size-sidebar-collapsed)+1.5rem)]" : "md:pl-[calc(var(--size-sidebar)+1.5rem)]")}>
+        <header className="glass-strong sticky top-3 z-20 mx-3 mt-3 flex h-header items-center gap-2 rounded-2xl px-3 shadow-card md:mx-page md:gap-3 md:px-5">
           <button type="button" onClick={() => setDrawer(true)} aria-label="Open menu" className="flex size-control items-center justify-center rounded-lg hover:bg-surface-muted md:hidden"><Menu aria-hidden className="size-6" /></button>
           <p className="type-card-title min-w-0 truncate md:shrink-0 md:text-lg">{title}</p>
 
@@ -89,7 +89,7 @@ export function AppShell({ nav, user, workspace, children }: ShellProps) {
 
           <div className="ml-auto flex items-center gap-1.5 md:gap-2">
             {workspace && (
-              <span className="hidden min-w-0 items-center gap-2 rounded-lg border border-line px-3 py-1.5 sm:flex" title="Current workspace">
+              <span className="hidden min-w-0 items-center gap-2 rounded-xl border border-line/70 bg-white/60 px-3 py-1.5 sm:flex" title="Current workspace">
                 <Building2 aria-hidden className="size-4 shrink-0 text-muted" />
                 <span className="max-w-40 truncate text-sm font-semibold">{workspace.name}</span>
                 {workspace.isDemo && <Badge tone="warning">Demo</Badge>}
@@ -100,14 +100,14 @@ export function AppShell({ nav, user, workspace, children }: ShellProps) {
           </div>
         </header>
 
-        <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-page py-section pb-[calc(var(--size-bottom-nav)+1.5rem)] md:pb-section">
+        <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-page py-section pb-[calc(var(--size-bottom-nav)+2.25rem)] md:pb-section">
           {workspace?.isDemo && <p className="type-caption mb-4 rounded-lg bg-warning-soft px-3 py-2 !text-warning"><strong>Demo workspace.</strong> Contains only sample data — never enter real patient information.</p>}
           {children}
         </main>
       </div>
 
       {/* Bottom navigation (mobile) */}
-      <nav aria-label="Quick navigation" className="fixed inset-x-0 bottom-0 z-30 flex h-bottom-nav items-stretch border-t border-line bg-surface md:hidden">
+      <nav aria-label="Quick navigation" className="glass-strong fixed inset-x-3 bottom-3 z-30 flex h-bottom-nav items-stretch overflow-hidden rounded-3xl shadow-pop md:hidden">
         {linkItems.map((item) => {
           const Icon = NAV_ICONS[item.icon];
           const active = isActive(pathname, item.href);

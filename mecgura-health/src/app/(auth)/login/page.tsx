@@ -17,8 +17,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (ctx) redirect(dest);
 
   return (
-    <div className="grid min-h-dvh lg:grid-cols-2">
-      <aside className="hidden flex-col justify-between bg-sidebar p-12 text-white lg:flex">
+    <div className="grid min-h-dvh gap-4 p-3 lg:grid-cols-2 lg:p-4">
+      <aside className="hidden flex-col justify-between rounded-[2rem] border border-white/15 bg-sidebar p-12 text-white shadow-modal backdrop-blur-xl lg:flex">
         <Logo name={tenant?.name ?? "MECGURA"} sub={tenant ? null : "HEALTH"} logoUrl={tenant?.logoUrl} inverted />
         <div>
           <h2 className="text-3xl font-bold leading-tight">Your complete<br />clinic operating system</h2>
@@ -32,7 +32,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       </aside>
 
       <main id="main" className="flex items-center justify-center px-page py-10">
-        <div className="w-full max-w-sm">
+        <div className="glass-strong w-full max-w-sm rounded-[2rem] p-7 shadow-modal sm:p-9">
           <Logo name={tenant?.name ?? "MECGURA"} sub={tenant ? null : "HEALTH"} logoUrl={tenant?.logoUrl} className="mb-8 lg:hidden" />
           <h1 className="type-page-title">Welcome back</h1>
           <p className="type-secondary mb-6 mt-1">Sign in to your account</p>

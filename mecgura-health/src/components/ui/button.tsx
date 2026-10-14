@@ -6,9 +6,9 @@ export type ButtonVariant = "primary" | "secondary" | "outline" | "ghost" | "dan
 export type ButtonSize = "sm" | "md" | "lg";
 
 const variants: Record<ButtonVariant, string> = {
-  primary: "bg-btn text-on-brand hover:bg-primary-hover",
+  primary: "bg-btn text-on-brand shadow-btn hover:bg-primary-hover",
   secondary: "bg-secondary text-on-brand hover:brightness-90",
-  outline: "border border-line-strong bg-surface text-ink hover:bg-surface-muted",
+  outline: "border border-line-strong bg-white/70 text-ink backdrop-blur-sm hover:bg-white",
   ghost: "text-ink hover:bg-surface-muted",
   danger: "bg-danger text-on-brand hover:brightness-90",
   success: "bg-success text-on-brand hover:brightness-90",
@@ -21,7 +21,7 @@ const sizes: Record<ButtonSize, string> = {
 
 export function buttonClass(variant: ButtonVariant = "primary", size: ButtonSize = "md", extra?: string) {
   return cn(
-    "type-button inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50",
+    "type-button lift inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50",
     variants[variant],
     sizes[size],
     extra,

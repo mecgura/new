@@ -47,7 +47,7 @@ export function Dropdown({ trigger, items, align = "right", triggerLabel, trigge
         {trigger}
       </button>
       {open && (
-        <div id={menuId} role="menu" aria-label={triggerLabel ?? "Menu"} className={cn("absolute z-40 mt-2 min-w-56 rounded-lg border border-line bg-surface p-1.5 shadow-pop", align === "right" ? "right-0" : "left-0")}>
+        <div id={menuId} role="menu" aria-label={triggerLabel ?? "Menu"} className={cn("absolute z-40 mt-2 min-w-56 glass-strong rounded-lg p-1.5 shadow-pop", align === "right" ? "right-0" : "left-0")}>
           {items.map((it, idx) => {
             if (it.type === "separator") return <div key={idx} role="separator" className="my-1 h-px bg-line" />;
             if (it.type === "label") return <p key={idx} className="type-caption px-3 py-1.5">{it.label}</p>;
