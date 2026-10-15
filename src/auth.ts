@@ -41,6 +41,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = await db.user.findUnique({ where: { email } });
         const ok = await bcrypt.compare(parsed.data.password, user?.passwordHash ?? DUMMY_HASH);
         if (!user || !ok || user.status !== "active") {
+          // Reason only (never the password or the email) — visible in the host's runtime logs for diagnosing sign-in problems.
+          console.warn(`[auth] login failed: ${!user ? "unknown_account" : !ok ? "bad_password" : "account_disabled"}`);
           await audit({
             action: "auth.login_failed",
             actorUserId: user?.id ?? null,
