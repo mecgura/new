@@ -39,7 +39,7 @@ export default async function SettingsPage() {
               <Row label="Address" value={t.address} />
               <Row label="Custom domain" value={t.customDomain} />
             </dl>
-          ) : <p className="type-secondary">You are a platform administrator and are not attached to a clinic workspace.</p>}
+          ) : <p className="type-secondary">You are a platform administrator and are not attached to a clinic workspace. Use the Platform settings and Security & privacy tabs above, or open a clinic from Platform → Clinics to change that clinic's settings.</p>}
         </CardBody>
       </Card>
     </div>

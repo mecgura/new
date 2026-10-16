@@ -1,9 +1,7 @@
-"use client";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { cn } from "@/lib/cn";
+import { SettingsTabs, type SettingsTab } from "@/components/shell/settings-tabs";
+import { getContext } from "@/lib/auth/context";
 
-const TABS = [
+const CLINIC_TABS: SettingsTab[] = [
   { href: "/settings", label: "Profile & workspace" },
   { href: "/settings/clinic", label: "Clinic profile" },
   { href: "/settings/branding", label: "Theme & branding" },
@@ -18,17 +16,24 @@ const TABS = [
   { href: "/settings/privacy", label: "Privacy & consent" },
 ];
 
-export default function SettingsLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+// A platform administrator is not attached to a clinic, so the clinic tabs would only bounce them away.
+// They get the platform equivalents instead.
+const PLATFORM_TABS: SettingsTab[] = [
+  { href: "/settings", label: "Profile" },
+  { href: "/platform/settings", label: "Platform settings" },
+  { href: "/platform/security", label: "Security & privacy" },
+  { href: "/platform/communications", label: "Communications" },
+  { href: "/platform/notifications", label: "Notifications" },
+  { href: "/account/security", label: "My account security" },
+];
+
+export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
+  const ctx = await getContext();
+  const tabs = ctx && !ctx.tenant ? PLATFORM_TABS : CLINIC_TABS;
   return (
     <div className="space-y-section">
       <h1 className="type-page-title">Settings</h1>
-      <nav aria-label="Settings sections" className="-mx-page flex gap-1 overflow-x-auto border-b border-line px-page">
-        {TABS.map((t) => {
-          const active = pathname === t.href;
-          return <Link key={t.href} href={t.href} aria-current={active ? "page" : undefined} className={cn("type-label -mb-px flex min-h-control shrink-0 items-center whitespace-nowrap border-b-2 px-4 no-underline", active ? "border-primary !text-primary" : "border-transparent !text-muted hover:!text-ink")}>{t.label}</Link>;
-        })}
-      </nav>
+      <SettingsTabs tabs={tabs} />
       {children}
     </div>
   );
