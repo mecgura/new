@@ -1,0 +1,12 @@
+import type { Tone } from "@/components/ui";
+export const INVOICE_STATUS_LABEL: Record<string, string> = { DRAFT: "Draft", ISSUED: "Unpaid", PARTIALLY_PAID: "Partially paid", PAID: "Paid", OVERDUE: "Overdue", CANCELLED: "Cancelled", REFUNDED: "Refunded", PARTIALLY_REFUNDED: "Partially refunded", UNPAID: "Unpaid", NOT_BILLED: "Not billed" };
+export const INVOICE_STATUS_TONE: Record<string, Tone> = { DRAFT: "neutral", ISSUED: "info", UNPAID: "info", PARTIALLY_PAID: "warning", PAID: "success", OVERDUE: "danger", CANCELLED: "danger", REFUNDED: "neutral", PARTIALLY_REFUNDED: "warning", NOT_BILLED: "neutral" };
+export const PAYMENT_STATUS_LABEL: Record<string, string> = { SUCCESS: "Received", PENDING: "Pending", FAILED: "Failed", CANCELLED: "Cancelled", REFUNDED: "Refunded", PARTIALLY_REFUNDED: "Partially refunded" };
+export const PAYMENT_STATUS_TONE: Record<string, Tone> = { SUCCESS: "success", PENDING: "warning", FAILED: "danger", CANCELLED: "danger", REFUNDED: "neutral", PARTIALLY_REFUNDED: "warning" };
+export const METHOD_LABEL: Record<string, string> = { CASH: "Cash", UPI: "UPI", CARD: "Card", BANK_TRANSFER: "Bank transfer", ONLINE: "Online", CHEQUE: "Cheque", OTHER: "Other" };
+export const REFUND_STATUS_LABEL: Record<string, string> = { REQUESTED: "Requested", APPROVED: "Approved", PROCESSED: "Processed", REJECTED: "Rejected", CANCELLED: "Cancelled" };
+export const REFUND_STATUS_TONE: Record<string, Tone> = { REQUESTED: "warning", APPROVED: "info", PROCESSED: "success", REJECTED: "danger", CANCELLED: "neutral" };
+export const SERVICE_TYPE_LABEL: Record<string, string> = { CONSULTATION: "Consultation", FOLLOW_UP: "Follow-up", PROCEDURE: "Procedure", INVESTIGATION: "Investigation", MEDICINE: "Medicine", DOCUMENT: "Document", OTHER: "Other" };
+export const EVENT_LABEL: Record<string, string> = { CREATED: "Invoice created", EDITED: "Draft edited", ISSUED: "Invoice issued", PAYMENT_RECEIVED: "Payment received", PAYMENT_CANCELLED: "Payment cancelled", CANCELLED: "Invoice cancelled", REFUND_REQUESTED: "Refund requested", REFUND_APPROVED: "Refund approved", REFUND_PROCESSED: "Refund processed", REFUND_REJECTED: "Refund declined" };
+export const dayLabel = (d: string | null | undefined) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }) : "—");
+export const stamp = (iso: string | null | undefined) => (iso ? iso.slice(0, 16).replace("T", " ") + " UTC" : "—");

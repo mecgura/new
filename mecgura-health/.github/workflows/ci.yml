@@ -1,0 +1,32 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:check-schema
+      - run: npx tsc --noEmit
+      - run: npx eslint
+      - run: npm run security:scan
+      - run: npx vitest run
+      - run: npx next build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+      # Known advisories in Prisma CLI tooling are tracked in security-review/FINDINGS.md; report, do not block.
+      - run: npm audit --omit=dev
+        continue-on-error: true
