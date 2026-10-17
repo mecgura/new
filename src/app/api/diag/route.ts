@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { mrrAt } from "@/lib/services/clients";
 
 // TEMPORARY diagnostic (guarded by CRON_SECRET, returns only booleans/timings — never secrets). Remove after use.
 export const maxDuration = 60;
@@ -35,6 +36,26 @@ export async function GET(req: Request) {
     t0 = performance.now();
     out.users = await db.user.count();
     t("count_ms", t0);
+    // The queries the /admin page runs, timed one by one so a slow or broken one shows up.
+    const probes: Record<string, () => Promise<unknown>> = {
+      orgCount: () => db.organization.count(),
+      accounts: () => db.whatsAppAccount.count(),
+      usage: () => db.usageCounter.groupBy({ by: ["day"], where: { metric: "messages_sent" }, _sum: { value: true } }),
+      audit: () => db.auditLog.findMany({ take: 8, orderBy: { createdAt: "desc" } }),
+      orgs: () => db.organization.findMany({ take: 5 }),
+      mrr: () => mrrAt(new Date()),
+      subs: () => db.subscription.count(),
+      plans: () => db.plan.count(),
+    };
+    const res: Record<string, string> = {};
+    for (const [k, fn] of Object.entries(probes)) {
+      const t1 = performance.now();
+      try { await fn(); res[k] = `ok ${Math.round(performance.now() - t1)}ms`; } catch (e) { res[k] = `ERR ${String(e).slice(0, 120)}`; }
+    }
+    out.adminQueries = res;
+    t0 = performance.now();
+    await Promise.all(Array.from({ length: 6 }, () => mrrAt(new Date())));
+    t("mrrParallel6_ms", t0);
   } catch (e) {
     out.error = String(e).slice(0, 300);
   }
