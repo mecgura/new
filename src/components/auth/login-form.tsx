@@ -3,7 +3,7 @@
 import * as React from "react";
 import { siteConfig } from "@/config/site";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Eye, EyeOff, Keyboard } from "lucide-react";
 import { loginSchema } from "@/lib/validations";
@@ -22,7 +22,6 @@ const NOTICES: Record<string, { tone: "info" | "success"; text: string }> = {
 };
 
 export function LoginForm() {
-  const router = useRouter();
   const params = useSearchParams();
   const callbackUrl = safeCallback(params.get("callbackUrl"));
   const notice = NOTICES[params.get("reason") ?? ""];
@@ -54,8 +53,8 @@ export function LoginForm() {
       });
       return;
     }
-    router.replace(callbackUrl);
-    router.refresh();
+    // Full navigation: the session cookie is set, and a hard load avoids a client-side transition that can stall.
+    window.location.assign(callbackUrl);
   }
 
   return (
