@@ -62,16 +62,21 @@ export function LoginForm() {
       title="Welcome back"
       subtitle="Sign in to your MECGURA account"
       footer={
-        siteConfig.contact.email ? (
-          <>
-            Don&apos;t have an account?{" "}
-            <a href={`mailto:${siteConfig.contact.email}`} className="font-medium text-app-primary hover:text-app-primary-hover">
-              Contact support
-            </a>
-          </>
-        ) : (
-          "Accounts are created by your administrator."
-        )
+        <>
+          {siteConfig.contact.email ? (
+            <>
+              Don&apos;t have an account?{" "}
+              <a href={`mailto:${siteConfig.contact.email}`} className="font-medium text-app-primary hover:text-app-primary-hover">
+                Contact support
+              </a>
+            </>
+          ) : (
+            "Accounts are created by your administrator."
+          )}
+          <span className="mt-2 block text-xs opacity-80">
+            <a href="/privacy" className="hover:underline">Privacy</a> · <a href="/terms" className="hover:underline">Terms</a>
+          </span>
+        </>
       }
     >
       <form onSubmit={onSubmit} noValidate className="space-y-5" aria-label="Sign in form">
