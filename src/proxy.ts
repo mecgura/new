@@ -16,7 +16,9 @@ export async function proxy(req: NextRequest) {
   const isApp = APP_PREFIXES.some((p) => matches(pathname, p)) || pathname === "/api";
   if (!isAdmin && !isApp) return NextResponse.next();
 
-  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
+  // Auth.js names the cookie "__Secure-authjs.session-token" on HTTPS; getToken does not detect that on its own.
+  const proto = req.headers.get("x-forwarded-proto")?.split(",")[0].trim() ?? req.nextUrl.protocol.replace(":", "");
+  const token = await getToken({ req, secret: process.env.AUTH_SECRET, secureCookie: proto === "https" });
   if (!token?.id) {
     const loginUrl = new URL("/login", req.nextUrl.origin);
     loginUrl.searchParams.set("callbackUrl", pathname);
