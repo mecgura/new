@@ -533,3 +533,35 @@ export async function diagnoseConnection(organizationId: string, accountId: stri
   );
   return { checks, checkedAt: new Date() };
 }
+
+/**
+ * Replaces the access token (and optionally the app secret) of a live developer-setup number without disconnecting it,
+ * so conversations, the webhook verify token and the Meta webhook settings all stay as they are.
+ */
+export async function replaceAccessToken(ctx: ActorCtx, accountId: string, input: { accessToken: string; appSecret?: string }) {
+  if (!isEncryptionConfigured()) throw new ApiError("SERVICE_UNAVAILABLE", "Secure credential storage is not configured on this server yet.");
+  const acc = await db.whatsAppAccount.findFirst({ where: { id: accountId, organizationId: ctx.organizationId }, include: { connection: true, waba: true } });
+  if (!acc) throw new ApiError("NOT_FOUND", "WhatsApp account not found.");
+  if (acc.isDemo || !acc.connection || acc.connection.method !== "manual" || !acc.waba || !acc.phoneNumberId) {
+    throw new ApiError("CONFLICT", "Only a number connected with API / Developer setup can have its token replaced here.");
+  }
+  try {
+    const phone = await getPhoneNumber(acc.phoneNumberId, input.accessToken);
+    if (phone.id !== acc.phoneNumberId) throw new ApiError("VALIDATION_ERROR", "This token doesn't belong to the connected phone number.");
+    await subscribeAppToWaba(acc.waba.wabaId, input.accessToken).catch(() => false);
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    throw metaFailure(e);
+  }
+  await db.whatsAppConnection.update({
+    where: { id: acc.connection.id },
+    data: {
+      encryptedAccessToken: encryptSecret(input.accessToken),
+      tokenLast4: last4(input.accessToken),
+      tokenObtainedAt: new Date(),
+      ...(input.appSecret ? { encryptedAppSecret: encryptSecret(input.appSecret) } : {}),
+    },
+  });
+  await audit({ action: "whatsapp.settings_changed", actorUserId: ctx.actorUserId, organizationId: ctx.organizationId, targetType: "whatsapp_account", targetId: acc.id, metadata: { fields: input.appSecret ? ["accessToken", "appSecret"] : ["accessToken"] }, req: ctx.req });
+  return getAccount(ctx.organizationId, acc.id);
+}

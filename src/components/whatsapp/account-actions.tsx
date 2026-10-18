@@ -147,3 +147,46 @@ export function ConnectionCheck({ orgId, accountId }: { orgId: string; accountId
     </Card>
   );
 }
+
+/** Paste a new Meta access token (for example a permanent system-user token) without disconnecting the number. */
+export function ReplaceTokenForm({ orgId, accountId }: { orgId: string; accountId: string }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [token, setToken] = React.useState("");
+  const [secret, setSecret] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    const r = await apiFetch(`/api/organizations/${orgId}/whatsapp/accounts/${accountId}/token`, { method: "POST", body: { accessToken: token, appSecret: secret } });
+    setSaving(false);
+    if (!r.ok) return setError(r.details?.accessToken?.[0] ?? r.details?.appSecret?.[0] ?? r.error);
+    setToken("");
+    setSecret("");
+    toast("Access token updated");
+    router.refresh();
+  }
+  return (
+    <Card>
+      <CardHeader title="Update access token" description="Use this when the token expired or you created a permanent system-user token. The number stays connected; the new token is verified with Meta and stored encrypted." />
+      <CardBody>
+        <form onSubmit={submit} noValidate autoComplete="off" className="space-y-4">
+          {error ? <Alert tone="danger">{error}</Alert> : null}
+          <Field id="wa-new-token" label="New access token">
+            <Input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" />
+          </Field>
+          <Field id="wa-new-secret" label="App secret (optional)" hint="Only if it changed.">
+            <Input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} autoComplete="off" />
+          </Field>
+          <div className="flex justify-end">
+            <Button type="submit" loading={saving} disabled={token.trim().length < 50}>
+              Update token
+            </Button>
+          </div>
+        </form>
+      </CardBody>
+    </Card>
+  );
+}

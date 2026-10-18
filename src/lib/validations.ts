@@ -219,6 +219,21 @@ export const embeddedCancelSchema = z.object({
   reason: z.string().max(300).optional().default(""),
 });
 
+export const replaceTokenSchema = z.object({
+  accessToken: z
+    .string()
+    .trim()
+    .min(50, "Access token looks too short")
+    .max(1024, "Access token looks too long")
+    .regex(/^[A-Za-z0-9_\-|.]+$/, "Access token contains invalid characters"),
+  appSecret: z
+    .string()
+    .trim()
+    .regex(/^[a-f0-9]{32}$/i, "App secret is a 32-character hex value")
+    .optional()
+    .or(z.literal("")),
+});
+
 export const manualConnectSchema = z.object({
   wabaId: metaId("WABA ID"),
   phoneNumberId: metaId("Phone Number ID"),

@@ -9,7 +9,7 @@ import { idSchema } from "@/lib/validations";
 import { Alert, Badge, Card, CardBody, CardHeader, PageHeader } from "@/components/ds";
 import { NoWorkspace, OwnerOnly, ServiceDisabled } from "@/components/whatsapp/states";
 import { QualityBadge, StatusBadge } from "@/components/whatsapp/status-badge";
-import { AccountSettingsForm, ConnectionCheck, DisconnectButton } from "@/components/whatsapp/account-actions";
+import { AccountSettingsForm, ConnectionCheck, DisconnectButton, ReplaceTokenForm } from "@/components/whatsapp/account-actions";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "WhatsApp number" };
@@ -136,7 +136,10 @@ export default async function WhatsAppAccountPage({ params, searchParams }: { pa
           </Card>
         ) : null
       ) : ctx.canManage ? (
-        <AccountSettingsForm orgId={ctx.orgId} accountId={account.id} displayName={account.displayName} />
+        <div className="space-y-4">
+          <AccountSettingsForm orgId={ctx.orgId} accountId={account.id} displayName={account.displayName} />
+          {!account.isDemo && account.connection?.method === "manual" && live ? <ReplaceTokenForm orgId={ctx.orgId} accountId={account.id} /> : null}
+        </div>
       ) : (
         <OwnerOnly what="change number settings" />
       )}

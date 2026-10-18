@@ -11,6 +11,7 @@ import * as manualRoute from "@/app/api/organizations/[orgId]/whatsapp/connect/m
 import * as demoRoute from "@/app/api/organizations/[orgId]/whatsapp/connect/demo/route";
 import * as accountRoute from "@/app/api/organizations/[orgId]/whatsapp/accounts/[accountId]/route";
 import * as disconnectRoute from "@/app/api/organizations/[orgId]/whatsapp/accounts/[accountId]/disconnect/route";
+import * as tokenRoute from "@/app/api/organizations/[orgId]/whatsapp/accounts/[accountId]/token/route";
 import * as diagnoseRoute from "@/app/api/organizations/[orgId]/whatsapp/accounts/[accountId]/diagnose/route";
 import * as webhookInfoRoute from "@/app/api/organizations/[orgId]/whatsapp/accounts/[accountId]/webhook/route";
 import * as metaWebhook from "@/app/api/webhooks/meta/route";
@@ -535,5 +536,45 @@ describe("connection check", () => {
     expect((await diagnoseRoute.POST(post({}), p(a.org.id, { accountId: demoId }))).status).toBe(409);
     actAs(b.owner);
     expect((await diagnoseRoute.POST(post({}), p(b.org.id, { accountId: demoId }))).status).toBe(404);
+  });
+});
+
+describe("replacing the access token", () => {
+  it("verifies the new token with Meta, stores it encrypted, keeps the number connected and never echoes it", async () => {
+    const { org, owner } = await makeTenant();
+    actAs(owner);
+    const r = await connectManual(org.id);
+    const before = await db.whatsAppConnection.findFirstOrThrow({ where: { organizationId: org.id }, include: { webhook: true } });
+    const newToken = TOKEN();
+    mockMeta(r.ids);
+    const res = await json(await tokenRoute.POST(post({ accessToken: newToken }), p(org.id, { accountId: r.accountId })));
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toContain(newToken);
+    const after = await db.whatsAppConnection.findFirstOrThrow({ where: { organizationId: org.id }, include: { webhook: true } });
+    expect(decryptSecret(after.encryptedAccessToken)).toBe(newToken);
+    expect(after.encryptedAppSecret).toBe(before.encryptedAppSecret); // untouched when no new secret is given
+    expect(after.webhook?.encryptedVerifyToken).toBe(before.webhook?.encryptedVerifyToken);
+    expect(calls.some((c) => c.auth === `Bearer ${newToken}`)).toBe(true);
+    const acc = await db.whatsAppAccount.findUniqueOrThrow({ where: { id: r.accountId } });
+    expect(acc.status).toBe("connected");
+  });
+
+  it("refuses a token Meta rejects, and demo numbers, and other tenants' numbers", async () => {
+    const a = await makeTenant();
+    const b = await makeTenant();
+    actAs(a.owner);
+    const r = await connectManual(a.org.id);
+    mockMeta({ ...r.ids, fail: { status: 400, message: "Error validating access token: Session has expired" } });
+    const bad = await json(await tokenRoute.POST(post({ accessToken: TOKEN() }), p(a.org.id, { accountId: r.accountId })));
+    expect(bad.status).toBeGreaterThanOrEqual(400);
+    expect(bad.status).toBeLessThan(500);
+    const stored = await db.whatsAppConnection.findFirstOrThrow({ where: { organizationId: a.org.id } });
+    expect(decryptSecret(stored.encryptedAccessToken)).toBe(r.token);
+
+    const demo = await json(await demoRoute.POST(post({ businessName: "Demo" }), p(a.org.id)));
+    const demoId = (demo.body.account as { id: string }).id;
+    expect((await tokenRoute.POST(post({ accessToken: TOKEN() }), p(a.org.id, { accountId: demoId }))).status).toBe(409);
+    actAs(b.owner);
+    expect((await tokenRoute.POST(post({ accessToken: TOKEN() }), p(b.org.id, { accountId: r.accountId }))).status).toBe(404);
   });
 });
