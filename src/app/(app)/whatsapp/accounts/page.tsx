@@ -7,6 +7,7 @@ import { formatNumber } from "@/lib/catalog";
 import { Badge, Card, EmptyState, PageHeader, UsageMeter, buttonVariants } from "@/components/ds";
 import { NoWorkspace, ServiceDisabled } from "@/components/whatsapp/states";
 import { QualityBadge, StatusBadge } from "@/components/whatsapp/status-badge";
+import { wouldExceed } from "@/lib/plans";
 import { CardActions } from "@/components/whatsapp/account-actions";
 
 export const metadata: Metadata = { title: "WhatsApp accounts" };
@@ -17,7 +18,7 @@ export default async function WhatsAppAccountsPage() {
   const ctx = await getWhatsAppContext();
   if (!ctx.active) return <NoWorkspace />;
   const accounts = ctx.serviceEnabled ? await listAccounts(ctx.orgId) : [];
-  const canAdd = ctx.canManage && (ctx.slots.limit === null || ctx.slots.used < ctx.slots.limit);
+  const canAdd = ctx.canManage && (ctx.slots.limit === null || !wouldExceed(ctx.slots.used, ctx.slots.limit));
 
   return (
     <>

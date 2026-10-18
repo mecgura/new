@@ -7,6 +7,7 @@ import { QUALITY_LABELS } from "@/lib/catalog";
 import { StatusBadge } from "@/components/whatsapp/status-badge";
 import { Alert, Badge, Card, CardBody, CardHeader, EmptyState, PageHeader, UsageMeter, buttonVariants } from "@/components/ds";
 import { NoWorkspace, ServiceDisabled } from "@/components/whatsapp/states";
+import { wouldExceed } from "@/lib/plans";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "WhatsApp Connection Center" };
@@ -15,7 +16,7 @@ export default async function WhatsAppCenterPage() {
   const ctx = await getWhatsAppContext();
   if (!ctx.active) return <NoWorkspace />;
   const accounts = await listAccounts(ctx.orgId);
-  const full = ctx.slots.limit !== null && ctx.slots.used >= ctx.slots.limit;
+  const full = ctx.slots.limit !== null && wouldExceed(ctx.slots.used, ctx.slots.limit);
 
   return (
     <>

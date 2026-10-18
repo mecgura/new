@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getWhatsAppContext } from "@/lib/whatsapp-context";
 import { PageHeader } from "@/components/ds";
 import { ConnectWizard } from "@/components/whatsapp/connect-wizard";
+import { wouldExceed } from "@/lib/plans";
 import { NoWorkspace, OwnerOnly, ServiceDisabled } from "@/components/whatsapp/states";
 
 export const metadata: Metadata = { title: "Connect WhatsApp" };
@@ -33,7 +34,7 @@ export default async function ConnectWhatsAppPage({ searchParams }: { searchPara
         demoAvailable={ctx.demoAvailable}
         encryptionReady={ctx.encryptionReady}
         callbackUrl={ctx.callbackUrl}
-        slotsFull={ctx.slots.limit !== null && ctx.slots.used >= ctx.slots.limit}
+        slotsFull={ctx.slots.limit !== null && wouldExceed(ctx.slots.used, ctx.slots.limit)}
       />
     </>
   );
