@@ -11,6 +11,7 @@ import {
   getPhoneNumber,
   getWaba,
   listPhoneNumbers,
+  listSubscribedApps,
   subscribeAppToWaba,
   toE164,
   unsubscribeAppFromWaba,
@@ -462,4 +463,73 @@ export async function getWebhookInfo(organizationId: string, accountId: string) 
     lastEventAt: wh?.lastEventAt ?? null,
     signatureSecretStored: Boolean(acc.connection?.encryptedAppSecret),
   };
+}
+
+export type ConnectionCheck = { id: string; label: string; status: "ok" | "warn" | "fail"; detail: string };
+
+/**
+ * Asks Meta (with the stored token) how this number is really set up, and combines that with what MECGURA has
+ * received so far. Every line says what is wrong in plain words; no secret or token is ever returned.
+ */
+export async function diagnoseConnection(organizationId: string, accountId: string): Promise<{ checks: ConnectionCheck[]; checkedAt: Date }> {
+  const acc = await db.whatsAppAccount.findFirst({ where: { id: accountId, organizationId }, include: { connection: { include: { webhook: true } }, waba: true } });
+  if (!acc) throw new ApiError("NOT_FOUND", "WhatsApp account not found.");
+  if (acc.isDemo || !acc.connection || !acc.waba || !acc.phoneNumberId) throw new ApiError("CONFLICT", "Only a live Meta connection can be checked.");
+  const checks: ConnectionCheck[] = [];
+  const add = (id: string, label: string, status: ConnectionCheck["status"], detail: string) => checks.push({ id, label, status, detail });
+  const wabaId = acc.waba.wabaId;
+
+  let token = "";
+  try {
+    token = decryptSecret(acc.connection.encryptedAccessToken);
+  } catch {
+    add("token", "Access token", "fail", "The stored token can't be read. Disconnect and connect again.");
+  }
+
+  if (token) {
+    try {
+      const phone = await getPhoneNumber(acc.phoneNumberId, token);
+      add("token", "Access token", "ok", "Meta accepts the token. Temporary tokens stop working after about 24 hours.");
+      add("status", "Number status at Meta", phone.status === "CONNECTED" ? "ok" : "fail", phone.status ? `Meta reports: ${phone.status}.` : "Meta didn't report a status.");
+      add(
+        "platform",
+        "Registered on WhatsApp Cloud API",
+        phone.platform_type === "CLOUD_API" ? "ok" : "fail",
+        phone.platform_type === "CLOUD_API"
+          ? "Messages for this number are delivered through the Cloud API."
+          : `Meta reports platform "${phone.platform_type ?? "unknown"}". The number isn't on the Cloud API, so customer messages reach the WhatsApp app, not MECGURA. Finish registering the number in WhatsApp Manager.`
+      );
+      add("verification", "Number verification", phone.code_verification_status === "VERIFIED" ? "ok" : "warn", `Meta reports: ${phone.code_verification_status ?? "unknown"}.`);
+    } catch (e) {
+      add("token", "Access token / number", "fail", e instanceof MetaApiError ? `Meta says: ${e.message}` : "Couldn't reach Meta. Try again.");
+    }
+    try {
+      const apps = await listSubscribedApps(wabaId, token);
+      add(
+        "subscribed",
+        "Your Meta app is subscribed to this WhatsApp account",
+        apps.length > 0 ? "ok" : "fail",
+        apps.length > 0 ? `Subscribed: ${apps.map((a) => a.name || a.id || "app").join(", ")}.` : "No app is subscribed, so Meta sends no webhooks. Reconnect the number (it subscribes the app again)."
+      );
+    } catch (e) {
+      add("subscribed", "App subscription", "warn", e instanceof MetaApiError ? `Couldn't read it: ${e.message}` : "Couldn't read it.");
+    }
+  }
+
+  const wh = acc.connection.webhook;
+  add("secret", "App secret stored (signature check)", acc.connection.encryptedAppSecret ? "ok" : "fail", acc.connection.encryptedAppSecret ? "Incoming messages are verified with your app secret." : "Not stored: every incoming message would be rejected. Reconnect with the app secret.");
+  const since = new Date(Date.now() - 7 * 86_400_000);
+  const [received, failed] = await Promise.all([
+    db.webhookEvent.count({ where: { organizationId, wabaId, receivedAt: { gte: since } } }),
+    db.webhookEvent.count({ where: { organizationId, wabaId, receivedAt: { gte: since }, status: "failed" } }),
+  ]);
+  add(
+    "events",
+    "Events received from Meta (7 days)",
+    received === 0 ? "warn" : failed > 0 ? "warn" : "ok",
+    received === 0
+      ? "None yet. If you've sent a message to this number, Meta isn't delivering webhooks: check the app is Live and the WhatsApp webhook fields (messages) are subscribed."
+      : `${received} received${failed ? `, ${failed} failed to process` : ""}.${wh?.lastEventAt ? "" : ""}`
+  );
+  return { checks, checkedAt: new Date() };
 }

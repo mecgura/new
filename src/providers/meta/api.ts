@@ -46,6 +46,12 @@ export async function subscribeAppToWaba(wabaId: string, token: string): Promise
   return r.success === true;
 }
 
+/** Apps currently subscribed to the WABA's webhooks (names only; used by the connection check). */
+export async function listSubscribedApps(wabaId: string, token: string): Promise<{ id?: string; name?: string }[]> {
+  const r = await graph<{ data?: { whatsapp_business_api_data?: { id?: string; name?: string } }[] }>(`${wabaId}/subscribed_apps`, { token });
+  return (r.data ?? []).map((d) => d.whatsapp_business_api_data ?? {});
+}
+
 export async function unsubscribeAppFromWaba(wabaId: string, token: string): Promise<boolean> {
   const r = await graph<{ success?: boolean }>(`${wabaId}/subscribed_apps`, { token, method: "DELETE" });
   return r.success === true;

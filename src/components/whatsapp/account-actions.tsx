@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plug2, Settings2, SlidersHorizontal } from "lucide-react";
+import { CheckCircle2, CircleAlert, Plug2, Settings2, SlidersHorizontal, Stethoscope, XCircle } from "lucide-react";
 import { Alert, Button, Card, CardBody, CardHeader, ConfirmationDialog, Field, Input, buttonVariants, useToast } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
 
@@ -95,6 +95,54 @@ export function AccountSettingsForm({ orgId, accountId, displayName }: { orgId: 
             </Button>
           </div>
         </form>
+      </CardBody>
+    </Card>
+  );
+}
+
+type Check = { id: string; label: string; status: "ok" | "warn" | "fail"; detail: string };
+
+/** Asks Meta how this number is really set up and lists what is wrong, in plain words. */
+export function ConnectionCheck({ orgId, accountId }: { orgId: string; accountId: string }) {
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [checks, setChecks] = React.useState<Check[] | null>(null);
+  async function run() {
+    setBusy(true);
+    setError("");
+    const r = await apiFetch<{ checks: Check[] }>(`/api/organizations/${orgId}/whatsapp/accounts/${accountId}/diagnose`, { method: "POST" });
+    setBusy(false);
+    if (!r.ok) return setError(r.error);
+    setChecks(r.data.checks);
+  }
+  const Icon = { ok: CheckCircle2, warn: CircleAlert, fail: XCircle } as const;
+  const tone = { ok: "text-emerald-500", warn: "text-amber-500", fail: "text-red-500" } as const;
+  return (
+    <Card>
+      <CardHeader title="Connection check" description="Asks Meta how this number is set up and shows what is blocking messages." />
+      <CardBody>
+        <div className="space-y-4">
+          {error ? <Alert tone="danger">{error}</Alert> : null}
+          <Button onClick={run} loading={busy}>
+            <Stethoscope aria-hidden="true" /> Run check
+          </Button>
+          {checks ? (
+            <ul className="divide-y divide-app-border">
+              {checks.map((c) => {
+                const I = Icon[c.status];
+                return (
+                  <li key={c.id} className="flex gap-3 py-3">
+                    <I className={`mt-0.5 size-5 shrink-0 ${tone[c.status]}`} aria-label={c.status} />
+                    <div className="min-w-0">
+                      <p className="text-body font-medium text-app-text">{c.label}</p>
+                      <p className="text-small text-app-muted">{c.detail}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </div>
       </CardBody>
     </Card>
   );

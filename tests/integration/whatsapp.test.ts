@@ -11,6 +11,7 @@ import * as manualRoute from "@/app/api/organizations/[orgId]/whatsapp/connect/m
 import * as demoRoute from "@/app/api/organizations/[orgId]/whatsapp/connect/demo/route";
 import * as accountRoute from "@/app/api/organizations/[orgId]/whatsapp/accounts/[accountId]/route";
 import * as disconnectRoute from "@/app/api/organizations/[orgId]/whatsapp/accounts/[accountId]/disconnect/route";
+import * as diagnoseRoute from "@/app/api/organizations/[orgId]/whatsapp/accounts/[accountId]/diagnose/route";
 import * as webhookInfoRoute from "@/app/api/organizations/[orgId]/whatsapp/accounts/[accountId]/webhook/route";
 import * as metaWebhook from "@/app/api/webhooks/meta/route";
 import * as adminNumber from "@/app/api/admin/whatsapp-accounts/[id]/route";
@@ -483,5 +484,56 @@ describe("webhook endpoint /api/webhooks/meta", () => {
     await disconnectRoute.POST(post({}), p(org.id, { accountId: r.accountId }));
     const body = envelope(r.ids.wabaId, { metadata: { phone_number_id: r.ids.phoneNumberId }, statuses: [{ id: `wamid.d${seq++}`, status: "sent" }] });
     expect((await metaWebhook.POST(signed(body, r.secret))).status).toBe(401);
+  });
+});
+
+describe("connection check", () => {
+  /** Meta's answers for the check: a real fetch mock that varies the phone platform and the app subscriptions. */
+  function mockCheck(ids: ReturnType<typeof metaIds>, o: { platform: string; apps: { name: string }[] }) {
+    return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = new URL(String(input)).pathname.replace(/^\/v[\d.]+\//, "");
+      const reply = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
+      if (path === `${ids.wabaId}/subscribed_apps`) return reply({ data: o.apps.map((a) => ({ whatsapp_business_api_data: a })) });
+      if (path === ids.phoneNumberId) return reply({ id: ids.phoneNumberId, status: "CONNECTED", platform_type: o.platform, code_verification_status: "VERIFIED" });
+      return reply({ error: { message: "Unknown path" } });
+    });
+  }
+  type Checks = { checks: { id: string; status: string; detail: string }[] };
+
+  it("flags a number that isn't on the Cloud API and an unsubscribed app, and never returns credentials", async () => {
+    const { org, owner } = await makeTenant();
+    actAs(owner);
+    const r = await connectManual(org.id);
+    mockCheck(r.ids, { platform: "NOT_APPLICABLE", apps: [] });
+    const res = await json(await diagnoseRoute.POST(post({}), p(org.id, { accountId: r.accountId })));
+    expect(res.status).toBe(200);
+    const byId = Object.fromEntries((res.body as unknown as Checks).checks.map((c) => [c.id, c]));
+    expect(byId.platform.status).toBe("fail");
+    expect(byId.subscribed.status).toBe("fail");
+    expect(byId.secret.status).toBe("ok");
+    expect(byId.events.status).toBe("warn");
+    expect(JSON.stringify(res.body)).not.toContain(r.token);
+    expect(JSON.stringify(res.body)).not.toContain(r.secret);
+  });
+
+  it("reports everything fine for a Cloud API number with a subscribed app", async () => {
+    const { org, owner } = await makeTenant();
+    actAs(owner);
+    const r = await connectManual(org.id);
+    mockCheck(r.ids, { platform: "CLOUD_API", apps: [{ name: "MECGURA" }] });
+    const res = await json(await diagnoseRoute.POST(post({}), p(org.id, { accountId: r.accountId })));
+    const checks = (res.body as unknown as Checks).checks;
+    expect(checks.filter((c) => c.status === "fail")).toEqual([]);
+  });
+
+  it("is refused for demo numbers and for other tenants' numbers", async () => {
+    const a = await makeTenant();
+    const b = await makeTenant();
+    actAs(a.owner);
+    const demo = await json(await demoRoute.POST(post({ businessName: "Demo" }), p(a.org.id)));
+    const demoId = (demo.body.account as { id: string }).id;
+    expect((await diagnoseRoute.POST(post({}), p(a.org.id, { accountId: demoId }))).status).toBe(409);
+    actAs(b.owner);
+    expect((await diagnoseRoute.POST(post({}), p(b.org.id, { accountId: demoId }))).status).toBe(404);
   });
 });

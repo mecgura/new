@@ -9,7 +9,7 @@ import { idSchema } from "@/lib/validations";
 import { Alert, Badge, Card, CardBody, CardHeader, PageHeader } from "@/components/ds";
 import { NoWorkspace, OwnerOnly, ServiceDisabled } from "@/components/whatsapp/states";
 import { QualityBadge, StatusBadge } from "@/components/whatsapp/status-badge";
-import { AccountSettingsForm, DisconnectButton } from "@/components/whatsapp/account-actions";
+import { AccountSettingsForm, ConnectionCheck, DisconnectButton } from "@/components/whatsapp/account-actions";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "WhatsApp number" };
@@ -109,6 +109,11 @@ export default async function WhatsAppAccountPage({ params, searchParams }: { pa
               </dl>
             </CardBody>
           </Card>
+          {ctx.canManage && !account.isDemo && account.connection && live ? (
+            <div className="lg:col-span-2">
+              <ConnectionCheck orgId={ctx.orgId} accountId={account.id} />
+            </div>
+          ) : null}
         </div>
       ) : tab === "webhook" ? (
         !ctx.canManage ? (
