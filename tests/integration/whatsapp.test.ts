@@ -490,11 +490,15 @@ describe("webhook endpoint /api/webhooks/meta", () => {
 
 describe("connection check", () => {
   /** Meta's answers for the check: a real fetch mock that varies the phone platform and the app subscriptions. */
-  function mockCheck(ids: ReturnType<typeof metaIds>, o: { platform: string; apps: { name: string }[]; webhook?: Record<string, string> }) {
+  function mockCheck(ids: ReturnType<typeof metaIds>, o: { platform: string; apps: { name: string; id?: string }[]; webhook?: Record<string, string>; subs?: unknown[]; subsFail?: boolean }) {
     return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = new URL(String(input)).pathname.replace(/^\/v[\d.]+\//, "");
       const reply = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
       if (path === `${ids.wabaId}/subscribed_apps`) return reply({ data: o.apps.map((a) => ({ whatsapp_business_api_data: a })) });
+      if (path === "debug_token") return reply({ data: { app_id: "111", application: "MECGURA", is_valid: true, expires_at: 0 } });
+      if (path.endsWith("/subscriptions")) {
+        return o.subsFail ? new Response(JSON.stringify({ error: { message: "Invalid OAuth access token signature." } }), { status: 400, headers: { "content-type": "application/json" } }) : reply({ data: o.subs ?? [] });
+      }
       if (path === ids.phoneNumberId) return reply({ id: ids.phoneNumberId, status: "CONNECTED", platform_type: o.platform, code_verification_status: "VERIFIED", webhook_configuration: o.webhook });
       return reply({ error: { message: "Unknown path" } });
     });
@@ -517,14 +521,34 @@ describe("connection check", () => {
     expect(JSON.stringify(res.body)).not.toContain(r.secret);
   });
 
+  const goodSubs = () => [{ object: "whatsapp_business_account", callback_url: `${siteUrl()}/api/webhooks/meta`, active: true, fields: [{ name: "messages" }] }];
+  const siteUrl = () => process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+
   it("reports everything fine for a Cloud API number with a subscribed app", async () => {
     const { org, owner } = await makeTenant();
     actAs(owner);
     const r = await connectManual(org.id);
-    mockCheck(r.ids, { platform: "CLOUD_API", apps: [{ name: "MECGURA" }] });
+    mockCheck(r.ids, { platform: "CLOUD_API", apps: [{ name: "MECGURA", id: "111" }], subs: goodSubs() });
     const res = await json(await diagnoseRoute.POST(post({}), p(org.id, { accountId: r.accountId })));
     const checks = (res.body as unknown as Checks).checks;
     expect(checks.filter((c) => c.status === "fail")).toEqual([]);
+  });
+
+  it("flags an app webhook that points to an old URL, and a secret that matches no subscribed app", async () => {
+    const { org, owner } = await makeTenant();
+    actAs(owner);
+    const r = await connectManual(org.id);
+    mockCheck(r.ids, { platform: "CLOUD_API", apps: [{ name: "MECGURA", id: "111" }], subs: [{ object: "whatsapp_business_account", callback_url: "https://old.example/api/whatsapp/webhook", active: true, fields: [{ name: "messages" }] }] });
+    const old = await json(await diagnoseRoute.POST(post({}), p(org.id, { accountId: r.accountId })));
+    const w = (old.body as unknown as Checks).checks.find((c) => c.id === "appwebhook");
+    expect(w?.status).toBe("fail");
+    expect(w?.detail).toContain("https://old.example/api/whatsapp/webhook");
+
+    mockCheck(r.ids, { platform: "CLOUD_API", apps: [{ name: "Business Agent", id: "222" }], subsFail: true });
+    const other = await json(await diagnoseRoute.POST(post({}), p(org.id, { accountId: r.accountId })));
+    const m = (other.body as unknown as Checks).checks.find((c) => c.id === "appwebhook");
+    expect(m?.status).toBe("fail");
+    expect(m?.detail).toContain("Business Agent");
   });
 
   it("flags a Meta webhook override that sends events somewhere other than MECGURA", async () => {

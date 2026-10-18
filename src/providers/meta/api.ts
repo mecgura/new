@@ -52,6 +52,22 @@ export async function listSubscribedApps(wabaId: string, token: string): Promise
   return (r.data ?? []).map((d) => ({ ...(d.whatsapp_business_api_data ?? {}), overrideCallbackUri: d.override_callback_uri }));
 }
 
+export type MetaTokenDebug = { app_id?: string; application?: string; is_valid?: boolean; expires_at?: number; type?: string };
+
+/** Which app issued a token, whether it is valid and when it expires (0 = never). */
+export async function debugToken(token: string): Promise<MetaTokenDebug> {
+  const r = await graph<{ data?: MetaTokenDebug }>("debug_token", { token, query: { input_token: token } });
+  return r.data ?? {};
+}
+
+export type MetaAppSubscription = { object?: string; callback_url?: string; active?: boolean; fields?: { name?: string }[] };
+
+/** An app's own webhook subscriptions. Needs the app access token (`app_id|app_secret`), so it only works when the stored secret belongs to that app. */
+export async function getAppSubscriptions(appId: string, appSecret: string): Promise<MetaAppSubscription[]> {
+  const r = await graph<{ data?: MetaAppSubscription[] }>(`${appId}/subscriptions`, { token: `${appId}|${appSecret}` });
+  return r.data ?? [];
+}
+
 export type MetaWebhookConfiguration = { phone_number?: string; whatsapp_business_account?: string; application?: string };
 
 /** Where Meta currently sends events for a number: phone-level override, WABA-level override and the app's own callback. */

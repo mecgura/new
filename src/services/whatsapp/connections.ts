@@ -8,6 +8,8 @@ import { isDemoAvailable, isMetaConfigured, publicMetaConfig } from "@/providers
 import { MetaApiError } from "@/providers/meta/graph";
 import {
   exchangeCodeForToken,
+  debugToken,
+  getAppSubscriptions,
   getPhoneNumber,
   getWebhookConfiguration,
   getWaba,
@@ -529,12 +531,65 @@ export async function diagnoseConnection(organizationId: string, accountId: stri
       if (elsewhere.length > 0) {
         add("target", "Where Meta sends events", "fail", `Meta is told to send events somewhere else: ${elsewhere.join("; ")}. Expected ${expected}. Remove that override in Meta, or it will never reach MECGURA.`);
       } else if (cfg.application && cfg.application !== expected) {
-        add("target", "Where Meta sends events", "fail", `Your Meta app's callback is ${cfg.application}, but MECGURA's is ${expected}.`);
+        add("target", "Where Meta sends events", "fail", `The Meta app that issued your token sends events to ${cfg.application}, but MECGURA's is ${expected}. If that is an old app, create the token for the app you set up for MECGURA.`);
       } else {
         add("target", "Where Meta sends events", cfg.application ? "ok" : "warn", cfg.application ? `Your Meta app sends events to ${cfg.application}.` : "Meta didn't report a callback URL for the app. Check Webhooks in your Meta app.");
       }
     } catch (e) {
       add("target", "Where Meta sends events", "warn", e instanceof MetaApiError ? `Couldn't read it: ${e.message}` : "Couldn't read it.");
+    }
+  }
+
+  if (token) {
+    try {
+      const dbg = await debugToken(token);
+      const exp = dbg.expires_at ? `expires ${new Date(dbg.expires_at * 1000).toISOString().slice(0, 16).replace("T", " ")} UTC` : "never expires";
+      add("tokenapp", "Token was issued by", dbg.is_valid === false ? "fail" : "ok", `${dbg.application ?? "unknown app"} (${dbg.app_id ?? "?"}), ${exp}.`);
+    } catch {
+      /* optional detail */
+    }
+    try {
+      let secret = "";
+      try {
+        secret = acc.connection.encryptedAppSecret ? decryptSecret(acc.connection.encryptedAppSecret) : "";
+      } catch {
+        secret = "";
+      }
+      const apps = (await listSubscribedApps(wabaId, token).catch(() => [])).filter((a) => a.id);
+      let ours: { name?: string; id?: string; subs: Awaited<ReturnType<typeof getAppSubscriptions>> } | null = null;
+      if (secret) {
+        for (const a of apps) {
+          try {
+            ours = { name: a.name, id: a.id, subs: await getAppSubscriptions(a.id!, secret) };
+            break;
+          } catch {
+            /* the secret belongs to a different app */
+          }
+        }
+      }
+      if (!ours) {
+        add(
+          "appwebhook",
+          "Your app's webhook settings",
+          secret ? "fail" : "warn",
+          secret
+            ? `The stored app secret doesn't match any app subscribed to this WhatsApp account (${apps.map((a) => a.name || a.id).join(", ") || "none"}). So the app you set the MECGURA webhook on is not subscribed to this number, or you entered another app's secret.`
+            : "No app secret stored, so the app's webhook settings can't be read."
+        );
+      } else {
+        const wa = ours.subs.find((x) => x.object === "whatsapp_business_account");
+        const expected = webhookCallbackUrl();
+        const fields = (wa?.fields ?? []).map((f) => f.name);
+        const problems = [
+          !wa ? "no WhatsApp webhook is configured on this app" : "",
+          wa && wa.callback_url !== expected ? `its callback is ${wa.callback_url}, not ${expected}` : "",
+          wa && wa.active === false ? "the subscription is inactive" : "",
+          wa && !fields.includes("messages") ? "the 'messages' field is not subscribed" : "",
+        ].filter(Boolean);
+        add("appwebhook", `Webhook settings of app "${ours.name ?? ours.id}"`, problems.length ? "fail" : "ok", problems.length ? `Problem: ${problems.join("; ")}.` : `Sends WhatsApp events to ${wa!.callback_url} (fields: ${fields.join(", ")}).`);
+      }
+    } catch {
+      /* optional detail */
     }
   }
 
