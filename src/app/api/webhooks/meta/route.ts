@@ -29,7 +29,11 @@ export async function POST(req: Request) {
   const raw = Buffer.from(await req.arrayBuffer());
   try {
     const result = await ingestWebhook(raw, req.headers.get("x-hub-signature-256"));
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) {
+      console.warn(`[webhook:meta] rejected ${result.status}: ${result.error}`);
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+    console.info(`[webhook:meta] accepted received=${result.received} duplicates=${result.duplicates}`);
     // 200 quickly so Meta doesn't retry; processing already happened idempotently.
     return NextResponse.json({ received: result.received, duplicates: result.duplicates });
   } catch (e) {
