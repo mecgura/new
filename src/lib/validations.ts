@@ -672,3 +672,23 @@ export const aiTestSchema = z.object({
 });
 export const aiConversationActionSchema = z.object({ action: z.enum(["pause", "resume", "summarize"]) });
 export const appointmentUpdateSchema = z.object({ status: z.enum(["requested", "confirmed", "cancelled", "completed"]), startsAt: z.coerce.date().nullable().optional(), notes: z.string().max(1000).optional() });
+
+// ---- Wallet (service credit) -------------------------------------------------
+
+const rupees = (max: number, min = 0) =>
+  z
+    .number()
+    .min(min)
+    .max(max)
+    .refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-6, "Use at most 2 decimals")
+    .transform((n) => Math.round(n * 100));
+
+export const walletMoveSchema = z.object({
+  direction: z.enum(["credit", "debit"]),
+  amountRupees: rupees(1_000_000, 0.01),
+  reference: z.string().trim().max(100).default(""),
+  note: z.string().trim().max(300).default(""),
+  idempotencyKey: z.string().trim().min(8).max(64).optional(),
+});
+
+export const walletSettingsSchema = z.object({ lowBalanceRupees: rupees(1_000_000) });

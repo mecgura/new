@@ -17,6 +17,7 @@ import {
   WhatsAppTab,
   type ClientDetail,
 } from "@/components/admin/client-detail-tabs";
+import { AdminWallet } from "@/components/wallet/admin-wallet";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -26,6 +27,7 @@ const TABS = [
   { id: "plan", label: "Plan" },
   { id: "usage", label: "Usage" },
   { id: "billing", label: "Billing" },
+  { id: "wallet", label: "Wallet" },
   { id: "activity", label: "Activity" },
 ];
 
@@ -121,6 +123,9 @@ function ClientDetailInner() {
       </TabPanel>
       <TabPanel id="billing" active={tab === "billing"}>
         <BillingTab d={data} />
+      </TabPanel>
+      <TabPanel id="wallet" active={tab === "wallet"}>
+        {tab === "wallet" ? <AdminWallet organizationId={o.id} /> : null}
       </TabPanel>
       <TabPanel id="activity" active={tab === "activity"}>
         <ActivityTab organizationId={o.id} />

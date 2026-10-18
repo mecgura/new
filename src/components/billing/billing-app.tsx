@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowDownRight, ArrowUpRight, Check, CreditCard, FileText, Gauge, Receipt } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Check, CreditCard, FileText, Gauge, Receipt, Wallet } from "lucide-react";
 import {
   Alert,
   Badge,
@@ -35,6 +35,7 @@ import { LIMIT_META, limitLabel, type PlanLimits } from "@/lib/plans";
 import { istFmt } from "@/components/campaigns/types";
 import { MiniBars } from "@/components/app/mini-bars";
 import { openCheckout, type Checkout } from "@/components/billing/checkout";
+import { ClientWallet } from "@/components/wallet/client-wallet";
 
 type PlanView = { id: string; name: string; slug: string; description: string; priceMonthly: number; selfServe: boolean; limits: PlanLimits; features: { key: string; label: string }[]; relation: "current" | "upgrade" | "downgrade" | "new" | "contact" };
 type InvoiceView = { id: string; number: string; kind: string; status: string; displayStatus: string; description: string; total: number; issuedAt: string; dueAt: string; paidAt: string | null; paidVia: string; lastPaymentFailure: string | null };
@@ -73,6 +74,7 @@ const TABS = [
   { id: "plan", label: "Plan", icon: CreditCard },
   { id: "usage", label: "Usage", icon: Gauge },
   { id: "invoices", label: "Invoices", icon: Receipt },
+  { id: "wallet", label: "Wallet", icon: Wallet },
 ] as const;
 const dateOnly = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" });
 const when = (s: string | null) => (s ? dateOnly.format(new Date(s)) : "—");
@@ -116,6 +118,7 @@ export function BillingApp({ orgId, canManage, initialTab }: { orgId: string; ca
       </nav>
       {tab === "plan" ? <PlanTab base={base} data={data} canManage={canManage} reload={load} onOpenInvoices={() => setTab("invoices")} /> : null}
       {tab === "usage" ? <UsageTab base={base} /> : null}
+      {tab === "wallet" ? <ClientWallet orgId={orgId} /> : null}
       {tab === "invoices" ? <InvoicesTab base={base} data={data} canManage={canManage} reload={load} /> : null}
     </>
   );

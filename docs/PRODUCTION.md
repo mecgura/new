@@ -167,3 +167,14 @@ After deploy:
 | Types / lint / build | `npx tsc --noEmit`, `npx eslint`, `npm run build` | |
 
 E2E tests need a running server on the same `DATABASE_URL` and the same `WHATSAPP_ENCRYPTION_KEY` as the test process.
+
+## Wallet (prepaid service credit) — W1
+
+Model: **client's own WABA** — Meta bills its message charges to the client's WhatsApp Business payment method. The wallet is prepaid **MECGURA service credit** only.
+
+* Super Admin → Clients → *client* → **Wallet**: add money received by UPI / bank (with payment reference), deduct a correction, set a low-balance alert.
+* Client → Billing → **Wallet**: balance and ledger (owners and managers, read-only).
+* Ledger is append-only (`WalletEntry`); the balance (`Wallet.balance`, paise) changes only together with an entry in one transaction; debits can't go below zero; an idempotency key makes retries a no-op.
+* API: `GET/POST/PATCH /api/admin/organizations/{id}/wallet`, `GET /api/organizations/{orgId}/wallet`.
+* Not yet (next phases): per-message price card and automatic deduction on campaigns/templates (W2), reconcile with Meta's `pricing` webhook field (W3), Razorpay self top-up + GST invoices (W4).
+* Prepaid-credit accounting, GST on advances and refund policy: confirm with your CA before going live.

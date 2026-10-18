@@ -95,6 +95,7 @@ model Organization {
   webhookEndpoints        WebhookEndpoint[]
   webhookDeliveries       WebhookDelivery[]
   invoices                Invoice[]
+  wallet                  Wallet?
   payments                Payment[]
 
   @@index([status])
@@ -1215,4 +1216,40 @@ model PaymentEvent {
 model InvoiceSequence {
   year Int @id
   last Int @default(0)
+}
+
+// Prepaid MECGURA service credit for one client (model C: Meta's own message charges are billed by Meta to the client's WABA).
+// Amounts are paise. The balance is only ever changed together with a WalletEntry, inside one transaction.
+model Wallet {
+  id                  String   @id @default(cuid())
+  organizationId      String   @unique
+  balance             Int      @default(0)
+  currency            String   @default("INR")
+  lowBalanceThreshold Int      @default(0) // paise; 0 = no low-balance warning
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entries      WalletEntry[]
+}
+
+// Append-only ledger. amount is always positive; direction says whether it was added or taken.
+model WalletEntry {
+  id             String   @id @default(cuid())
+  walletId       String
+  organizationId String
+  direction      String // credit | debit
+  amount         Int // paise, > 0
+  balanceAfter   Int // paise
+  reason         String // topup | correction | usage | refund
+  note           String   @default("")
+  reference      String   @default("") // payment reference entered by the admin (UPI / bank ref)
+  idempotencyKey String?  @unique
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt])
+  @@index([organizationId, createdAt])
 }
