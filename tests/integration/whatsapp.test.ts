@@ -490,12 +490,12 @@ describe("webhook endpoint /api/webhooks/meta", () => {
 
 describe("connection check", () => {
   /** Meta's answers for the check: a real fetch mock that varies the phone platform and the app subscriptions. */
-  function mockCheck(ids: ReturnType<typeof metaIds>, o: { platform: string; apps: { name: string }[] }) {
+  function mockCheck(ids: ReturnType<typeof metaIds>, o: { platform: string; apps: { name: string }[]; webhook?: Record<string, string> }) {
     return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = new URL(String(input)).pathname.replace(/^\/v[\d.]+\//, "");
       const reply = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
       if (path === `${ids.wabaId}/subscribed_apps`) return reply({ data: o.apps.map((a) => ({ whatsapp_business_api_data: a })) });
-      if (path === ids.phoneNumberId) return reply({ id: ids.phoneNumberId, status: "CONNECTED", platform_type: o.platform, code_verification_status: "VERIFIED" });
+      if (path === ids.phoneNumberId) return reply({ id: ids.phoneNumberId, status: "CONNECTED", platform_type: o.platform, code_verification_status: "VERIFIED", webhook_configuration: o.webhook });
       return reply({ error: { message: "Unknown path" } });
     });
   }
@@ -525,6 +525,27 @@ describe("connection check", () => {
     const res = await json(await diagnoseRoute.POST(post({}), p(org.id, { accountId: r.accountId })));
     const checks = (res.body as unknown as Checks).checks;
     expect(checks.filter((c) => c.status === "fail")).toEqual([]);
+  });
+
+  it("flags a Meta webhook override that sends events somewhere other than MECGURA", async () => {
+    const { org, owner } = await makeTenant();
+    actAs(owner);
+    const r = await connectManual(org.id);
+    mockCheck(r.ids, { platform: "CLOUD_API", apps: [{ name: "MECGURA" }], webhook: { phone_number: "https://example.com/hook", application: "https://other.example/api" } });
+    const res = await json(await diagnoseRoute.POST(post({}), p(org.id, { accountId: r.accountId })));
+    const target = (res.body as unknown as Checks).checks.find((c) => c.id === "target");
+    expect(target?.status).toBe("fail");
+    expect(target?.detail).toContain("https://example.com/hook");
+  });
+
+  it("reports a clean webhook target when the app's callback is MECGURA's", async () => {
+    const { org, owner } = await makeTenant();
+    actAs(owner);
+    const r = await connectManual(org.id);
+    const expected = `${(await import("@/config/site")).siteConfig.url}/api/webhooks/meta`;
+    mockCheck(r.ids, { platform: "CLOUD_API", apps: [{ name: "MECGURA" }], webhook: { application: expected } });
+    const res = await json(await diagnoseRoute.POST(post({}), p(org.id, { accountId: r.accountId })));
+    expect((res.body as unknown as Checks).checks.find((c) => c.id === "target")?.status).toBe("ok");
   });
 
   it("is refused for demo numbers and for other tenants' numbers", async () => {

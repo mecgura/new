@@ -9,6 +9,7 @@ import { MetaApiError } from "@/providers/meta/graph";
 import {
   exchangeCodeForToken,
   getPhoneNumber,
+  getWebhookConfiguration,
   getWaba,
   listPhoneNumbers,
   listSubscribedApps,
@@ -513,6 +514,27 @@ export async function diagnoseConnection(organizationId: string, accountId: stri
       );
     } catch (e) {
       add("subscribed", "App subscription", "warn", e instanceof MetaApiError ? `Couldn't read it: ${e.message}` : "Couldn't read it.");
+    }
+  }
+
+  if (token) {
+    try {
+      const cfg = await getWebhookConfiguration(acc.phoneNumberId, token);
+      const wabaOverride = (await listSubscribedApps(wabaId, token).catch(() => [])).find((a) => a.overrideCallbackUri)?.overrideCallbackUri;
+      const expected = webhookCallbackUrl();
+      const elsewhere = [
+        cfg.phone_number && cfg.phone_number !== expected ? `this number → ${cfg.phone_number}` : "",
+        (cfg.whatsapp_business_account ?? wabaOverride) && (cfg.whatsapp_business_account ?? wabaOverride) !== expected ? `this WhatsApp account → ${cfg.whatsapp_business_account ?? wabaOverride}` : "",
+      ].filter(Boolean);
+      if (elsewhere.length > 0) {
+        add("target", "Where Meta sends events", "fail", `Meta is told to send events somewhere else: ${elsewhere.join("; ")}. Expected ${expected}. Remove that override in Meta, or it will never reach MECGURA.`);
+      } else if (cfg.application && cfg.application !== expected) {
+        add("target", "Where Meta sends events", "fail", `Your Meta app's callback is ${cfg.application}, but MECGURA's is ${expected}.`);
+      } else {
+        add("target", "Where Meta sends events", cfg.application ? "ok" : "warn", cfg.application ? `Your Meta app sends events to ${cfg.application}.` : "Meta didn't report a callback URL for the app. Check Webhooks in your Meta app.");
+      }
+    } catch (e) {
+      add("target", "Where Meta sends events", "warn", e instanceof MetaApiError ? `Couldn't read it: ${e.message}` : "Couldn't read it.");
     }
   }
 

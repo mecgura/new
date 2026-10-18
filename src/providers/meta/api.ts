@@ -46,10 +46,18 @@ export async function subscribeAppToWaba(wabaId: string, token: string): Promise
   return r.success === true;
 }
 
-/** Apps currently subscribed to the WABA's webhooks (names only; used by the connection check). */
-export async function listSubscribedApps(wabaId: string, token: string): Promise<{ id?: string; name?: string }[]> {
-  const r = await graph<{ data?: { whatsapp_business_api_data?: { id?: string; name?: string } }[] }>(`${wabaId}/subscribed_apps`, { token });
-  return (r.data ?? []).map((d) => d.whatsapp_business_api_data ?? {});
+/** Apps currently subscribed to the WABA's webhooks, with the WABA-level callback override if one is set. */
+export async function listSubscribedApps(wabaId: string, token: string): Promise<{ id?: string; name?: string; overrideCallbackUri?: string }[]> {
+  const r = await graph<{ data?: { whatsapp_business_api_data?: { id?: string; name?: string }; override_callback_uri?: string }[] }>(`${wabaId}/subscribed_apps`, { token });
+  return (r.data ?? []).map((d) => ({ ...(d.whatsapp_business_api_data ?? {}), overrideCallbackUri: d.override_callback_uri }));
+}
+
+export type MetaWebhookConfiguration = { phone_number?: string; whatsapp_business_account?: string; application?: string };
+
+/** Where Meta currently sends events for a number: phone-level override, WABA-level override and the app's own callback. */
+export async function getWebhookConfiguration(phoneNumberId: string, token: string): Promise<MetaWebhookConfiguration> {
+  const r = await graph<{ webhook_configuration?: MetaWebhookConfiguration }>(phoneNumberId, { token, query: { fields: "webhook_configuration" } });
+  return r.webhook_configuration ?? {};
 }
 
 export async function unsubscribeAppFromWaba(wabaId: string, token: string): Promise<boolean> {

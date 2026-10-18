@@ -45,6 +45,7 @@ export async function ingestWebhook(raw: Buffer, signatureHeader: string | null)
     return { ok: false, status: 400, error: "Invalid JSON" };
   }
   if (payload.object !== "whatsapp_business_account" || !Array.isArray(payload.entry)) {
+    console.warn(`[webhook:meta] unsupported object="${String(payload.object).slice(0, 40)}" entries=${Array.isArray(payload.entry) ? payload.entry.length : "n/a"}`);
     return { ok: false, status: 400, error: "Unsupported webhook object" };
   }
 
