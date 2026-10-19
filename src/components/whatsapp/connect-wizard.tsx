@@ -421,6 +421,26 @@ function DeveloperPanel(props: WizardProps) {
 
   return (
     <div className="grid gap-4 lg:grid-cols-5">
+      <Card className="lg:col-span-5">
+        <CardHeader title="Onboarding a client on a call (Zoom)" description="Works today, no Meta approval needed from MECGURA's side for the steps below, though Meta may ask for more access on some accounts." />
+        <CardBody>
+          <ol className="list-decimal space-y-2 pl-5 text-small text-app-muted">
+            <li>
+              <strong className="text-app-text">Client shares their WhatsApp account with you.</strong> Client: business.facebook.com → Business settings → Accounts → WhatsApp accounts → choose the account → Partners → Add → enter <em>your</em> Business portfolio ID → give <em>Full control</em>.
+            </li>
+            <li>
+              <strong className="text-app-text">You create a token.</strong> You: Business settings → Users → System users → add one (Admin) → Add assets → WhatsApp accounts → pick the client&apos;s account (Full control) → Generate token for the MECGURA app with <code className="rounded bg-app-hover px-1">whatsapp_business_management</code> and <code className="rounded bg-app-hover px-1">whatsapp_business_messaging</code>, expiry <em>Never</em>.
+            </li>
+            <li>
+              <strong className="text-app-text">Copy the two IDs.</strong> Meta developer dashboard → WhatsApp → API setup lists the <em>WhatsApp Business Account ID</em> (WABA ID) and the <em>Phone number ID</em> for the client&apos;s number. The number must be added to that account and verified by the client (OTP) first.
+            </li>
+            <li>
+              <strong className="text-app-text">Paste below and press Verify &amp; connect.</strong> MECGURA checks the token with Meta, subscribes the app to the account and registers the number. Then run <em>Connection check</em> on the number&apos;s page.
+            </li>
+          </ol>
+          <p className="mt-3 text-caption text-app-subtle">Never ask the client to send you their Facebook password. If the client can generate a token themselves, they can paste it here while you watch the screen share.</p>
+        </CardBody>
+      </Card>
       <Card className="lg:col-span-3">
         <CardHeader title="API / Developer setup" description="For businesses with their own Meta app and a permanent system-user token." />
         <CardBody>
