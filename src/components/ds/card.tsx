@@ -6,7 +6,7 @@ import { Badge } from "@/components/ds/badge";
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("min-w-0 rounded-[var(--radius-card)] border border-app-border bg-app-surface shadow-[var(--shadow-card)]", className)}
+      className={cn("glass min-w-0 rounded-[var(--radius-card)] shadow-[var(--shadow-card)]", className)}
       {...props}
     />
   );
@@ -44,6 +44,8 @@ export type StatCardProps = {
   value: React.ReactNode | null;
   icon: LucideIcon;
   hint?: React.ReactNode;
+  /** Bento hero tile: bigger number and a colour glow. */
+  featured?: boolean;
   /** Explicit data-source label so demo or unconnected numbers are never mistaken for live data. */
   source?: "live" | "demo" | "not-connected" | "coming-soon";
   className?: string;
@@ -56,18 +58,18 @@ const SOURCE_BADGE = {
   "coming-soon": <Badge tone="neutral">Coming soon</Badge>,
 } as const;
 
-export function StatCard({ label, value, icon: Icon, hint, source = "live", className }: StatCardProps) {
+export function StatCard({ label, value, icon: Icon, hint, featured = false, source = "live", className }: StatCardProps) {
   return (
-    <Card className={cn("flex flex-col gap-4 p-5", className)}>
+    <Card className={cn("tile-lift flex flex-col gap-4 p-5", featured && "bento-glow justify-between p-6", className)}>
       <div className="flex items-start justify-between gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-app-primary-soft text-app-primary">
+        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,rgba(52,211,153,0.28),rgba(20,184,166,0.1))] text-app-primary-hover ring-1 ring-inset ring-white/10">
           <Icon className="size-5" aria-hidden="true" />
         </span>
         {SOURCE_BADGE[source]}
       </div>
       <div>
         <p className="text-small text-app-muted">{label}</p>
-        <p className="mt-1 text-h1 tabular-nums text-app-text">{value ?? <span className="text-app-subtle">—</span>}</p>
+        <p className={cn("mt-1 tabular-nums text-app-text", featured ? "text-display" : "text-h1")}>{value ?? <span className="text-app-subtle">—</span>}</p>
         {hint ? <p className="mt-1 text-caption text-app-subtle">{hint}</p> : null}
       </div>
     </Card>

@@ -167,9 +167,9 @@ body {
   --text-caption--line-height: 1rem;
   --text-caption--letter-spacing: 0.01em;
 
-  --radius-card: 0.875rem;
-  --radius-control: 0.625rem;
-  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px rgba(0, 0, 0, 0.28);
+  --radius-card: 1.375rem;
+  --radius-control: 0.8rem;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.07) inset, 0 18px 40px -18px rgba(0, 0, 0, 0.55);
   --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.5);
 }
 
@@ -177,6 +177,43 @@ body {
   background-color: var(--color-app-bg);
   color: var(--color-app-text);
   color-scheme: dark;
+  isolation: isolate;
+}
+/* Aurora backdrop: soft colour pools behind frosted-glass tiles. Fixed, so content scrolls over it. */
+.app-root::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(52rem 34rem at 8% -8%, rgba(16, 185, 129, 0.3), transparent 62%),
+    radial-gradient(44rem 32rem at 100% 2%, rgba(124, 92, 255, 0.24), transparent 58%),
+    radial-gradient(40rem 30rem at 58% 112%, rgba(20, 184, 166, 0.2), transparent 60%);
+}
+/* Frosted glass tile used by Card; falls back to the solid surface where backdrop-filter is missing. */
+.glass {
+  background-color: color-mix(in srgb, var(--color-app-surface) 92%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+@supports (backdrop-filter: blur(1px)) {
+  .glass {
+    background-color: color-mix(in srgb, var(--color-app-surface) 58%, transparent);
+    backdrop-filter: blur(18px) saturate(1.3);
+    -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  }
+}
+.bento-glow {
+  background-image: radial-gradient(22rem 14rem at 100% 0%, rgba(16, 185, 129, 0.16), transparent 70%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tile-lift {
+    transition: transform 0.2s ease, border-color 0.2s ease;
+  }
+  .tile-lift:hover {
+    transform: translateY(-2px);
+    border-color: rgba(52, 211, 153, 0.35);
+  }
 }
 .app-root :focus-visible {
   outline: 2px solid var(--color-app-primary);

@@ -87,7 +87,7 @@ export function AppShell({
         >
           Skip to content
         </a>
-        <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-app-border bg-app-surface lg:block">
+        <aside className="glass sticky top-0 hidden h-dvh w-64 shrink-0 rounded-none border-y-0 border-l-0 lg:block">
           <Sidebar variant={variant} sections={sections} pathname={pathname} />
         </aside>
         <Drawer open={mobileOpen} onClose={() => setMobileOpen(false)} title="Main navigation">
@@ -172,7 +172,7 @@ function Sidebar({
                       aria-current={active ? "page" : undefined}
                       className={cn(
                         "flex items-center gap-3 rounded-[var(--radius-control)] px-3 py-2 text-body font-medium transition-colors",
-                        active ? "bg-app-primary-soft text-app-primary-hover" : "text-app-muted hover:bg-app-hover hover:text-app-text"
+                        active ? "bg-[linear-gradient(90deg,rgba(16,185,129,0.22),rgba(16,185,129,0.04))] text-app-primary-hover ring-1 ring-inset ring-emerald-400/20" : "text-app-muted hover:bg-white/[0.05] hover:text-app-text"
                       )}
                     >
                       <Icon className="size-[18px] shrink-0" aria-hidden="true" />
@@ -206,7 +206,7 @@ function Topbar({
 }) {
   const activeOrg = organizations.find((o) => o.id === activeOrganizationId) ?? null;
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center gap-1 border-b border-app-border bg-app-bg/90 px-3 backdrop-blur sm:gap-3 sm:px-6">
+    <header className="sticky top-0 z-40 flex h-16 items-center gap-1 border-b border-white/[0.06] bg-app-bg/55 px-3 backdrop-blur-xl sm:gap-3 sm:px-6">
       <IconButton label="Open navigation menu" onClick={onOpenMenu} className="lg:hidden">
         <Menu aria-hidden="true" />
       </IconButton>

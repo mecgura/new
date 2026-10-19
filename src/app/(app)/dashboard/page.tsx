@@ -192,15 +192,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </div>
       )}
 
-      <section aria-label="Key metrics" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <StatCard label="WhatsApp numbers" value={numbers} icon={Phone} source={numbers ? "live" : "not-connected"} hint={subscription ? `${numbers} of ${subscription.plan.maxWhatsAppNumbers} allowed by your plan` : "Manage in WhatsApp → Connection Center"} />
-        <StatCard label="Open conversations" value={openChats} icon={MessageCircle} hint={activeNumber ? "On this number" : "Across all numbers"} />
-        <StatCard label="Messages sent" value={sent} icon={Send} hint="Last 30 days" />
-        <StatCard label="Messages received" value={received} icon={Inbox} hint="Last 30 days" />
-        <StatCard label="Contacts & leads" value={contacts} icon={Contact} hint={activeNumber ? "Who have chatted on this number" : "In your workspace"} />
-        <StatCard label="Campaigns" value={campaigns} icon={Megaphone} hint={activeNumber ? "Sending from this number" : "All numbers"} />
-        <StatCard label="Automation runs" value={runs} icon={Workflow} hint="Last 30 days" />
-        <StatCard label="Team members" value={memberCount} icon={UsersRound} hint="Live from your workspace" />
+      <section aria-label="Key metrics" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-12">
+        <StatCard featured className="xl:col-span-4" label="Open conversations" value={openChats} icon={MessageCircle} hint={activeNumber ? "On this number" : "Across all numbers"} />
+        <StatCard className="xl:col-span-3" label="Messages sent" value={sent} icon={Send} hint="Last 30 days" />
+        <StatCard className="xl:col-span-3" label="Messages received" value={received} icon={Inbox} hint="Last 30 days" />
+        <StatCard className="xl:col-span-2" label="Team members" value={memberCount} icon={UsersRound} hint="Live from your workspace" />
+        <StatCard className="xl:col-span-3" label="WhatsApp numbers" value={numbers} icon={Phone} source={numbers ? "live" : "not-connected"} hint={subscription ? `${numbers} of ${subscription.plan.maxWhatsAppNumbers} allowed by your plan` : "Manage in WhatsApp → Connection Center"} />
+        <StatCard className="xl:col-span-3" label="Contacts & leads" value={contacts} icon={Contact} hint={activeNumber ? "Who have chatted on this number" : "In your workspace"} />
+        <StatCard className="xl:col-span-3" label="Campaigns" value={campaigns} icon={Megaphone} hint={activeNumber ? "Sending from this number" : "All numbers"} />
+        <StatCard className="xl:col-span-3" label="Automation runs" value={runs} icon={Workflow} hint="Last 30 days" />
       </section>
 
       {usable.length > 1 ? (
