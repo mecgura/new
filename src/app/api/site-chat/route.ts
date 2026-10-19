@@ -14,7 +14,8 @@ const schema = z.discriminatedUnion("action", [
 
 function fail(e: unknown) {
   if (e instanceof ApiError) return NextResponse.json({ error: e.message }, { status: e.status, headers: e.headers });
-  throw e;
+  console.error("[site-chat] unexpected failure:", e instanceof Error ? `${e.name}: ${e.message}\n${e.stack ?? ""}` : e);
+  return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
 }
 
 /** Home page chatbot settings (public: it only says whether the chat is on). */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { MessageCircle, Send, X } from "lucide-react";
 
 const QUICK = [
@@ -44,7 +44,7 @@ function visitorId() {
  * Floating chat. When the admin has switched the chatbot on, visitors leave a name and number (they
  * become a lead) and chat with the assistant. Otherwise it offers quick WhatsApp links.
  */
-export function FloatingChat({ digits }: { digits: string }) {
+function ChatWidget({ digits }: { digits: string }) {
   const [open, setOpen] = useState(false);
   const [cfg, setCfg] = useState<Config>({ enabled: false });
   const [vid, setVid] = useState("");
@@ -154,7 +154,7 @@ export function FloatingChat({ digits }: { digits: string }) {
   return (
     <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
       {open ? (
-        <div role="dialog" aria-label="Chat with MECGURA" className="wa-card w-[min(21rem,calc(100vw-2rem))] overflow-hidden shadow-xl">
+        <div role="dialog" aria-label="Chat with MECGURA" translate="no" className="wa-card w-[min(21rem,calc(100vw-2rem))] overflow-hidden shadow-xl">
           <div className="flex items-center gap-3 bg-[#075e54] px-4 py-3 text-white">
             <span className="grid size-9 place-items-center rounded-full bg-white/15 font-bold">M</span>
             <div className="min-w-0 flex-1">
@@ -218,5 +218,38 @@ export function FloatingChat({ digits }: { digits: string }) {
         {open ? <X className="size-6" aria-hidden="true" /> : <MessageCircle className="size-7" aria-hidden="true" />}
       </button>
     </div>
+  );
+}
+
+/** A problem inside the chat must never blank the whole home page: fall back to a plain WhatsApp button. */
+class ChatBoundary extends Component<{ digits: string; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: unknown) {
+    console.error("[chat] widget crashed:", error);
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <a
+        href={`https://wa.me/${this.props.digits}?text=${encodeURIComponent("Hi MECGURA, I would like to know more about the platform.")}`}
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Chat with us on WhatsApp"
+        className="fixed bottom-4 right-4 z-40 grid size-14 place-items-center rounded-full bg-[#25d366] text-white shadow-lg sm:bottom-6 sm:right-6"
+      >
+        <MessageCircle className="size-7" aria-hidden="true" />
+      </a>
+    );
+  }
+}
+
+export function FloatingChat({ digits }: { digits: string }) {
+  return (
+    <ChatBoundary digits={digits}>
+      <ChatWidget digits={digits} />
+    </ChatBoundary>
   );
 }
