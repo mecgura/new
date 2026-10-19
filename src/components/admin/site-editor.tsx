@@ -88,6 +88,55 @@ function ChatbotCard() {
   );
 }
 
+type WaBot = { accountId: string | null; accounts: { id: string; label: string }[] };
+
+function WhatsAppBotCard() {
+  const toast = useToast();
+  const [st, setSt] = React.useState<WaBot | null>(null);
+  const [sel, setSel] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    void apiFetch<WaBot>("/api/admin/site-chat/whatsapp").then((r) => {
+      if (!r.ok) return;
+      setSt(r.data);
+      setSel(r.data.accountId ?? r.data.accounts[0]?.id ?? "");
+    });
+  }, []);
+
+  async function apply(accountId: string | null) {
+    setBusy(true);
+    const r = await apiFetch<{ accountId: string | null }>("/api/admin/site-chat/whatsapp", { method: "PUT", body: { accountId } });
+    setBusy(false);
+    if (!r.ok) return toast(r.error, "error");
+    setSt((x) => (x ? { ...x, accountId: r.data.accountId } : x));
+    toast(accountId ? "The assistant now answers on that WhatsApp number." : "The assistant is off for WhatsApp.");
+  }
+
+  return (
+    <Card>
+      <CardHeader title="WhatsApp number assistant" description="Anyone who messages this WhatsApp number gets an automatic reply, becomes a lead, and your team is notified. A person can take over any chat from the inbox, and the assistant then stays quiet." action={st ? <Badge tone={st.accountId ? "success" : "neutral"}>{st.accountId ? "On" : "Off"}</Badge> : null} />
+      <CardBody className="space-y-3">
+        {!st ? <p className="text-small text-app-muted">Loading…</p> : st.accounts.length === 0 ? <p className="text-small text-app-muted">No connected WhatsApp numbers yet.</p> : (
+          <>
+            <div className="max-w-md">
+              <Label htmlFor="wa-bot-num">WhatsApp number</Label>
+              <Select id="wa-bot-num" value={sel} onChange={(e) => setSel(e.target.value)}>
+                {st.accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+              </Select>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" loading={busy} disabled={!sel} onClick={() => apply(sel)}>{st.accountId ? "Update number" : "Turn on"}</Button>
+              {st.accountId ? <Button size="sm" variant="secondary" loading={busy} onClick={() => apply(null)}>Turn off</Button> : null}
+            </div>
+            <p className="text-caption text-app-subtle">Replies use that workspace&apos;s wallet (the usual service fee per reply), so keep some balance in it. If an AI Agent or an automation already answers on the number, the assistant steps aside.</p>
+          </>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
 export function SiteEditor({ initial }: { initial: HomeContent }) {
   const toast = useToast();
   const [team, setTeam] = React.useState<Team[]>(initial.team);
@@ -135,6 +184,7 @@ export function SiteEditor({ initial }: { initial: HomeContent }) {
       />
 
       <ChatbotCard />
+      <WhatsAppBotCard />
 
       <Card>
         <CardHeader

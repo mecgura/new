@@ -59,3 +59,31 @@ describe("home page chatbot", () => {
     expect((await json(await pub.GET())).body.enabled).toBe(false);
   });
 });
+
+describe("WhatsApp number assistant", () => {
+  it("answers a stranger on the chosen number, creates the lead, and steps aside for people", async () => {
+    const { receiveInbound } = await import("@/services/inbox/messaging");
+    const { handleInboundForWaBot, setWaBot } = await import("@/services/site/lead-chat");
+    const org = await makeOrg("WA bot org");
+    const acct = await db.whatsAppAccount.create({ data: { organizationId: org.id, displayName: "MECGURA", phoneNumber: `+9178${Math.floor(Math.random() * 1e8)}`, status: "demo", isDemo: true } });
+    const ev = async (body: string, externalId: string) => {
+      const r = await receiveInbound(org.id, acct.id, { externalId, fromPhone: "+919811100011", profileName: "Neha Arora", type: "text", body, at: new Date(), isDemo: true });
+      return { conversationId: r!.conversationId, contactId: r!.contactId, whatsappAccountId: acct.id, type: "text", text: body, optOut: false, automationHandled: false };
+    };
+    const first = await ev("hi, price kitna hai?", "wa-1");
+    expect((await handleInboundForWaBot(org.id, first)).status).toBe("not_this_number");
+
+    await setWaBot(acct.id, boss.id);
+    expect((await handleInboundForWaBot(org.id, first)).status).toBe("replied");
+    const out = await db.message.findMany({ where: { conversationId: first.conversationId, direction: "outbound" } });
+    expect(out).toHaveLength(1);
+    expect(out[0].body).toMatch(/Thanks for messaging MECGURA/);
+    expect(await db.contact.findFirstOrThrow({ where: { organizationId: org.id, phone: "+919811100011" } })).toMatchObject({ name: "Neha Arora", lifecycle: "lead" });
+
+    // A team member takes the chat: the assistant stays quiet.
+    await db.conversation.update({ where: { id: first.conversationId }, data: { assignedToUserId: boss.id } });
+    expect((await handleInboundForWaBot(org.id, await ev("hello?", "wa-2"))).status).toBe("person_owns_chat");
+    expect((await handleInboundForWaBot(org.id, { ...first, optOut: true })).status).toBe("skipped");
+    await setWaBot(null, boss.id);
+  });
+});

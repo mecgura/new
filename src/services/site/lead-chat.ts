@@ -183,3 +183,67 @@ export async function visitorMessageWithBot(account: Account, visitorId: string,
   if (!sent) return { reply: null };
   return { reply: await storeBotMessage(account, sent.conversationId, await answerFor(text)) };
 }
+
+// ---------------------------------------------------------------------------
+// The MECGURA WhatsApp number: the same assistant answers people who message it
+// ---------------------------------------------------------------------------
+const WA_KEY = "home:wa_bot";
+
+export async function waBotAccountId(): Promise<string | null> {
+  const raw = await getSetting(WA_KEY, "");
+  try {
+    const v = JSON.parse(raw) as { whatsappAccountId?: string };
+    return v.whatsappAccountId || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setWaBot(accountId: string | null, adminId: string, req?: Request) {
+  if (accountId) {
+    const a = await db.whatsAppAccount.findUnique({ where: { id: accountId }, select: { id: true, organizationId: true } });
+    if (!a) throw new ApiError("NOT_FOUND", "WhatsApp number not found.");
+  }
+  await setSetting(WA_KEY, accountId ? JSON.stringify({ whatsappAccountId: accountId }) : "");
+  await audit({ action: "site.content_updated", actorUserId: adminId, targetType: "site_wa_bot", targetId: accountId ?? "", metadata: { whatsappBot: accountId ? "enabled" : "disabled" }, req });
+}
+
+const HUMAN_QUIET_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Answers an inbound message on the chosen WhatsApp number with the built-in assistant, and tells the
+ * team about a brand-new lead. Stays quiet when: it isn't that number, the person sent STOP, an
+ * automation or the AI agent already took the message, a team member owns the chat or replied
+ * recently, or the message isn't text.
+ */
+export async function handleInboundForWaBot(
+  organizationId: string,
+  ev: { conversationId: string; contactId: string; whatsappAccountId: string; type: string; text: string; optOut: boolean; automationHandled: boolean }
+): Promise<{ status: string }> {
+  if ((await waBotAccountId()) !== ev.whatsappAccountId) return { status: "not_this_number" };
+  if (ev.optOut || ev.automationHandled || !["text", "button"].includes(ev.type) || !ev.text.trim()) return { status: "skipped" };
+  const conv = await db.conversation.findFirst({ where: { id: ev.conversationId, organizationId } });
+  if (!conv || conv.assignedToUserId || conv.aiStatus === "handoff") return { status: "person_owns_chat" };
+  const humanReplied = await db.message.count({ where: { conversationId: conv.id, direction: "outbound", senderUserId: { not: null }, createdAt: { gt: new Date(Date.now() - HUMAN_QUIET_MS) } } });
+  if (humanReplied) return { status: "person_replied" };
+  const aiReplied = await db.message.count({ where: { conversationId: conv.id, direction: "outbound", payload: { contains: '"origin":"ai' }, createdAt: { gt: new Date(Date.now() - HUMAN_QUIET_MS) } } });
+  if (aiReplied) return { status: "ai_active" };
+
+  const contact = await db.contact.findUnique({ where: { id: ev.contactId }, select: { name: true, phone: true } });
+  const inbound = await db.message.count({ where: { conversationId: conv.id, direction: "inbound" } });
+  if (inbound <= 1) {
+    const members = await db.organizationMember.findMany({ where: { organizationId, role: { in: ["CLIENT_OWNER", "MANAGER"] } }, select: { userId: true } });
+    await Promise.all(members.map((m) => notify({ userId: m.userId, organizationId, type: "success", title: "New WhatsApp lead", body: `${contact?.name || "Someone"} · ${contact?.phone ?? ""}`, link: `/contacts/${ev.contactId}` })));
+  }
+  const { sendSystemText } = await import("@/services/inbox/messaging");
+  const first = (contact?.name ?? "").split(" ")[0];
+  const answer = await answerFor(ev.text);
+  const body = inbound <= 1 ? `Hi${first ? ` ${first}` : ""}! 👋 Thanks for messaging MECGURA. ${answer}` : answer;
+  try {
+    await sendSystemText(organizationId, conv.id, body, { origin: "site_assistant" });
+    return { status: "replied" };
+  } catch (e) {
+    console.error("[wa-bot] reply failed:", e instanceof Error ? e.message : e);
+    return { status: "send_failed" };
+  }
+}

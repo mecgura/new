@@ -497,7 +497,12 @@ export async function receiveInbound(organizationId: string, whatsappAccountId: 
   const aiInput = { conversationId: conv.id, contactId: contact.id, whatsappAccountId, messageId: msg.id, type: input.type, text: input.body, optOut, automationHandled };
   runAfterResponse(async () => {
     const { handleInboundForAi } = await import("@/services/ai/engine");
-    await handleInboundForAi(organizationId, aiInput);
+    const ai = await handleInboundForAi(organizationId, aiInput);
+    // No AI agent answered: the built-in MECGURA assistant covers the chosen number (see Admin → Website).
+    if (!["replied", "handoff", "send_failed", "handed_off", "assigned", "automation_running", "automation_handled"].includes(ai.status)) {
+      const { handleInboundForWaBot } = await import("@/services/site/lead-chat");
+      await handleInboundForWaBot(organizationId, aiInput);
+    }
   });
   return { conversationId: conv.id, messageId: msg.id, contactId: contact.id };
 }
