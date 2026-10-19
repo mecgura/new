@@ -39,6 +39,55 @@ function StateSelect({ value, onChange, label }: { value: "live" | "soon"; onCha
   );
 }
 
+type ChatStatus = { enabled: boolean; organization: { id: string; name: string } | null; organizations: { id: string; name: string }[] };
+
+function ChatbotCard() {
+  const toast = useToast();
+  const [st, setSt] = React.useState<ChatStatus | null>(null);
+  const [orgId, setOrgId] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    void apiFetch<ChatStatus>("/api/admin/site-chat").then((r) => {
+      if (!r.ok) return;
+      setSt(r.data);
+      setOrgId(r.data.organization?.id ?? r.data.organizations[0]?.id ?? "");
+    });
+  }, []);
+
+  async function apply(enabled: boolean) {
+    setBusy(true);
+    const r = await apiFetch<Omit<ChatStatus, "organizations">>("/api/admin/site-chat", { method: "PUT", body: { enabled, ...(enabled ? { organizationId: orgId } : {}) } });
+    setBusy(false);
+    if (!r.ok) return toast(r.error, "error");
+    setSt((x) => (x ? { ...x, ...r.data } : x));
+    toast(enabled ? "Chatbot is on. Leads go to that workspace." : "Chatbot is off. The home page shows quick WhatsApp links.");
+  }
+
+  return (
+    <Card>
+      <CardHeader title="Home page chatbot" description="Visitors leave a name and number, become a lead in the workspace you choose, and an assistant answers common questions. Every chat also shows in that workspace's Channels inbox." action={st ? <Badge tone={st.enabled ? "success" : "neutral"}>{st.enabled ? "On" : "Off"}</Badge> : null} />
+      <CardBody className="space-y-3">
+        {!st ? <p className="text-small text-app-muted">Loading…</p> : (
+          <>
+            <div className="max-w-sm">
+              <Label htmlFor="chat-org">Send leads to workspace</Label>
+              <Select id="chat-org" value={orgId} onChange={(e) => setOrgId(e.target.value)}>
+                {st.organizations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </Select>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" loading={busy} disabled={!orgId} onClick={() => apply(true)}>{st.enabled ? "Update workspace" : "Turn chatbot on"}</Button>
+              {st.enabled ? <Button size="sm" variant="secondary" loading={busy} onClick={() => apply(false)}>Turn off</Button> : null}
+            </div>
+            <p className="text-caption text-app-subtle">Turning it on also switches on the Omnichannel inbox for that workspace.</p>
+          </>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
 export function SiteEditor({ initial }: { initial: HomeContent }) {
   const toast = useToast();
   const [team, setTeam] = React.useState<Team[]>(initial.team);
@@ -84,6 +133,8 @@ export function SiteEditor({ initial }: { initial: HomeContent }) {
           </>
         }
       />
+
+      <ChatbotCard />
 
       <Card>
         <CardHeader
