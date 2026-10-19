@@ -32,6 +32,7 @@ import {
   useToast,
 } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
+import { stripVcfBinary } from "@/lib/vcf";
 import type { InboxPerms } from "@/lib/inbox-context";
 import { dayFmt, type Tag, type TeamMember } from "@/components/inbox/types";
 import { LEAD_STATUSES } from "@/components/inbox/customer-panel";
@@ -293,11 +294,20 @@ function ImportModal({ open, onClose, orgId, onDone }: { open: boolean; onClose:
     setSaving(true);
     setError("");
     const fd = new FormData();
-    fd.set("file", file);
+    let upload: File = file;
+    if (/\.(vcf|vcard)$/i.test(file.name)) {
+      // Drop embedded photos in the browser so big phone exports fit the upload limit.
+      upload = new File([stripVcfBinary(await file.text())], file.name, { type: "text/vcard" });
+    }
+    if (upload.size > 2 * 1024 * 1024) {
+      setSaving(false);
+      return setError(`This file is still ${(upload.size / 1048576).toFixed(1)} MB after removing photos. Split it into smaller files (the limit is 2 MB and 5,000 contacts).`);
+    }
+    fd.set("file", upload);
     try {
       const res = await fetch(`/api/organizations/${orgId}/contacts/import`, { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) return setError(data.error ?? "Import failed");
+      const data = (await res.json().catch(() => ({}))) as { error?: string; created: number; updated: number; skipped: number; errors: { line: number; error: string }[] };
+      if (!res.ok) return setError(res.status === 413 ? "The file is too large. Split it into smaller files." : (data.error ?? "Import failed"));
       setResult(data);
       onDone();
     } catch {
@@ -329,7 +339,7 @@ function ImportModal({ open, onClose, orgId, onDone }: { open: boolean; onClose:
       ) : (
         <form onSubmit={submit} className="space-y-4">
           {error ? <Alert tone="danger">{error}</Alert> : null}
-          <Field id="csv-file" label="CSV or VCF file (max 2 MB, 5,000 contacts)">
+          <Field id="csv-file" label="CSV or VCF file (max 2 MB after photos are removed, 5,000 contacts)">
             <Input type="file" accept=".csv,.vcf,text/csv,text/vcard,text/x-vcard" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="py-1.5" />
           </Field>
           <p className="text-caption text-app-subtle">Only import people who agreed to hear from you on WhatsApp. Mark consent with the opt_in column.</p>

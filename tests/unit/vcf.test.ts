@@ -29,3 +29,19 @@ describe("vCard (.vcf) parsing", () => {
     expect(parseVcf("")).toEqual([["name", "phone", "email"]]);
   });
 });
+
+import { stripVcfBinary } from "@/lib/vcf";
+
+describe("stripVcfBinary", () => {
+  it("drops folded base64 photos but keeps names, numbers and emails", () => {
+    const photo = "A".repeat(200);
+    const vcf = ["BEGIN:VCARD", "VERSION:3.0", "FN:Asha", `PHOTO;ENCODING=b;TYPE=JPEG:${photo.slice(0, 60)}`, ` ${photo.slice(60, 130)}`, ` ${photo.slice(130)}`, "TEL:+919876543210", "item2.PHOTO;X=1:abc", "EMAIL:a@b.co", "END:VCARD", ""].join("\r\n");
+    const out = stripVcfBinary(vcf);
+    expect(out).not.toContain("AAAA");
+    expect(out).not.toContain("PHOTO");
+    expect(out).toContain("FN:Asha");
+    expect(out).toContain("TEL:+919876543210");
+    expect(out).toContain("EMAIL:a@b.co");
+    expect(parseVcf(out)).toEqual([["name", "phone", "email"], ["Asha", "+919876543210", "a@b.co"]]);
+  });
+});
