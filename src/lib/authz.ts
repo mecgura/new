@@ -73,6 +73,8 @@ export const ORG_PERMISSIONS = {
   // AI agent
   "ai:read": ["CLIENT_OWNER", "MANAGER", "AGENT"],
   "ai:manage": ["CLIENT_OWNER", "MANAGER"], // settings, knowledge, activation
+  "voice:read": ["CLIENT_OWNER", "MANAGER", "AGENT"],
+  "voice:manage": ["CLIENT_OWNER", "MANAGER"], // place AI calls
   "appointments:manage": ["CLIENT_OWNER", "MANAGER", "AGENT"],
   // Developer access: API keys are owner-only; webhooks are owner/manager
   "api:read": ["CLIENT_OWNER", "MANAGER"], // usage + request logs, key list (never the secret)
@@ -118,6 +120,8 @@ export const PERMISSION_LABELS: Partial<Record<OrgPermission, string>> = {
   "automations:manage": "Build & publish automations",
   "flows:manage": "Build & publish WhatsApp Flows",
   "ai:manage": "Configure the AI agent",
+  "voice:read": "View AI call logs",
+  "voice:manage": "Place AI calls",
   "appointments:manage": "Confirm appointments",
   "api:read": "View API usage and logs",
   "api:manage": "Create, rotate and revoke API keys",

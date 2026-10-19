@@ -68,6 +68,7 @@ model Organization {
   subscriptions           Subscription[]
   whatsappAccounts        WhatsAppAccount[]
   channelAccounts         ChannelAccount[]
+  voiceCalls              VoiceCall[]
   usageCounters           UsageCounter[]
   wabas                   WhatsAppBusinessAccount[]
   phoneNumbers            PhoneNumber[]
@@ -493,6 +494,7 @@ model Contact {
   tags                 ContactTag[]
   conversations        Conversation[]
   identities           ContactIdentity[]
+  voiceCalls           VoiceCall[]
   notes                ContactNote[]
   consents             ConsentRecord[]
   campaignRecipients   CampaignRecipient[]
@@ -1392,5 +1394,36 @@ model ContactIdentity {
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, kind, value])
+  @@index([contactId])
+}
+
+
+// An AI phone call to a contact. Live calls need a voice provider; until one is connected every call is a labelled simulation.
+model VoiceCall {
+  id              String    @id @default(cuid())
+  organizationId  String
+  contactId       String
+  createdByUserId String?
+  mode            String    @default("demo") // demo | live
+  status          String    @default("queued") // queued | in_progress | completed | no_answer | failed
+  goal            String // what the call should achieve
+  script          String    @default("") // opening line / key points
+  language        String    @default("en")
+  consentNote     String    @default("") // who agreed to be called, recorded at request time
+  providerCallId  String    @default("")
+  transcript      String    @default("[]") // JSON [{ role: "agent" | "customer", text }]
+  summary         String    @default("")
+  outcome         String    @default("") // interested | callback | not_interested | no_answer | ""
+  durationSec     Int       @default(0)
+  error           String    @default("")
+  startedAt       DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
   @@index([contactId])
 }

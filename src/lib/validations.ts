@@ -782,3 +782,15 @@ export const inboundEmailSchema = z
     messageId: z.string().trim().min(3).max(300).optional(),
   })
   .strict();
+
+// ---- AI voice calls -------------------------------------------------------------
+
+export const voiceCallSchema = z
+  .object({
+    contactId: idSchema,
+    goal: z.string().trim().min(3, "Say what the call should achieve").max(300),
+    script: z.string().trim().max(1000).default(""),
+    language: z.enum(["en", "hi", "pa"]).default("en"),
+    consentNote: z.string().trim().min(5, "Record who agreed to be called and how").max(300),
+  })
+  .strict();

@@ -23,6 +23,8 @@ const PERMS = [
   "automations:manage",
   "flows:manage",
   "ai:manage",
+  "voice:read",
+  "voice:manage",
   "appointments:manage",
   "api:read",
   "api:manage",
