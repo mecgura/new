@@ -691,6 +691,8 @@ export const walletMoveSchema = z.object({
   idempotencyKey: z.string().trim().min(8).max(64).optional(),
 });
 
+export const walletTopupSchema = z.object({ amountRupees: rupees(50_000, 100) }).strict();
+
 export const walletSettingsSchema = z.object({ lowBalanceRupees: rupees(1_000_000) });
 
 const priceField = z.union([rupees(10_000), z.null()]).optional();

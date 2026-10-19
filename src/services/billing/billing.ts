@@ -11,6 +11,7 @@ import { getGateway, availableGateways } from "@/providers/payments/registry";
 import { GatewayError, type CheckoutSession, type GatewayEvent } from "@/providers/payments/types";
 import { getBillingSettings } from "@/services/billing/settings";
 import { billingState } from "@/services/billing/entitlements";
+import { creditWallet } from "@/services/wallet";
 
 const DAY = 86_400_000;
 
@@ -43,7 +44,7 @@ export function prorate(amount: number, start: Date, end: Date, now: Date): numb
 // Invoices
 // ---------------------------------------------------------------------------
 
-type InvoiceInput = { organizationId: string; subscriptionId?: string | null; kind: "subscription" | "upgrade" | "renewal"; description: string; lines: { description: string; amount: number }[]; periodStart?: Date | null; periodEnd?: Date | null; targetPlanId?: string | null; dueAt?: Date };
+type InvoiceInput = { organizationId: string; subscriptionId?: string | null; kind: "subscription" | "upgrade" | "renewal" | "topup"; description: string; lines: { description: string; amount: number }[]; periodStart?: Date | null; periodEnd?: Date | null; targetPlanId?: string | null; dueAt?: Date };
 
 async function nextNumber(tx: Prisma.TransactionClient, at: Date): Promise<string> {
   const year = at.getUTCFullYear();
@@ -355,6 +356,10 @@ async function markPaid(invoiceId: string, via: string, note: string, actorUserI
   if (!flipped.count) return false; // already paid or void — never applied twice
   const inv = await db.invoice.findUniqueOrThrow({ where: { id: invoiceId } });
   if (inv.targetPlanId) await activateUpgrade(inv.organizationId, inv.targetPlanId, actorUserId, req);
+  // Prepaid credit: the wallet gets the pre-tax amount. The key makes a repeated webhook add it only once.
+  if (inv.kind === "topup") {
+    await creditWallet(inv.organizationId, { actorUserId, req }, { amount: inv.subtotal, reason: "topup", reference: inv.number, note: `Online payment (${via})`, idempotencyKey: `topup:${inv.id}` });
+  }
   await audit({ action: "billing.invoice_paid", actorUserId, organizationId: inv.organizationId, targetType: "invoice", targetId: inv.id, metadata: { number: inv.number, total: inv.total, via }, req });
   await tellOwners(inv.organizationId, `Payment received for ${inv.number}`, "Thank you!", "success");
   return true;
@@ -531,3 +536,21 @@ export async function runBillingCycle(now = new Date()) {
 }
 
 const fmtMonth = (d: Date) => new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" }).format(d);
+
+
+// ---------------------------------------------------------------------------
+// Wallet top-up (client pays online, credit is added when the payment is confirmed)
+// ---------------------------------------------------------------------------
+
+export const MIN_TOPUP = 10_000; // ₹100
+export const MAX_TOPUP = 5_000_000; // ₹50,000
+
+/** Creates an open invoice for prepaid service credit. It is paid through the normal invoice checkout; the wallet is credited only once the gateway confirms payment. */
+export async function createTopupInvoice(access: OrgAccess, amount: number, req?: Request) {
+  if (!Number.isInteger(amount) || amount < MIN_TOPUP || amount > MAX_TOPUP) throw new ApiError("VALIDATION_ERROR", "Enter an amount between ₹100 and ₹50,000.", { details: { amountRupees: ["Between ₹100 and ₹50,000"] } });
+  const open = await db.invoice.count({ where: { organizationId: access.organizationId, kind: "topup", status: "open" } });
+  if (open >= 5) throw new ApiError("CONFLICT", "You have several unpaid top-up invoices. Pay or ask MECGURA to void them first.");
+  const inv = await createInvoice({ organizationId: access.organizationId, kind: "topup", description: "Prepaid service credit (wallet top-up)", lines: [{ description: "Prepaid service credit", amount }] });
+  await audit({ action: "billing.invoice_created", actorUserId: access.user.id, organizationId: access.organizationId, targetType: "invoice", targetId: inv.id, metadata: { number: inv.number, total: inv.total, kind: "topup" }, req });
+  return invoiceDto(await db.invoice.findUniqueOrThrow({ where: { id: inv.id }, include: invoiceInclude }));
+}

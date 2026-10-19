@@ -13,7 +13,7 @@ import { formatINR } from "@/lib/catalog";
 
 export const MAX_WALLET_AMOUNT = 100_000_000; // ₹10,00,000 per entry
 
-export type WalletActor = { actorUserId: string; req?: Request };
+export type WalletActor = { actorUserId: string | null; req?: Request };
 
 export type WalletEntryView = {
   id: string;

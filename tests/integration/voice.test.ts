@@ -5,7 +5,7 @@ import * as calls from "@/app/api/organizations/[orgId]/voice/calls/route";
 import * as call from "@/app/api/organizations/[orgId]/voice/calls/[callId]/route";
 
 let n = 0;
-const P = (orgId: string, extra: Record<string, string> = {}) => params({ orgId, ...extra });
+const P = <E extends Record<string, string> = Record<never, string>>(orgId: string, extra?: E) => params({ orgId, ...(extra ?? ({} as E)) });
 const post = (body: unknown) => req("/x", { method: "POST", body });
 
 async function tenant() {

@@ -118,7 +118,7 @@ export function BillingApp({ orgId, canManage, initialTab }: { orgId: string; ca
       </nav>
       {tab === "plan" ? <PlanTab base={base} data={data} canManage={canManage} reload={load} onOpenInvoices={() => setTab("invoices")} /> : null}
       {tab === "usage" ? <UsageTab base={base} /> : null}
-      {tab === "wallet" ? <ClientWallet orgId={orgId} /> : null}
+      {tab === "wallet" ? <WalletTab orgId={orgId} base={base} data={data} canManage={canManage} reload={load} /> : null}
       {tab === "invoices" ? <InvoicesTab base={base} data={data} canManage={canManage} reload={load} /> : null}
     </>
   );
@@ -151,6 +151,22 @@ function usePay(base: string, data: Overview, reload: () => Promise<void>) {
     }
   }
   return { pay, busy };
+}
+
+function WalletTab({ orgId, base, data, canManage, reload }: { orgId: string; base: string; data: Overview; canManage: boolean; reload: () => Promise<void> }) {
+  const toast = useToast();
+  const { pay, busy } = usePay(base, data, reload);
+  const [key, setKey] = React.useState(0);
+  const [creating, setCreating] = React.useState(false);
+  async function topUp(rupees: number) {
+    setCreating(true);
+    const r = await apiFetch<{ invoice: { id: string } }>(`/api/organizations/${orgId}/wallet/topup`, { method: "POST", body: { amountRupees: rupees } });
+    setCreating(false);
+    if (!r.ok) return toast(r.details?.amountRupees?.[0] ?? r.error, "error");
+    await pay(r.data.invoice.id);
+    setKey((k) => k + 1);
+  }
+  return <ClientWallet key={key} orgId={orgId} canTopUp={canManage && data.gateways.length > 0} onTopUp={topUp} busy={creating || Boolean(busy)} />;
 }
 
 function ManualPayNote({ data }: { data: Overview }) {
