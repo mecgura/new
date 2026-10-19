@@ -47,8 +47,8 @@ export async function receiveChannelMessage(account: { id: string; organizationI
   const contact = await contactFor(organizationId, input.identityKind, input.identityValue, input.name);
   const isDemo = account.status === "demo";
   const prev = (input.subject ? `${input.subject} — ${input.body}` : input.body).replace(/\s+/g, " ").slice(0, 140);
-  const where = { channelAccountId_contactId_externalThreadId: { channelAccountId: account.id, contactId: contact.id, externalThreadId: "" } };
-  const existing = await db.conversation.findUnique({ where });
+  // Not a unique key (adding one to a live table needs a risky schema push), so look up the oldest matching chat.
+  const existing = await db.conversation.findFirst({ where: { channelAccountId: account.id, contactId: contact.id, externalThreadId: "" }, orderBy: { createdAt: "asc" } });
   const conv = existing
     ? await db.conversation.update({
         where: { id: existing.id },

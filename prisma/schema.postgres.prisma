@@ -568,7 +568,7 @@ model Conversation {
   assignments     ConversationAssignment[]
 
   @@unique([whatsappAccountId, contactId])
-  @@unique([channelAccountId, contactId, externalThreadId])
+  @@index([channelAccountId, contactId, externalThreadId])
   @@index([organizationId, lastMessageAt])
   @@index([organizationId, assignedToUserId])
   @@index([organizationId, status])

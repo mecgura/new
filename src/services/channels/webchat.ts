@@ -39,7 +39,7 @@ export async function visitorSend(account: NonNullable<Awaited<ReturnType<typeof
 export async function visitorMessages(account: { id: string; organizationId: string }, visitorId: string, since: Date | null) {
   const identity = await db.contactIdentity.findUnique({ where: { organizationId_kind_value: { organizationId: account.organizationId, kind: "visitor", value: visitorId } } });
   if (!identity) return [];
-  const conv = await db.conversation.findUnique({ where: { channelAccountId_contactId_externalThreadId: { channelAccountId: account.id, contactId: identity.contactId, externalThreadId: "" } }, select: { id: true } });
+  const conv = await db.conversation.findFirst({ where: { channelAccountId: account.id, contactId: identity.contactId, externalThreadId: "" }, orderBy: { createdAt: "asc" }, select: { id: true } });
   if (!conv) return [];
   const rows = await db.message.findMany({
     where: { conversationId: conv.id, direction: "outbound", status: { not: "failed" }, ...(since ? { createdAt: { gt: since } } : {}) },
