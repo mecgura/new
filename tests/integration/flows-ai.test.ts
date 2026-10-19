@@ -72,6 +72,7 @@ async function makeTenant(): Promise<Tenant> {
   await db.plan.update({ where: { id: plan.id }, data: { maxContacts: 10_000 } });
   await db.subscription.create({ data: { organizationId: org.id, planId: plan.id, priceMonthly: plan.priceMonthly } });
   await db.organizationService.create({ data: { organizationId: org.id, service: "WHATSAPP_AUTOMATION", enabled: true } });
+  await db.organizationService.create({ data: { organizationId: org.id, service: "AI_ASSISTANT", enabled: true } });
   actAs(owner);
   const d = await json(await demoConnect.POST(post({ businessName: "Demo Clinic" }), P(org.id)));
   return { orgId: org.id, owner, manager, agent, accountId: (d.body.account as { id: string }).id };

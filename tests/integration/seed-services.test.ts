@@ -20,3 +20,19 @@ describe("seed: modules added later", () => {
     expect((await flags(on.id)).AI_CALLING).toBe(false);
   }, 120_000);
 });
+
+describe("seed: AI Assistant becomes a per-client service", () => {
+  it("is switched on once for WhatsApp workspaces whose row existed switched off, then left alone", async () => {
+    await db.siteSetting.deleteMany({ where: { key: "migration:ai_assistant_service" } });
+    const org = await makeOrg("Seed AI");
+    await db.organizationService.create({ data: { organizationId: org.id, service: "WHATSAPP_AUTOMATION", enabled: true } });
+    await db.organizationService.create({ data: { organizationId: org.id, service: "AI_ASSISTANT", enabled: false } });
+    const run = () => execFileSync("npx", ["tsx", "prisma/seed.ts"], { env: { ...process.env, SEED_ADMIN_EMAIL: "", SEED_DEMO_PASSWORD: "" }, stdio: "pipe" });
+    run();
+    const row = () => db.organizationService.findUniqueOrThrow({ where: { organizationId_service: { organizationId: org.id, service: "AI_ASSISTANT" } } });
+    expect((await row()).enabled).toBe(true);
+    await db.organizationService.update({ where: { organizationId_service: { organizationId: org.id, service: "AI_ASSISTANT" } }, data: { enabled: false } });
+    run();
+    expect((await row()).enabled).toBe(false);
+  }, 120_000);
+});

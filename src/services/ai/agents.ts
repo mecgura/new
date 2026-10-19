@@ -1,5 +1,6 @@
 import { Prisma, type AiAgent } from "@prisma/client";
 import { assertFeature } from "@/services/billing/entitlements";
+import { assertServiceEnabled } from "@/services/whatsapp/guards";
 import { db } from "@/lib/db";
 import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
@@ -82,6 +83,7 @@ async function numbers(organizationId: string) {
 
 /** Overview for the /ai page: agents, numbers and which mode each number would run in. */
 export async function listAgents(organizationId: string) {
+  await assertServiceEnabled(organizationId, "AI_ASSISTANT");
   const [rows, accounts, members] = await Promise.all([
     db.aiAgent.findMany({ where: { organizationId }, include, orderBy: { createdAt: "asc" } }),
     numbers(organizationId),
@@ -110,6 +112,7 @@ async function validHandoff(organizationId: string, h: AiHandoffConfig) {
 }
 
 export async function createAgent(access: OrgAccess, input: AgentInput, req?: Request) {
+  await assertServiceEnabled(access.organizationId, "AI_ASSISTANT");
   await assertFeature(access.organizationId, "ai_agent");
   const orgId = access.organizationId;
   const accountIds = await validAccounts(orgId, input.accountIds);
@@ -132,6 +135,7 @@ export async function createAgent(access: OrgAccess, input: AgentInput, req?: Re
 }
 
 export async function updateAgent(access: OrgAccess, id: string, input: Partial<AgentInput>, req?: Request) {
+  await assertServiceEnabled(access.organizationId, "AI_ASSISTANT");
   const orgId = access.organizationId;
   const before = await load(orgId, id);
   const data: Prisma.AiAgentUpdateInput = {};
@@ -161,6 +165,7 @@ async function assertNoOverlap(organizationId: string, id: string) {
 }
 
 export async function setAgentStatus(access: OrgAccess, id: string, status: "active" | "paused", req?: Request) {
+  if (status === "active") await assertServiceEnabled(access.organizationId, "AI_ASSISTANT");
   const orgId = access.organizationId;
   const a = await load(orgId, id);
   if (status === "active") {

@@ -41,6 +41,7 @@ async function main() {
 
   await seedPlans();
   await backfillClientDefaults();
+  await grandfatherAiAssistant();
   await seedDemoTenants();
   await backfillClientDefaults();
 }
@@ -65,6 +66,21 @@ async function seedPlans() {
     created++;
   }
   if (created) console.log(`Seeded ${created} plan(s) (edit them in Admin → Billing & Plans)`);
+}
+
+/**
+ * One time: the AI Agent became a per-client service after workspaces were already using it, and its service rows already
+ * exist (switched off). Switch it on once for workspaces running WhatsApp; a marker keeps later deploys from undoing an admin's choice.
+ */
+async function grandfatherAiAssistant() {
+  const key = "migration:ai_assistant_service";
+  if (await db.siteSetting.findUnique({ where: { key } })) return;
+  const orgs = await db.organizationService.findMany({ where: { service: "WHATSAPP_AUTOMATION", enabled: true }, select: { organizationId: true } });
+  for (const { organizationId } of orgs) {
+    await db.organizationService.updateMany({ where: { organizationId, service: "AI_ASSISTANT" }, data: { enabled: true } });
+  }
+  await db.siteSetting.create({ data: { key, value: new Date().toISOString() } });
+  console.log(`Switched the AI Assistant service on for ${orgs.length} existing workspace(s).`);
 }
 
 /** Every organization gets settings + service rows (idempotent). */

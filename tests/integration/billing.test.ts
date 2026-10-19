@@ -81,6 +81,7 @@ async function makeTenant(planId?: string, billingMode: "complimentary" | "invoi
   await addMember(org.id, manager.id, "MANAGER");
   await addMember(org.id, agent.id, "AGENT");
   await db.organizationService.create({ data: { organizationId: org.id, service: "WHATSAPP_AUTOMATION", enabled: true } });
+  await db.organizationService.create({ data: { organizationId: org.id, service: "AI_ASSISTANT", enabled: true } });
   if (planId) {
     actAs(admin);
     expect((await adminAssign.PUT(put({ planId, billingMode }), params({ id: org.id }))).status).toBe(200);

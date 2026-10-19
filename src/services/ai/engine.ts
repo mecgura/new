@@ -1,5 +1,6 @@
 import type { AiAgent, Conversation } from "@prisma/client";
 import { hasFeature, monthlyQuotaLeft } from "@/services/billing/entitlements";
+import { assertServiceEnabled, isServiceEnabled } from "@/services/whatsapp/guards";
 import { db } from "@/lib/db";
 import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
@@ -212,6 +213,10 @@ export async function handleInboundForAi(organizationId: string, ev: InboundForA
     return { status: "automation_running" };
   }
 
+  if (!(await isServiceEnabled(organizationId, "AI_ASSISTANT"))) {
+    await log(agent, { conversationId: conv.id, contactId: ev.contactId, mode: "", kind: "skipped", input: ev.text, error: "The AI Assistant service isn't enabled for this workspace." });
+    return { status: "service_off" };
+  }
   if (!(await hasFeature(organizationId, "ai_agent"))) {
     await log(agent, { conversationId: conv.id, contactId: ev.contactId, mode: "", kind: "skipped", input: ev.text, error: "The AI agent isn't included in this workspace's plan." });
     return { status: "not_in_plan" };
@@ -352,6 +357,7 @@ export async function onConversationClosed(organizationId: string, conversationI
 // ---------------------------------------------------------------------------
 
 export async function testChat(access: OrgAccess, agentId: string, input: { history: ChatTurn[]; message: string; mode: "live" | "demo" }) {
+  await assertServiceEnabled(access.organizationId, "AI_ASSISTANT");
   const agent = await db.aiAgent.findFirst({ where: { id: agentId, organizationId: access.organizationId } });
   if (!agent) throw new ApiError("NOT_FOUND", "AI agent not found.");
   if (input.mode === "live" && !aiConfigured()) throw new ApiError("CONFLICT", "Live AI isn't configured on this installation (ANTHROPIC_API_KEY is not set). Use demo mode.");

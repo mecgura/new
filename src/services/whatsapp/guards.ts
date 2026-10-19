@@ -14,8 +14,8 @@ export async function assertWhatsAppEnabled(organizationId: string) {
   }
 }
 
-export type GatedService = "OMNICHANNEL" | "AI_CALLING";
-const GATE_LABEL: Record<GatedService, string> = { OMNICHANNEL: "The omnichannel inbox (email, website chat, Messenger, Instagram)", AI_CALLING: "AI Calling" };
+export type GatedService = "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT";
+const GATE_LABEL: Record<GatedService, string> = { OMNICHANNEL: "The omnichannel inbox (email, website chat, Messenger, Instagram)", AI_CALLING: "AI Calling", AI_ASSISTANT: "The AI Agent" };
 
 export async function isServiceEnabled(organizationId: string, service: GatedService) {
   const row = await db.organizationService.findUnique({ where: { organizationId_service: { organizationId, service } }, select: { enabled: true } });
