@@ -9,6 +9,7 @@ import { incrementUsage } from "@/lib/services/usage";
 import { applyStatusUpdate, fromMetaMessage, receiveInbound } from "@/services/inbox/messaging";
 import { applyTemplateWebhook } from "@/services/templates/templates";
 import { handleLeadgen } from "@/services/leads/leads";
+import { receiveChannelMessage } from "@/services/channels/inbound";
 
 /**
  * GET verification handshake. Accepts MECGURA's platform verify token or the
@@ -45,7 +46,8 @@ export async function ingestWebhook(raw: Buffer, signatureHeader: string | null)
   } catch {
     return { ok: false, status: 400, error: "Invalid JSON" };
   }
-  if ((payload as { object?: string }).object === "page") return ingestPageWebhook(raw, signatureHeader, payload as unknown as PageWebhookPayload);
+  const obj = (payload as { object?: string }).object;
+  if (obj === "page" || obj === "instagram") return ingestPageWebhook(raw, signatureHeader, payload as unknown as PageWebhookPayload);
   if (payload.object !== "whatsapp_business_account" || !Array.isArray(payload.entry)) {
     console.warn(`[webhook:meta] unsupported object="${String(payload.object).slice(0, 40)}" entries=${Array.isArray(payload.entry) ? payload.entry.length : "n/a"}`);
     return { ok: false, status: 400, error: "Unsupported webhook object" };
@@ -169,7 +171,8 @@ async function processEvent(organizationId: string, wabaRecordId: string, ev: No
 // Facebook Page events (Lead Ads)
 // ---------------------------------------------------------------------------
 
-type PageWebhookPayload = { object: "page"; entry?: { id?: string | number; changes?: { field?: string; value?: { leadgen_id?: string | number; form_id?: string | number; page_id?: string | number } }[] }[] };
+type SocialMessaging = { sender?: { id?: string }; timestamp?: number; message?: { mid?: string; text?: string; is_echo?: boolean; attachments?: unknown[] } };
+type PageWebhookPayload = { object: "page" | "instagram"; entry?: { id?: string | number; messaging?: SocialMessaging[]; changes?: { field?: string; value?: { leadgen_id?: string | number; form_id?: string | number; page_id?: string | number } }[] }[] };
 
 /**
  * Page webhooks carry Lead Ad submissions (`leadgen`). Same rule as WhatsApp events: nothing is trusted until the signature
@@ -178,9 +181,13 @@ type PageWebhookPayload = { object: "page"; entry?: { id?: string | number; chan
 async function ingestPageWebhook(raw: Buffer, signatureHeader: string | null, payload: PageWebhookPayload): Promise<IngestResult> {
   if (!Array.isArray(payload.entry)) return { ok: false, status: 400, error: "Unsupported webhook object" };
   const pageIds = [...new Set(payload.entry.map((e) => String(e.id ?? "")).filter(Boolean))];
-  const sources = await db.leadSource.findMany({ where: { pageId: { in: pageIds } }, select: { organizationId: true } });
-  const conns = sources.length
-    ? await db.whatsAppConnection.findMany({ where: { organizationId: { in: [...new Set(sources.map((s) => s.organizationId))] }, status: "active", encryptedAppSecret: { not: "" } }, select: { encryptedAppSecret: true } })
+  const [sources, social] = await Promise.all([
+    db.leadSource.findMany({ where: { pageId: { in: pageIds } }, select: { organizationId: true } }),
+    db.channelAccount.findMany({ where: { kind: payload.object === "instagram" ? "instagram" : "messenger", address: { in: pageIds }, status: "active" } }),
+  ]);
+  const owners = [...new Set([...sources.map((s) => s.organizationId), ...social.map((a) => a.organizationId)])];
+  const conns = owners.length
+    ? await db.whatsAppConnection.findMany({ where: { organizationId: { in: owners }, status: "active", encryptedAppSecret: { not: "" } }, select: { encryptedAppSecret: true } })
     : [];
   const secrets = [getMetaConfig().appSecret];
   for (const c of conns) {
@@ -194,6 +201,22 @@ async function ingestPageWebhook(raw: Buffer, signatureHeader: string | null, pa
   let received = 0;
   let duplicates = 0;
   for (const entry of payload.entry) {
+    const account = social.find((a) => a.address === String(entry.id ?? ""));
+    for (const m of entry.messaging ?? []) {
+      if (!account || !m.sender?.id || !m.message?.mid || m.message.is_echo) continue; // echoes are our own sends
+      const text = m.message.text?.trim() || (m.message.attachments?.length ? "[Attachment — open it in Messenger/Instagram]" : "");
+      if (!text) continue;
+      const r = await receiveChannelMessage(account, {
+        identityKind: account.kind as "messenger" | "instagram",
+        identityValue: String(m.sender.id),
+        name: `${account.kind === "instagram" ? "Instagram" : "Messenger"} user ${String(m.sender.id).slice(-4)}`,
+        body: text,
+        externalId: m.message.mid,
+        at: m.timestamp ? new Date(m.timestamp) : new Date(),
+      });
+      if (r) received++;
+      else duplicates++;
+    }
     for (const change of entry.changes ?? []) {
       if (change.field !== "leadgen" || !change.value?.leadgen_id) continue;
       const result = await handleLeadgen(String(change.value.page_id ?? entry.id ?? ""), String(change.value.leadgen_id), String(change.value.form_id ?? ""));

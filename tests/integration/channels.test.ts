@@ -4,6 +4,9 @@ import { actAs, addMember, json, makeOrg, makePlan, makeUser, params, req } from
 import * as channels from "@/app/api/organizations/[orgId]/channels/route";
 import * as channel from "@/app/api/organizations/[orgId]/channels/[chid]/route";
 import * as simulate from "@/app/api/organizations/[orgId]/channels/[chid]/simulate/route";
+import * as webchat from "@/app/api/webchat/[key]/route";
+import * as metaWebhook from "@/app/api/webhooks/meta/route";
+import { createHmac } from "node:crypto";
 import * as inboundHook from "@/app/api/webhooks/channels/[key]/route";
 import * as convList from "@/app/api/organizations/[orgId]/inbox/conversations/route";
 import * as messages from "@/app/api/organizations/[orgId]/inbox/conversations/[cid]/messages/route";
@@ -150,5 +153,158 @@ describe("channels: email inbox", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({ message: "domain not verified" }), { status: 403 }));
     const failed = await json(await messages.POST(post({ type: "text", body: "Again" }), P(t.org.id, { cid: conv.id })));
     expect(failed.body.message).toMatchObject({ status: "failed", error: "domain not verified" });
+  });
+});
+
+describe("channels: website chat", () => {
+  const VID = "a".repeat(24) + "b1c2d3";
+  const wcPost = (key: string, body: unknown, ip = "198.51.100.7") => webchat.POST(req("/x", { method: "POST", body, headers: { "x-forwarded-for": ip } }), { params: Promise.resolve({ key }) });
+  const wcGet = (key: string, qs = "") => webchat.GET(req(`/x${qs}`), { params: Promise.resolve({ key }) });
+
+  async function addChat(t: Awaited<ReturnType<typeof tenant>>) {
+    actAs(t.owner);
+    const r = await json(await channels.POST(post({ kind: "webchat", name: "Website chat" }), P(t.org.id)));
+    expect(r.status).toBe(201);
+    return r.body.channel as { id: string; publicKey: string; status: string };
+  }
+
+  it("is live immediately and serves public widget settings with CORS", async () => {
+    const t = await tenant();
+    const c = await addChat(t);
+    expect(c.status).toBe("active");
+    const res = await wcGet(c.publicKey);
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    const body = (await res.json()) as { config: { name: string; color: string } };
+    expect(body.config).toMatchObject({ name: "Website chat", color: "#0f766e" });
+    expect((await wcGet("0".repeat(48))).status).toBe(404);
+  });
+
+  it("visitor message reaches the inbox and the team's reply comes back; notes never do", async () => {
+    const t = await tenant();
+    const c = await addChat(t);
+    expect((await wcPost(c.publicKey, { visitorId: VID, text: "Hello, do you deliver?" })).status).toBe(201);
+    const conv = await db.conversation.findFirstOrThrow({ where: { organizationId: t.org.id }, include: { contact: true } });
+    expect(conv.channel).toBe("webchat");
+    expect(conv.contact.name).toMatch(/^Website visitor /);
+    actAs(t.owner);
+    await messages.POST(post({ type: "text", body: "Yes, across the city." }), P(t.org.id, { cid: conv.id }));
+    await db.message.create({ data: { organizationId: t.org.id, conversationId: conv.id, direction: "internal", type: "note", body: "secret note", status: "received" } });
+    const got = (await (await wcGet(c.publicKey, `?visitorId=${VID}`)).json()) as { messages: { id: string; text: string }[] };
+    expect(got.messages.map((m) => m.text)).toEqual(["Yes, across the city."]);
+    // Another visitor sees nothing.
+    const other = (await (await wcGet(c.publicKey, `?visitorId=${"z".repeat(30)}`)).json()) as { messages: unknown[] };
+    expect(other.messages).toEqual([]);
+  });
+
+  it("validates input and refuses disabled inboxes", async () => {
+    const t = await tenant();
+    const c = await addChat(t);
+    expect((await wcPost(c.publicKey, { visitorId: "short", text: "hi" })).status).toBe(400);
+    expect((await wcPost(c.publicKey, { visitorId: VID, text: "" })).status).toBe(400);
+    expect((await wcPost(c.publicKey, { visitorId: VID, text: "x".repeat(2001) })).status).toBe(400);
+    expect((await wcPost(c.publicKey, { visitorId: VID, text: "hi", extra: 1 })).status).toBe(400);
+    actAs(t.owner);
+    await channel.PATCH(req("/x", { method: "PATCH", body: { status: "disabled" } }), P(t.org.id, { chid: c.id }));
+    expect((await wcPost(c.publicKey, { visitorId: VID, text: "hi" })).status).toBe(404);
+  });
+
+  it("caps brand-new visitors per IP", async () => {
+    const t = await tenant();
+    const c = await addChat(t);
+    const ip = `203.0.113.${100 + n++}`;
+    const codes: number[] = [];
+    for (let i = 0; i < 12; i++) codes.push((await wcPost(c.publicKey, { visitorId: `v${i}`.padEnd(30, "q"), text: "hi" }, ip)).status);
+    expect(codes.slice(0, 10).every((x) => x === 201), codes.join(",")).toBe(true);
+    expect(codes[10]).toBe(429);
+  });
+});
+
+
+describe("channels: Messenger and Instagram", () => {
+  const SECRET = "test-app-secret-test-app-secret-1234";
+  const TOKEN = `EAAG${"x".repeat(60)}`;
+  const pid = () => `77${String(Date.now()).slice(-8)}${n++}`;
+  const signed = (obj: "page" | "instagram", entry: unknown) => {
+    const raw = JSON.stringify({ object: obj, entry: [entry] });
+    return new Request("http://localhost:3000/api/webhooks/meta", { method: "POST", headers: { "content-type": "application/json", "x-hub-signature-256": `sha256=${createHmac("sha256", SECRET).update(raw).digest("hex")}` }, body: raw });
+  };
+  function graphOk(calls: { url: URL; body?: Record<string, unknown> }[] = []) {
+    return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = new URL(String(input));
+      calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      const id = url.pathname.split("/").filter(Boolean).at(-1)!;
+      if (url.pathname.endsWith("/messages")) return new Response(JSON.stringify({ message_id: "m_out_1" }), { status: 200 });
+      return new Response(JSON.stringify({ id, name: "Shop Page", username: "shop_ig" }), { status: 200 });
+    });
+  }
+  async function connect(t: Awaited<ReturnType<typeof tenant>>, kind: "messenger" | "instagram", address = pid()) {
+    actAs(t.owner);
+    const r = await json(await channels.POST(post({ kind, name: "Social", address, accessToken: TOKEN }), P(t.org.id)));
+    return { r, address };
+  }
+
+  it("verifies the token with Meta, stores it encrypted, never returns it", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    graphOk();
+    const t = await tenant();
+    const { r, address } = await connect(t, "messenger");
+    expect(r.status).toBe(201);
+    expect(JSON.stringify(r.body)).not.toContain(TOKEN);
+    const row = await db.channelAccount.findFirstOrThrow({ where: { address } });
+    expect(row.encryptedToken).not.toBe("");
+    expect(row.encryptedToken).not.toContain(TOKEN);
+    expect(row.status).toBe("active");
+    // The same account can't be claimed by another workspace.
+    const other = await tenant();
+    expect((await connect(other, "messenger", address)).r.status).toBe(409);
+  });
+
+  it("rejects a token Meta refuses and malformed input", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({ error: { message: "Invalid OAuth access token", code: 190 } }), { status: 400 }));
+    const t = await tenant();
+    expect((await connect(t, "instagram")).r.status).toBe(400);
+    actAs(t.owner);
+    expect((await channels.POST(post({ kind: "messenger", name: "X", address: "abc", accessToken: TOKEN }), P(t.org.id))).status).toBe(400);
+    expect((await channels.POST(post({ kind: "messenger", name: "X", address: "12345678" }), P(t.org.id))).status).toBe(400);
+  });
+
+  it("inbound DM creates a chat; echoes and duplicates are ignored; reply goes out through Graph", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    const calls: { url: URL; body?: Record<string, unknown> }[] = [];
+    graphOk(calls);
+    const t = await tenant();
+    const { address } = await connect(t, "messenger");
+    const dm = { id: address, messaging: [{ sender: { id: "psid-1" }, timestamp: Date.now(), message: { mid: "mid.1", text: "Is this in stock?" } }] };
+    expect((await json(await metaWebhook.POST(signed("page", dm)))).body).toEqual({ received: 1, duplicates: 0 });
+    expect((await json(await metaWebhook.POST(signed("page", dm)))).body).toEqual({ received: 0, duplicates: 1 });
+    const echo = { id: address, messaging: [{ sender: { id: address }, message: { mid: "mid.2", text: "our own", is_echo: true } }] };
+    expect((await json(await metaWebhook.POST(signed("page", echo)))).body).toEqual({ received: 0, duplicates: 0 });
+    // Wrong signature is refused.
+    const bad = signed("page", dm);
+    expect((await metaWebhook.POST(new Request(bad.url, { method: "POST", headers: { "x-hub-signature-256": "sha256=00" }, body: await bad.text() }))).status).toBe(401);
+
+    const conv = await db.conversation.findFirstOrThrow({ where: { organizationId: t.org.id } });
+    expect(conv.channel).toBe("messenger");
+    actAs(t.owner);
+    const sent = await json(await messages.POST(post({ type: "text", body: "Yes!" }), P(t.org.id, { cid: conv.id })));
+    expect(sent.body.message).toMatchObject({ status: "sent" });
+    const out = calls.find((c) => c.url.pathname.endsWith("/messages"))!;
+    expect(out.body).toMatchObject({ recipient: { id: "psid-1" }, messaging_type: "RESPONSE", message: { text: "Yes!" } });
+  });
+
+  it("refuses replies after the 24-hour window; instagram events only reach instagram inboxes", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    graphOk();
+    const t = await tenant();
+    const { address } = await connect(t, "instagram");
+    // A page event for the same id must not reach an instagram inbox.
+    const dm = { id: address, messaging: [{ sender: { id: "igsid-1" }, message: { mid: "mid.ig1", text: "hi" } }] };
+    expect((await json(await metaWebhook.POST(signed("page", dm)))).body).toEqual({ received: 0, duplicates: 0 });
+    expect((await json(await metaWebhook.POST(signed("instagram", dm)))).body).toEqual({ received: 1, duplicates: 0 });
+    const conv = await db.conversation.findFirstOrThrow({ where: { organizationId: t.org.id } });
+    await db.conversation.update({ where: { id: conv.id }, data: { lastInboundAt: new Date(Date.now() - 25 * 3600_000) } });
+    actAs(t.owner);
+    const res = await messages.POST(post({ type: "text", body: "late" }), P(t.org.id, { cid: conv.id }));
+    expect(res.status).toBe(409);
   });
 });

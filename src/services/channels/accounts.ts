@@ -4,8 +4,11 @@ import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import type { OrgAccess } from "@/lib/session";
 import { isEmailConfigured } from "@/lib/mailer";
+import { encryptSecret } from "@/lib/crypto";
+import { MetaApiError } from "@/providers/meta/graph";
+import { verifySocialAccount } from "@/providers/meta/social";
 
-export const CHANNEL_KINDS = ["email", "webchat"] as const;
+export const CHANNEL_KINDS = ["email", "webchat", "messenger", "instagram"] as const;
 export type ChannelKind = (typeof CHANNEL_KINDS)[number];
 
 type Row = Awaited<ReturnType<typeof db.channelAccount.findFirstOrThrow>>;
@@ -34,6 +37,7 @@ export function toChannelDto(a: Row, conversations = 0) {
     settings: parseSettings(a.settings),
     inboundPath: inboundPath(a.kind, a.publicKey),
     publicKey: a.kind === "webchat" ? a.publicKey : undefined,
+    embedPath: a.kind === "webchat" ? "/widget.js" : undefined,
     conversations,
     createdAt: a.createdAt,
   };
@@ -47,12 +51,23 @@ export async function listChannels(organizationId: string) {
   };
 }
 
-export async function createChannel(access: OrgAccess, input: { kind: ChannelKind; name: string; address: string }, req?: Request) {
+export async function createChannel(access: OrgAccess, input: { kind: ChannelKind; name: string; address: string; accessToken?: string }, req?: Request) {
   const orgId = access.organizationId;
   if (input.kind === "email" && !input.address) throw new ApiError("VALIDATION_ERROR", "Enter the email address customers write to.", { details: { address: ["Required"] } });
   if (await db.channelAccount.count({ where: { organizationId: orgId } }) >= 20) throw new ApiError("CONFLICT", "You can connect up to 20 inboxes.");
+  const social = input.kind === "messenger" || input.kind === "instagram";
+  let encryptedToken = "";
+  if (social) {
+    if (await db.channelAccount.findFirst({ where: { kind: input.kind, address: input.address } })) throw new ApiError("CONFLICT", "That account is already connected to a workspace.");
+    try {
+      await verifySocialAccount(input.kind as "messenger" | "instagram", input.address, input.accessToken ?? "");
+    } catch (e) {
+      throw new ApiError("VALIDATION_ERROR", e instanceof MetaApiError ? `Meta rejected the token: ${e.message}` : "That ID and access token don't match.", { details: { accessToken: ["Could not be verified with Meta"] } });
+    }
+    encryptedToken = encryptSecret(input.accessToken ?? "");
+  }
   const a = await db.channelAccount.create({
-    data: { organizationId: orgId, kind: input.kind, name: input.name, address: input.kind === "email" ? input.address.toLowerCase() : "", publicKey: randomBytes(24).toString("hex"), status: "demo" },
+    data: { organizationId: orgId, kind: input.kind, name: input.name, address: input.kind === "email" ? input.address.toLowerCase() : social ? input.address : "", encryptedToken, publicKey: randomBytes(24).toString("hex"), status: input.kind === "email" ? "demo" : "active", settings: input.kind === "webchat" ? JSON.stringify({ greeting: "Hi! How can we help you?", color: "#0f766e" }) : "{}" },
   });
   await audit({ action: "channel.connected", actorUserId: access.user.id, organizationId: orgId, targetType: "channel", targetId: a.id, metadata: { kind: input.kind }, req });
   return toChannelDto(a);

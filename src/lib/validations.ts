@@ -740,13 +740,18 @@ export const testLeadSchema = z.object({ phone: z.string().trim().min(8).max(20)
 
 export const channelCreateSchema = z
   .object({
-    kind: z.enum(["email", "webchat"]),
+    kind: z.enum(["email", "webchat", "messenger", "instagram"]),
     name: z.string().trim().min(1).max(100),
     address: z.string().trim().toLowerCase().max(200).default(""),
+    accessToken: z.string().trim().min(50, "Access token looks too short").max(1024).regex(/^[A-Za-z0-9_\-|.]+$/, "Access token contains invalid characters").optional(),
   })
   .strict()
   .superRefine((v, ctx) => {
     if (v.kind === "email" && !z.string().email().safeParse(v.address).success) ctx.addIssue({ code: "custom", path: ["address"], message: "Enter a valid email address" });
+    if (v.kind === "messenger" || v.kind === "instagram") {
+      if (!/^\d{5,20}$/.test(v.address)) ctx.addIssue({ code: "custom", path: ["address"], message: v.kind === "messenger" ? "Page ID is a number" : "Instagram account ID is a number" });
+      if (!v.accessToken) ctx.addIssue({ code: "custom", path: ["accessToken"], message: "Access token is required" });
+    }
   });
 
 export const channelUpdateSchema = z

@@ -1370,6 +1370,7 @@ model ChannelAccount {
   publicKey      String   @unique // inbound webhook + widget key (random)
   status         String   @default("demo") // demo | active | disabled
   settings       String   @default("{}") // JSON, non-secret
+  encryptedToken String   @default("") // Page / Instagram access token (AES-GCM), never returned by the API
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

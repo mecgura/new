@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import { Mail, Trash2 } from "lucide-react";
-import { Alert, Badge, Button, Card, CardBody, CardHeader, ConfirmationDialog, EmptyState, ErrorState, Field, Input, LoadingState, Modal, PageHeader, useToast } from "@/components/ds";
+import { Alert, Badge, Button, Card, CardBody, CardHeader, ConfirmationDialog, EmptyState, ErrorState, Field, Input, LoadingState, Modal, PageHeader, Select, useToast } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
 import { siteConfig } from "@/config/site";
 
-type Channel = { id: string; kind: string; name: string; address: string; status: "demo" | "active" | "disabled"; inboundPath: string; conversations: number };
+type Channel = { id: string; kind: string; name: string; address: string; status: "demo" | "active" | "disabled"; inboundPath: string; conversations: number; publicKey?: string; settings: Record<string, string> };
 
 const TONE = { demo: "warning", active: "success", disabled: "neutral" } as const;
 const LABEL = { demo: "Demo", active: "Live", disabled: "Off" } as const;
@@ -53,8 +53,8 @@ export function ChannelsApp({ orgId, canManage }: { orgId: string; canManage: bo
     <>
       <PageHeader
         title="Channels"
-        description="Email and other inboxes that land in the same team inbox as WhatsApp."
-        actions={canManage ? <Button onClick={() => setOpen(true)}>Add email inbox</Button> : null}
+        description="Email and website chat that land in the same team inbox as WhatsApp."
+        actions={canManage ? <Button onClick={() => setOpen(true)}>Add an inbox</Button> : null}
       />
       {emailSending !== "ready" ? (
         <Alert tone="info" className="mb-4" title="Email sending is in demo mode">
@@ -63,7 +63,7 @@ export function ChannelsApp({ orgId, canManage }: { orgId: string; canManage: bo
       ) : null}
       {channels.length === 0 ? (
         <Card>
-          <EmptyState icon={Mail} title="No extra inboxes yet" description="Add an email address (for example support@yourbusiness.com) to answer customer emails next to WhatsApp chats." />
+          <EmptyState icon={Mail} title="No extra inboxes yet" description="Add an email address or a website chat widget to answer customers next to WhatsApp chats." />
         </Card>
       ) : (
         <div className="space-y-3">
@@ -76,8 +76,14 @@ export function ChannelsApp({ orgId, canManage }: { orgId: string; canManage: bo
                       {c.name} <Badge tone={TONE[c.status]}>{LABEL[c.status]}</Badge>
                     </p>
                     <p className="mt-1 text-small text-app-muted">
-                      Email · {c.address} · {c.conversations} conversation{c.conversations === 1 ? "" : "s"}
+                      {c.kind === "webchat" ? "Website chat" : c.kind === "email" ? `Email · ${c.address}` : `${c.kind === "messenger" ? "Messenger" : "Instagram"} · ${c.address}`} · {c.conversations} conversation{c.conversations === 1 ? "" : "s"}
                     </p>
+                    {c.kind === "webchat" && c.publicKey ? (
+                      <div className="mt-2">
+                        <p className="text-caption text-app-muted">Paste this before &lt;/body&gt; on your website:</p>
+                        <code className="mt-1 block break-all rounded bg-app-hover p-2 text-caption">{`<script src="${siteConfig.url}/widget.js" data-key="${c.publicKey}" async></script>`}</code>
+                      </div>
+                    ) : null}
                     {c.inboundPath ? (
                       <p className="mt-2 break-all text-caption text-app-muted">
                         Incoming mail URL (keep secret): <code className="rounded bg-app-hover px-1">{siteConfig.url}{c.inboundPath}</code>
@@ -86,12 +92,12 @@ export function ChannelsApp({ orgId, canManage }: { orgId: string; canManage: bo
                   </div>
                   {canManage ? (
                     <div className="flex flex-wrap gap-2">
-                      {c.status === "demo" ? (
+                      {c.kind === "email" && c.status === "demo" ? (
                         <Button size="sm" variant="secondary" onClick={() => setSimulating(c)}>
                           Simulate customer email
                         </Button>
                       ) : null}
-                      {c.status !== "active" ? (
+                      {c.kind === "email" && c.status !== "active" ? (
                         <Button size="sm" variant="secondary" onClick={() => setStatus(c, "active")}>
                           Go live
                         </Button>
@@ -120,11 +126,14 @@ export function ChannelsApp({ orgId, canManage }: { orgId: string; canManage: bo
         <CardHeader title="How email works" />
         <CardBody>
           <ol className="list-decimal space-y-1.5 pl-5 text-small text-app-muted">
-            <li>Add the address customers write to. Start in demo mode to try the inbox.</li>
+            <li>Email: add the address customers write to. Start in demo mode to try the inbox.</li>
             <li>Forward incoming mail to the secret URL above (any inbound-mail provider or forwarder can post JSON with from, subject and text).</li>
             <li>Verify your sending domain with the email provider, then press “Go live”. Replies are sent from your address.</li>
           </ol>
-          <p className="mt-3 text-small text-app-muted">Email is plain text for now. WhatsApp campaigns and templates stay WhatsApp-only.</p>
+          <p className="mt-3 text-small text-app-muted">
+            Messenger and Instagram: in your Meta app add the <strong>Page</strong> / <strong>Instagram</strong> webhook with callback <code className="rounded bg-app-hover px-1">{siteConfig.url}/api/webhooks/meta</code> and subscribe to <strong>messages</strong>. Replies are allowed for 24 hours after the customer writes. Accounts outside your own Meta app need Meta&apos;s app review and Business Verification first.
+          </p>
+          <p className="mt-3 text-small text-app-muted">Website chat works right away: paste the snippet on your site and visitors can message you. Email is plain text for now. WhatsApp campaigns and templates stay WhatsApp-only.</p>
         </CardBody>
       </Card>
       <AddModal open={open} onClose={() => setOpen(false)} base={base} onDone={() => { setOpen(false); void load(); }} />
@@ -136,6 +145,8 @@ export function ChannelsApp({ orgId, canManage }: { orgId: string; canManage: bo
 
 function AddModal({ open, onClose, base, onDone }: { open: boolean; onClose: () => void; base: string; onDone: () => void }) {
   const toast = useToast();
+  const [kind, setKind] = React.useState<"email" | "webchat" | "messenger" | "instagram">("email");
+  const [token, setToken] = React.useState("");
   const [name, setName] = React.useState("");
   const [address, setAddress] = React.useState("");
   const [err, setErr] = React.useState<Record<string, string[]>>({});
@@ -143,24 +154,45 @@ function AddModal({ open, onClose, base, onDone }: { open: boolean; onClose: () 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    const r = await apiFetch(base, { method: "POST", body: { kind: "email", name, address } });
+    const r = await apiFetch(base, { method: "POST", body: { kind, name, ...(kind === "email" || kind === "messenger" || kind === "instagram" ? { address } : {}), ...(kind === "messenger" || kind === "instagram" ? { accessToken: token } : {}) } });
     setSaving(false);
     if (!r.ok) return setErr(r.details ?? { name: [r.error] });
-    toast("Inbox added in demo mode");
+    toast(kind === "email" ? "Inbox added in demo mode" : kind === "webchat" ? "Website chat created" : "Connected");
+    setToken("");
     setName("");
     setAddress("");
     setErr({});
     onDone();
   }
   return (
-    <Modal open={open} onClose={onClose} title="Add an email inbox" description="Customers email this address; the team answers from the shared inbox.">
+    <Modal open={open} onClose={onClose} title="Add an inbox" description="Pick where customers will reach you. The team answers from the shared inbox.">
       <form onSubmit={submit} className="space-y-3">
+        <Field id="ch-kind" label="Type">
+          <Select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+            <option value="email">Email address</option>
+            <option value="webchat">Website chat widget</option>
+            <option value="messenger">Facebook Messenger</option>
+            <option value="instagram">Instagram DMs</option>
+          </Select>
+        </Field>
         <Field id="ch-name" label="Name" error={err.name?.[0]}>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Support" required />
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === "email" ? "Support" : "Website chat"} required />
         </Field>
-        <Field id="ch-address" label="Email address" error={err.address?.[0]}>
-          <Input type="email" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="support@yourbusiness.com" required />
-        </Field>
+        {kind === "email" ? (
+          <Field id="ch-address" label="Email address" error={err.address?.[0]}>
+            <Input type="email" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="support@yourbusiness.com" required />
+          </Field>
+        ) : null}
+        {kind === "messenger" || kind === "instagram" ? (
+          <>
+            <Field id="ch-address" label={kind === "messenger" ? "Facebook Page ID" : "Instagram account ID"} error={err.address?.[0]}>
+              <Input value={address} onChange={(e) => setAddress(e.target.value)} inputMode="numeric" required />
+            </Field>
+            <Field id="ch-token" label="Page access token" error={err.accessToken?.[0]} hint="Stored encrypted and never shown again. Needs the messaging permissions; accounts that aren't part of your Meta app need Meta's app review first.">
+              <Input type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} required />
+            </Field>
+          </>
+        ) : null}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={saving}>Add inbox</Button>

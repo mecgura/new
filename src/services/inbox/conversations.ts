@@ -31,7 +31,8 @@ const WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export function toConversationDto(c: ConvRow) {
   // Only WhatsApp has a 24-hour customer-service window; email and web chat can always be answered.
-  const windowOpen = c.channel !== "whatsapp" || Boolean(c.lastInboundAt && Date.now() - c.lastInboundAt.getTime() < WINDOW_MS);
+  const windowed = c.channel === "whatsapp" || c.channel === "messenger" || c.channel === "instagram";
+  const windowOpen = !windowed || Boolean(c.lastInboundAt && Date.now() - c.lastInboundAt.getTime() < WINDOW_MS);
   const ca = c.channelAccount;
   return {
     id: c.id,
@@ -41,7 +42,7 @@ export function toConversationDto(c: ConvRow) {
     lastMessagePreview: c.lastMessagePreview,
     lastInboundAt: c.lastInboundAt,
     windowOpen,
-    windowExpiresAt: c.channel !== "whatsapp" ? null : c.lastInboundAt ? new Date(c.lastInboundAt.getTime() + WINDOW_MS) : null,
+    windowExpiresAt: !windowed ? null : c.lastInboundAt ? new Date(c.lastInboundAt.getTime() + WINDOW_MS) : null,
     isDemo: c.isDemo,
     contact: { id: c.contact.id, name: c.contact.name, phone: c.contact.phone, optInStatus: c.contact.optInStatus, tags: c.contact.tags.map((t) => t.tag) },
     assignedTo: c.assignedTo ? { id: c.assignedTo.id, name: c.assignedTo.name ?? c.assignedTo.email } : null,

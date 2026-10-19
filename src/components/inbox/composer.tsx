@@ -125,7 +125,7 @@ export function Composer({
       {mode === "reply" && reasons ? <Alert tone="warning" className="mb-2">{reasons}</Alert> : null}
       {mode === "reply" && !reasons && windowClosed ? (
         <Alert tone="info" className="mb-2">
-          The 24-hour customer service window is closed. Only approved templates can be sent until the customer replies.
+          {conversation.channel === "whatsapp" ? "The 24-hour customer service window is closed. Only approved templates can be sent until the customer replies." : "The 24-hour reply window is closed. You can answer again when the customer writes to you."}
         </Alert>
       ) : null}
       {error ? <Alert tone="danger" className="mb-2">{error}</Alert> : null}
@@ -175,7 +175,7 @@ export function Composer({
             }
           }}
           disabled={mode === "reply" ? replyDisabled || windowClosed : !canNote}
-          placeholder={mode === "note" ? "Write a note only your team can see…" : windowClosed ? "Window closed — send a template" : "Type a message…  (Enter to send, Shift+Enter for a new line)"}
+          placeholder={mode === "note" ? "Write a note only your team can see…" : windowClosed ? (conversation.channel === "whatsapp" ? "Window closed — send a template" : "Window closed — waiting for the customer") : "Type a message…  (Enter to send, Shift+Enter for a new line)"}
           className={cn(
             "app-scroll max-h-40 min-h-10 flex-1 resize-none rounded-[var(--radius-control)] border bg-app-bg px-3 py-2 text-body text-app-text placeholder:text-app-subtle focus:outline-none disabled:opacity-50",
             mode === "note" ? "border-amber-500/40 focus:border-amber-400" : "border-app-border focus:border-app-primary/70"

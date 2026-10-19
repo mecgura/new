@@ -7,6 +7,11 @@ import { assertBillingActive } from "@/services/billing/entitlements";
 import { can, getVisibleConversation, toMessageDto } from "@/services/inbox/conversations";
 import { emitMessageEvent } from "@/services/webhooks/events";
 import { sendCustomerEmail } from "@/providers/email/resend";
+import { decryptSecret } from "@/lib/crypto";
+import { MetaApiError } from "@/providers/meta/graph";
+import { sendSocialMessage } from "@/providers/meta/social";
+
+const WINDOW_MS = 24 * 60 * 60 * 1000;
 import type { SendInput } from "@/services/inbox/messaging";
 
 const include = {
@@ -26,6 +31,10 @@ export async function sendChannelReply(access: OrgAccess, conversationId: string
   if (!account || account.status === "disabled") throw new ApiError("CONFLICT", "This inbox is disabled. Enable it in Channels.");
   const contact = await db.contact.findUniqueOrThrow({ where: { id: conv.contactId } });
   if (contact.suppressed) throw new ApiError("CONFLICT", "This contact is on the suppression list. Messages are blocked.");
+  const social = account.kind === "messenger" || account.kind === "instagram";
+  if (social && (!conv.lastInboundAt || Date.now() - conv.lastInboundAt.getTime() >= WINDOW_MS)) {
+    throw new ApiError("CONFLICT", "The 24-hour reply window is closed. You can answer again when the customer writes to you.");
+  }
   await assertBillingActive(conv.organizationId);
 
   const isDemo = account.status === "demo";
@@ -67,6 +76,19 @@ export async function sendChannelReply(access: OrgAccess, conversationId: string
         data: r.ok ? { status: "sent", externalId: r.id, sentAt: now } : { status: "failed", failedAt: now, error: r.error },
       });
     }
+  } else if (social) {
+    try {
+      const ident = await db.contactIdentity.findFirst({ where: { contactId: contact.id, kind: account.kind } });
+      if (!ident || !account.encryptedToken) throw new Error("not connected");
+      const id = await sendSocialMessage(decryptSecret(account.encryptedToken), ident.value, input.body);
+      await db.message.update({ where: { id: msg.id }, data: { status: "sent", externalId: id ? `${account.id}:${id}` : `${account.id}:out.${randomUUID()}`, sentAt: now } });
+    } catch (e) {
+      const error = e instanceof MetaApiError ? e.message : "Sending failed.";
+      await db.message.update({ where: { id: msg.id }, data: { status: "failed", failedAt: now, error: error.slice(0, 500) } });
+    }
+  } else if (account.kind === "webchat") {
+    // Delivered to the visitor's widget the next time it polls.
+    await db.message.update({ where: { id: msg.id }, data: { status: "sent", externalId: `wc.out.${randomUUID()}`, sentAt: now } });
   } else {
     await db.message.update({ where: { id: msg.id }, data: { status: "failed", failedAt: now, error: "This channel can't send yet." } });
   }
