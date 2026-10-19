@@ -186,3 +186,10 @@ Serverless instances don't share memory, so the inbox no longer holds a stream o
 ## Public pages
 
 `/` is a public landing page (features, channel roadmap with honest "coming soon" labels, plans read from the database). `/privacy`, `/terms`, `/data-deletion` are public. Everything else requires sign-in. `robots.txt` allows only the public pages.
+
+## Lead Ads → WhatsApp, Click-to-WhatsApp, Embedded Signup
+
+* **Lead Ads** (`/lead-ads`): a client connects a Facebook Page (Page ID + Page access token with `leads_retrieval`). In the Meta app add the **Page** webhook with the same callback as WhatsApp (`/api/webhooks/meta`) and subscribe to `leadgen`. Each submission is saved as a contact (`source = meta_lead_ad`, consent recorded as `lead_form` **only because the owner confirmed the form asks for WhatsApp permission**) and receives the chosen approved template. Every lead leaves a `Lead` row (messaged / skipped / failed with the reason). A test button runs the full flow. Needs Meta app review for the Pages/leads permissions for pages MECGURA doesn't own.
+* **Click-to-WhatsApp**: the `referral` object Meta sends with a customer's first message is stored (`AdReferral`), shown in the inbox customer panel and summarised under Analytics → Click-to-WhatsApp ads.
+* **Embedded Signup**: Admin → WhatsApp Accounts shows what's missing (`META_APP_ID`, `META_APP_SECRET`, `META_EMBEDDED_SIGNUP_CONFIG_ID`, `META_WEBHOOK_VERIFY_TOKEN`). New numbers added through Embedded Signup are registered for the Cloud API with a generated PIN (stored encrypted) when Meta hasn't done so; coexistence numbers are not registered. Set `META_GRAPH_API_VERSION` to change the Graph version (default v23.0).
+* Realtime events, wallet and fees: see the sections above.

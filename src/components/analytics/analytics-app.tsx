@@ -245,6 +245,59 @@ export function AnalyticsApp({ orgId, numbers }: { orgId: string; numbers: { id:
           )}
         </Card>
       </div>
+      <AdsCard orgId={orgId} days={days} />
     </>
+  );
+}
+
+type AdsData = { days: number; totalChats: number; customers: number; optedIn: number; ads: { sourceId: string; sourceType: string; headline: string; chats: number; customers: number; lastAt: string }[] };
+
+/** Click-to-WhatsApp ads: which ads started chats in this period. Empty until a customer messages you from an ad. */
+function AdsCard({ orgId, days }: { orgId: string; days: string }) {
+  const [data, setData] = React.useState<AdsData | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    void apiFetch<AdsData>(`/api/organizations/${orgId}/ads?days=${days}`).then((r) => {
+      if (!cancelled && r.ok) setData(r.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId, days]);
+  if (!data) return null;
+  return (
+    <Card className="mt-4">
+      <CardHeader title="Click-to-WhatsApp ads" description="Chats that started from a Facebook or Instagram ad." />
+      {data.ads.length ? (
+        <>
+          <p className="px-5 pt-3 text-small text-app-muted">
+            {data.totalChats} chats from ads · {data.customers} customers · {data.optedIn} opted in
+          </p>
+          <Table caption="Ads that started chats" className="min-w-[420px]">
+            <THead>
+              <tr>
+                <TH>Ad</TH>
+                <TH className="text-right">Chats</TH>
+                <TH className="text-right">Customers</TH>
+              </tr>
+            </THead>
+            <TBody>
+              {data.ads.map((a) => (
+                <TR key={a.sourceId || a.headline}>
+                  <TD>
+                    {a.headline || `Ad ${a.sourceId}`}
+                    {a.headline && a.sourceId ? <span className="block text-caption text-app-subtle">Ad {a.sourceId}</span> : null}
+                  </TD>
+                  <TD className="text-right tabular-nums">{a.chats}</TD>
+                  <TD className="text-right tabular-nums">{a.customers}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </>
+      ) : (
+        <EmptyState icon={Workflow} title="No ad chats in this period" description="When someone messages you from a Click-to-WhatsApp ad, it shows up here." className="py-6" />
+      )}
+    </Card>
   );
 }

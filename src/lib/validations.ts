@@ -699,3 +699,39 @@ export const walletPricesSchema = z
   .object({ marketing: priceField, utility: priceField, authentication: priceField, service: priceField })
   .strict()
   .refine((v) => Object.values(v).some((x) => x !== undefined), "Send at least one price");
+
+// ---- Lead Ads ----------------------------------------------------------------
+
+const leadField = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9_.\- ]+$/, "Use the field name exactly as it appears on the form");
+
+export const leadSourceCreateSchema = z
+  .object({
+    name: z.string().trim().max(100).default(""),
+    pageId: z.string().trim().regex(/^\d{5,20}$/, "Page ID is a number"),
+    pageAccessToken: z.string().trim().min(50, "Access token looks too short").max(1024).regex(/^[A-Za-z0-9_\-|.]+$/, "Access token contains invalid characters"),
+    formId: z.string().trim().regex(/^\d{0,20}$/, "Form ID is a number").default(""),
+    whatsappAccountId: idSchema,
+    templateId: idSchema.nullable().default(null),
+    variables: z.record(z.string().max(64), variableMappingSchema).default({}),
+    phoneField: leadField.default("phone_number"),
+    nameField: leadField.default("full_name"),
+    emailField: leadField.default("email"),
+    consentConfirmed: z.boolean(),
+  })
+  .strict();
+
+export const leadSourceUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100).optional(),
+    status: z.enum(["active", "paused"]).optional(),
+    whatsappAccountId: idSchema.optional(),
+    templateId: idSchema.nullable().optional(),
+    variables: z.record(z.string().max(64), variableMappingSchema).optional(),
+    phoneField: leadField.optional(),
+    nameField: leadField.optional(),
+    emailField: leadField.optional(),
+  })
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, "Nothing to change");
+
+export const testLeadSchema = z.object({ phone: z.string().trim().min(8).max(20), name: z.string().trim().max(120).default("Test lead") }).strict();

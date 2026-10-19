@@ -96,6 +96,7 @@ model Organization {
   webhookDeliveries       WebhookDelivery[]
   invoices                Invoice[]
   wallet                  Wallet?
+  leadSources             LeadSource[]
   payments                Payment[]
 
   @@index([status])
@@ -383,6 +384,7 @@ model WhatsAppConnection {
   encryptedAccessToken String    @default("")
   tokenLast4           String    @default("")
   encryptedAppSecret   String    @default("")
+  encryptedRegistrationPin String @default("") // two-step verification PIN set when MECGURA registers the number
   tokenObtainedAt      DateTime?
   error                String    @default("")
   createdById          String?
@@ -1279,4 +1281,72 @@ model RealtimeEvent {
 
   @@index([organizationId, seq])
   @@index([createdAt])
+}
+
+// Click-to-WhatsApp ad (or post) a customer came from. Meta sends this with the customer's first message.
+model AdReferral {
+  id             String   @id @default(cuid())
+  organizationId String
+  conversationId String
+  contactId      String
+  messageId      String   @unique
+  sourceType     String   @default("") // ad | post
+  sourceId       String   @default("") // Meta ad id
+  sourceUrl      String   @default("")
+  headline       String   @default("")
+  body           String   @default("")
+  ctwaClid       String   @default("")
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, sourceId])
+  @@index([contactId])
+}
+
+// A Facebook Page whose Lead Ad forms feed MECGURA. Each new lead becomes a contact (with the consent the owner confirmed)
+// and, when a template is chosen, gets a WhatsApp message right away.
+model LeadSource {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  name               String
+  pageId             String    @unique
+  formId             String    @default("") // empty = every form on the page
+  encryptedPageToken String
+  tokenLast4         String    @default("")
+  whatsappAccountId  String
+  templateId         String? // approved template sent to each new lead; empty = only create the contact
+  variables          String    @default("{}") // JSON: template slot -> mapping (same format as campaigns)
+  phoneField         String    @default("phone_number")
+  nameField          String    @default("full_name")
+  emailField         String    @default("email")
+  consentConfirmed   Boolean   @default(false) // the owner confirmed the form asks permission to message on WhatsApp
+  status             String    @default("active") // active | paused
+  leadsCount         Int       @default(0)
+  lastLeadAt         DateTime?
+  createdById        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leads        Lead[]
+
+  @@index([organizationId])
+}
+
+model Lead {
+  id             String   @id @default(cuid())
+  organizationId String
+  sourceId       String
+  leadgenId      String   @unique
+  formId         String   @default("")
+  contactId      String?
+  status         String   @default("received") // received | messaged | skipped | failed
+  error          String   @default("")
+  isTest         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  source LeadSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([sourceId, createdAt])
 }

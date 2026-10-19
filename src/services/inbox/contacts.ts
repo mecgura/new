@@ -116,7 +116,7 @@ async function tabCounts(organizationId: string) {
 export async function getContactDetail(organizationId: string, id: string) {
   const c = await loadContact(organizationId, id);
   if (!c) throw new ApiError("NOT_FOUND", "Contact not found.");
-  const [notes, consents, conversations] = await Promise.all([
+  const [notes, consents, conversations, adReferrals] = await Promise.all([
     db.contactNote.findMany({ where: { contactId: id, organizationId }, orderBy: { createdAt: "desc" }, take: 50, include: { author: { select: { name: true, email: true } } } }),
     db.consentRecord.findMany({ where: { contactId: id, organizationId }, orderBy: { createdAt: "desc" }, take: 20, include: { recordedBy: { select: { name: true, email: true } } } }),
     db.conversation.findMany({
@@ -124,11 +124,13 @@ export async function getContactDetail(organizationId: string, id: string) {
       orderBy: { lastMessageAt: "desc" },
       include: { whatsappAccount: { select: { displayName: true, phoneNumber: true } }, assignedTo: { select: { id: true, name: true, email: true } } },
     }),
+    db.adReferral.findMany({ where: { contactId: id, organizationId }, orderBy: { createdAt: "desc" }, take: 5 }),
   ]);
   return {
     contact: toContactDto(c),
     notes: notes.map((n) => ({ id: n.id, body: n.body, createdAt: n.createdAt, author: n.author?.name ?? n.author?.email ?? "System" })),
     consents: consents.map((r) => ({ id: r.id, status: r.status, source: r.source, evidence: r.evidence, createdAt: r.createdAt, recordedBy: r.recordedBy?.name ?? r.recordedBy?.email ?? "System" })),
+    adReferrals: adReferrals.map((a) => ({ id: a.id, sourceType: a.sourceType, sourceId: a.sourceId, sourceUrl: a.sourceUrl, headline: a.headline, body: a.body, createdAt: a.createdAt })),
     conversations: conversations.map((cv) => ({
       id: cv.id,
       status: cv.status,
@@ -287,7 +289,7 @@ export async function addContactNote(ctx: Ctx, contactId: string, body: string) 
 export async function recordConsent(
   ctx: Ctx,
   contactId: string,
-  input: { status: "opted_in" | "opted_out"; source: "manual" | "import" | "inbound_keyword" | "api" | "flow" | "ai"; evidence: string },
+  input: { status: "opted_in" | "opted_out"; source: "manual" | "import" | "inbound_keyword" | "api" | "flow" | "ai" | "lead_form"; evidence: string },
   opts: { silent?: boolean } = {}
 ) {
   const c = await db.contact.findFirst({ where: { id: contactId, organizationId: ctx.organizationId }, select: { id: true, optInStatus: true } });

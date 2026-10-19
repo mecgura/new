@@ -25,6 +25,7 @@ type Detail = {
   notes: { id: string; body: string; createdAt: string; author: string }[];
   consents: { id: string; status: string; source: string; createdAt: string }[];
   conversations: { id: string; status: string; lastMessageAt: string; lastMessagePreview: string; account: string }[];
+  adReferrals?: { id: string; sourceType: string; sourceId: string; sourceUrl: string; headline: string; body: string; createdAt: string }[];
 };
 
 export const LEAD_STATUSES = ["new", "contacted", "qualified", "proposal", "won", "lost"];
@@ -127,6 +128,22 @@ export function CustomerPanel({
         </Link>
       </div>
 
+      {d.adReferrals?.length ? (
+        <Section title="Came from an ad">
+          <ul className="space-y-2">
+            {d.adReferrals.map((a) => (
+              <li key={a.id} className="rounded-lg border border-app-border p-2.5 text-small">
+                <p className="font-medium text-app-text">{a.headline || `Click-to-WhatsApp ${a.sourceType || "ad"}`}</p>
+                {a.body ? <p className="mt-0.5 line-clamp-2 text-app-muted">{a.body}</p> : null}
+                <p className="mt-1 text-caption text-app-subtle">
+                  {a.sourceId ? `Ad ${a.sourceId} · ` : ""}
+                  {dayFmt.format(new Date(a.createdAt))}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
       <Section title="Tags">
         <div className="flex flex-wrap gap-1.5">
           {c.tags.map((t) => (

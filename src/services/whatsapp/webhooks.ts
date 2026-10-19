@@ -8,6 +8,7 @@ import { toE164 } from "@/providers/meta/api";
 import { incrementUsage } from "@/lib/services/usage";
 import { applyStatusUpdate, fromMetaMessage, receiveInbound } from "@/services/inbox/messaging";
 import { applyTemplateWebhook } from "@/services/templates/templates";
+import { handleLeadgen } from "@/services/leads/leads";
 
 /**
  * GET verification handshake. Accepts MECGURA's platform verify token or the
@@ -44,6 +45,7 @@ export async function ingestWebhook(raw: Buffer, signatureHeader: string | null)
   } catch {
     return { ok: false, status: 400, error: "Invalid JSON" };
   }
+  if ((payload as { object?: string }).object === "page") return ingestPageWebhook(raw, signatureHeader, payload as unknown as PageWebhookPayload);
   if (payload.object !== "whatsapp_business_account" || !Array.isArray(payload.entry)) {
     console.warn(`[webhook:meta] unsupported object="${String(payload.object).slice(0, 40)}" entries=${Array.isArray(payload.entry) ? payload.entry.length : "n/a"}`);
     return { ok: false, status: 400, error: "Unsupported webhook object" };
@@ -161,4 +163,43 @@ async function processEvent(organizationId: string, wabaRecordId: string, ev: No
     default:
       return "ignored";
   }
+}
+
+// ---------------------------------------------------------------------------
+// Facebook Page events (Lead Ads)
+// ---------------------------------------------------------------------------
+
+type PageWebhookPayload = { object: "page"; entry?: { id?: string | number; changes?: { field?: string; value?: { leadgen_id?: string | number; form_id?: string | number; page_id?: string | number } }[] }[] };
+
+/**
+ * Page webhooks carry Lead Ad submissions (`leadgen`). Same rule as WhatsApp events: nothing is trusted until the signature
+ * matches MECGURA's Meta app secret, or the app secret a client stored for the connection that owns the Page.
+ */
+async function ingestPageWebhook(raw: Buffer, signatureHeader: string | null, payload: PageWebhookPayload): Promise<IngestResult> {
+  if (!Array.isArray(payload.entry)) return { ok: false, status: 400, error: "Unsupported webhook object" };
+  const pageIds = [...new Set(payload.entry.map((e) => String(e.id ?? "")).filter(Boolean))];
+  const sources = await db.leadSource.findMany({ where: { pageId: { in: pageIds } }, select: { organizationId: true } });
+  const conns = sources.length
+    ? await db.whatsAppConnection.findMany({ where: { organizationId: { in: [...new Set(sources.map((s) => s.organizationId))] }, status: "active", encryptedAppSecret: { not: "" } }, select: { encryptedAppSecret: true } })
+    : [];
+  const secrets = [getMetaConfig().appSecret];
+  for (const c of conns) {
+    try {
+      secrets.push(decryptSecret(c.encryptedAppSecret));
+    } catch {
+      /* unreadable secret → skip */
+    }
+  }
+  if (!verifySignature(raw, signatureHeader, secrets)) return { ok: false, status: 401, error: "Invalid signature" };
+  let received = 0;
+  let duplicates = 0;
+  for (const entry of payload.entry) {
+    for (const change of entry.changes ?? []) {
+      if (change.field !== "leadgen" || !change.value?.leadgen_id) continue;
+      const result = await handleLeadgen(String(change.value.page_id ?? entry.id ?? ""), String(change.value.leadgen_id), String(change.value.form_id ?? ""));
+      if (result === "duplicate") duplicates++;
+      else if (result !== "ignored") received++;
+    }
+  }
+  return { ok: true, received, duplicates };
 }

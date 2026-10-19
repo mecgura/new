@@ -353,6 +353,47 @@ export async function sendSystemText(organizationId: string, conversationId: str
   return msg.id;
 }
 
+/**
+ * Sends an approved template to a contact on behalf of MECGURA itself (lead-ad auto replies). Same rules as a campaign message:
+ * opted-in, not suppressed, approved template, active billing, plan and wallet limits. Returns the stored message id.
+ */
+export async function sendTemplateToContact(organizationId: string, whatsappAccountId: string, contactId: string, templateId: string, values: SlotValues, origin: Record<string, unknown>) {
+  const acct = await db.whatsAppAccount.findFirst({ where: { id: whatsappAccountId, organizationId }, include: { connection: { select: { encryptedAccessToken: true } } } });
+  if (!acct || (acct.status !== "connected" && acct.status !== "demo")) throw new SystemSendError("The WhatsApp number is disconnected.");
+  const contact = await db.contact.findFirst({ where: { id: contactId, organizationId } });
+  if (!contact) throw new SystemSendError("Contact not found.");
+  if (contact.suppressed || contact.optInStatus === "opted_out") throw new SystemSendError("The contact opted out or is suppressed — not messaged.");
+  if (contact.optInStatus !== "opted_in") throw new SystemSendError("No WhatsApp consent is recorded for this contact.");
+  let t;
+  try {
+    t = await requireApprovedTemplate(organizationId, acct.wabaRecordId, { templateId });
+    assertTemplateValues(t, values);
+    await assertBillingActive(organizationId);
+    const sub = await currentPlan(organizationId);
+    if (sub && !acct.isDemo && wouldExceed(await monthTotal(organizationId, "messages_sent"), sub.plan.maxMonthlyMessages)) throw new ApiError("CONFLICT", `The ${sub.plan.name} plan's monthly message limit is reached.`);
+    const { payload: p0, stored: s0 } = templateMessage(t, values);
+    void p0;
+    if (!acct.isDemo) await assertCanAfford(organizationId, categoryOfMessage("template", s0));
+  } catch (e) {
+    throw new SystemSendError(e instanceof ApiError ? e.message : "The template can't be sent.");
+  }
+  const { payload, body, stored } = templateMessage(t, values);
+  const now = new Date();
+  const conv =
+    (await db.conversation.findUnique({ where: { whatsappAccountId_contactId: { whatsappAccountId: acct.id, contactId: contact.id } } })) ??
+    (await db.conversation.create({ data: { organizationId, contactId: contact.id, whatsappAccountId: acct.id, isDemo: acct.isDemo, lastMessagePreview: "" } }));
+  const msg = await db.message.create({
+    data: { organizationId, conversationId: conv.id, direction: "outbound", type: "template", body, payload: JSON.stringify({ ...stored, ...origin }), status: "pending", isDemo: acct.isDemo },
+  });
+  await db.conversation.update({ where: { id: conv.id }, data: { lastMessageAt: now, lastMessagePreview: preview("template", body) } });
+  await db.contact.update({ where: { id: contact.id }, data: { lastMessageAt: now } });
+  const sent = await transmit(msg.id, { isDemo: acct.isDemo, phoneNumberId: acct.phoneNumberId, connection: acct.connection }, contact.phone, payload, undefined);
+  publish(organizationId, { type: "message.created", conversationId: conv.id, messageId: msg.id, assignedToUserId: conv.assignedToUserId });
+  if (sent.status !== "sent") throw new SystemSendError(sent.error || "Sending failed.", "retryable" in sent && Boolean(sent.retryable));
+  if (acct.isDemo && acct.phoneRecordId) await db.phoneNumber.update({ where: { id: acct.phoneRecordId }, data: { messagesSent: { increment: 1 } } });
+  return msg.id;
+}
+
 // ---------------------------------------------------------------------------
 // Inbound + delivery states (used by the Meta webhook and the demo simulator)
 // ---------------------------------------------------------------------------
@@ -366,6 +407,8 @@ export type InboundInput = {
   payload?: Record<string, unknown>;
   attachments?: { kind: MediaKind; mimeType: string; filename: string; providerMediaId: string; sha256: string; caption: string }[];
   replyToExternalId?: string;
+  /** Click-to-WhatsApp ad this message came from (Meta sends it with the customer's first message). */
+  referral?: { sourceType: string; sourceId: string; sourceUrl: string; headline: string; body: string; ctwaClid: string };
   at: Date;
   isDemo: boolean;
 };
@@ -400,6 +443,9 @@ export async function receiveInbound(organizationId: string, whatsappAccountId: 
       ...(input.attachments?.length ? { attachments: { create: input.attachments } } : {}),
     },
   });
+  if (input.referral && (input.referral.sourceId || input.referral.sourceUrl || input.referral.headline)) {
+    await db.adReferral.create({ data: { organizationId, conversationId: conv.id, contactId: contact.id, messageId: msg.id, ...input.referral } }).catch((e) => console.error("[ads] saving referral failed:", e));
+  }
   // Consent keywords (WhatsApp best practice): STOP opts out, START opts back in.
   const text = input.type === "text" || input.type === "button" ? input.body.trim() : "";
   const optOut = OPT_OUT.test(text);
@@ -471,6 +517,14 @@ export async function applyStatusUpdate(organizationId: string, externalId: stri
 
 /** Meta inbound message object → InboundInput. Unsupported types are kept with a readable summary. */
 export function fromMetaMessage(raw: Record<string, unknown>, from: string, profileName: string): Omit<InboundInput, "isDemo"> {
+  const parsed = parseMetaMessage(raw, from, profileName);
+  const ref = raw.referral as Record<string, unknown> | undefined;
+  if (!ref || typeof ref !== "object") return parsed;
+  const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
+  return { ...parsed, referral: { sourceType: str(ref.source_type, 20), sourceId: str(ref.source_id, 100), sourceUrl: str(ref.source_url, 500), headline: str(ref.headline, 300), body: str(ref.body, 500), ctwaClid: str(ref.ctwa_clid, 300) } };
+}
+
+function parseMetaMessage(raw: Record<string, unknown>, from: string, profileName: string): Omit<InboundInput, "isDemo" | "referral"> {
   const type = String(raw.type ?? "unsupported");
   const at = raw.timestamp ? new Date(Number(raw.timestamp) * 1000) : new Date();
   const base = { externalId: String(raw.id), fromPhone: normalizePhone(from) ?? `+${from}`, profileName, at, replyToExternalId: (raw.context as { id?: string } | undefined)?.id };

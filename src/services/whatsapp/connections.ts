@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { db } from "@/lib/db";
 import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
@@ -15,6 +16,7 @@ import {
   getWaba,
   listPhoneNumbers,
   listSubscribedApps,
+  registerPhoneNumber,
   subscribeAppToWaba,
   toE164,
   unsubscribeAppFromWaba,
@@ -69,6 +71,8 @@ type PersistInput = {
   };
   accessToken?: string;
   appSecret?: string;
+  /** Two-step verification PIN set while registering the number (stored encrypted). */
+  registrationPin?: string;
   /** "platform" = MECGURA's Meta app; "own_app" = client's app (needs its own verify token); "none" = demo. */
   webhookMode: "platform" | "own_app" | "none";
   appSubscribed: boolean;
@@ -105,6 +109,7 @@ async function persistConnection(ctx: ActorCtx, input: PersistInput) {
       encryptedAccessToken: encToken,
       tokenLast4: input.accessToken ? last4(input.accessToken) : "",
       encryptedAppSecret: encSecret,
+      ...(input.registrationPin ? { encryptedRegistrationPin: encryptSecret(input.registrationPin) } : {}),
       tokenObtainedAt: input.accessToken ? now : null,
       connectedAt: now,
       error: "",
@@ -261,8 +266,20 @@ export async function completeEmbeddedSignup(ctx: ActorCtx, input: { state: stri
     const { accessToken } = await exchangeCodeForToken(input.code);
     const details = await fetchFromMeta(input.wabaId, input.phoneNumberId, accessToken);
     const appSubscribed = await subscribeAppToWaba(input.wabaId, accessToken).catch(() => false);
+    // A new number must be registered for the Cloud API before it can send or receive. Coexistence numbers stay on the
+    // customer's WhatsApp Business app and are not registered here. A failure is not fatal: the connection check shows it.
+    let registrationPin: string | undefined;
+    if (conn.method === "embedded_signup" && details.phone.platformType !== "CLOUD_API") {
+      const pin = String(randomInt(100000, 1000000));
+      try {
+        if (await registerPhoneNumber(input.phoneNumberId, accessToken, pin)) registrationPin = pin;
+      } catch (e) {
+        console.warn("[whatsapp] number registration failed:", e instanceof MetaApiError ? e.message : "unknown error");
+      }
+    }
     return await persistConnection(ctx, {
       method: conn.method as "embedded_signup" | "coexistence",
+      registrationPin,
       isDemo: false,
       existingConnectionId: conn.id,
       ...details,

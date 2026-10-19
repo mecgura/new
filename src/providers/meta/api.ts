@@ -76,6 +76,12 @@ export async function getWebhookConfiguration(phoneNumberId: string, token: stri
   return r.webhook_configuration ?? {};
 }
 
+/** Registers a phone number for the Cloud API and sets its two-step verification PIN. */
+export async function registerPhoneNumber(phoneNumberId: string, token: string, pin: string): Promise<boolean> {
+  const r = await graph<{ success?: boolean }>(`${phoneNumberId}/register`, { token, method: "POST", body: { messaging_product: "whatsapp", pin } });
+  return r.success === true;
+}
+
 export async function unsubscribeAppFromWaba(wabaId: string, token: string): Promise<boolean> {
   const r = await graph<{ success?: boolean }>(`${wabaId}/subscribed_apps`, { token, method: "DELETE" });
   return r.success === true;
@@ -85,4 +91,24 @@ export async function unsubscribeAppFromWaba(wabaId: string, token: string): Pro
 export function toE164(display: string): string {
   const digits = display.replace(/\D/g, "");
   return `+${digits}`;
+}
+
+// ---- Facebook Pages / Lead Ads -------------------------------------------------------------------
+
+export type MetaLead = { id: string; field_data?: { name: string; values?: string[] }[]; form_id?: string };
+
+/** Checks a Page access token and returns the Page's id and name. */
+export function getPageInfo(pageId: string, pageToken: string) {
+  return graph<{ id: string; name?: string }>(pageId, { token: pageToken, query: { fields: "id,name" } });
+}
+
+/** Subscribes the app to the Page's lead form submissions. */
+export async function subscribePageToLeads(pageId: string, pageToken: string): Promise<boolean> {
+  const r = await graph<{ success?: boolean }>(`${pageId}/subscribed_apps`, { token: pageToken, method: "POST", body: { subscribed_fields: ["leadgen"] } });
+  return r.success === true;
+}
+
+/** Reads one submitted lead (needs the leads_retrieval permission on the Page token). */
+export function getLead(leadgenId: string, pageToken: string) {
+  return graph<MetaLead>(leadgenId, { token: pageToken, query: { fields: "id,field_data,form_id" } });
 }

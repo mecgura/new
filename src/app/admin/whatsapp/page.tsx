@@ -24,6 +24,7 @@ import {
 } from "@/components/ds";
 import { WHATSAPP_STATUS_LABELS } from "@/lib/catalog";
 import { usePaged } from "@/components/admin/use-paged";
+import { apiFetch } from "@/lib/client-api";
 
 type Account = {
   id: string;
@@ -37,6 +38,56 @@ type Account = {
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
 
+type Readiness = { embeddedSignupReady: boolean; missing: string[]; encryptionReady: boolean; graphVersion: string; callbackUrl: string };
+
+/** Whether "Connect with Meta" (Embedded Signup) can work for clients, and what to do when it can't. */
+function MetaReadiness() {
+  const [r, setR] = React.useState<Readiness | null>(null);
+  React.useEffect(() => {
+    let off = false;
+    void apiFetch<Readiness>("/api/admin/meta-readiness").then((x) => {
+      if (!off && x.ok) setR(x.data);
+    });
+    return () => {
+      off = true;
+    };
+  }, []);
+  if (!r) return null;
+  return (
+    <Card className="mb-4">
+      <div className="space-y-3 p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="font-semibold text-app-text">Connect with Meta (Embedded Signup)</h2>
+          <Badge tone={r.embeddedSignupReady ? "success" : "warning"}>{r.embeddedSignupReady ? "Ready" : "Not set up"}</Badge>
+        </div>
+        {r.embeddedSignupReady ? (
+          <p className="text-small text-app-muted">Clients can connect a WhatsApp number with their Facebook login. Graph API {r.graphVersion}.</p>
+        ) : (
+          <>
+            <p className="text-small text-app-muted">
+              Clients can still connect with <strong>API / Developer setup</strong>. To enable the one-click flow, MECGURA&apos;s Meta app must become a Tech Provider and these settings must be added in Vercel:
+            </p>
+            <ul className="flex flex-wrap gap-2">
+              {r.missing.map((m) => (
+                <li key={m} className="rounded bg-app-hover px-2 py-1 font-mono text-caption">
+                  {m}
+                </li>
+              ))}
+            </ul>
+            <ol className="list-decimal space-y-1 pl-5 text-small text-app-muted">
+              <li>Complete Business Verification for MECGURA in Meta Business Settings.</li>
+              <li>In your Meta app, add WhatsApp and Facebook Login for Business, then apply to become a Tech Provider.</li>
+              <li>Create an Embedded Signup configuration (version 4) and copy its configuration ID.</li>
+              <li>Set the webhook callback to <code className="rounded bg-app-hover px-1">{r.callbackUrl}</code> with your verify token, and subscribe to messages and account_update.</li>
+            </ol>
+          </>
+        )}
+        {!r.encryptionReady ? <Alert tone="danger">WHATSAPP_ENCRYPTION_KEY is missing. Client credentials can&apos;t be stored securely until it is set.</Alert> : null}
+      </div>
+    </Card>
+  );
+}
+
 export default function AdminWhatsAppPage() {
   const [q, setQ] = React.useState("");
   const [status, setStatus] = React.useState("");
@@ -45,9 +96,7 @@ export default function AdminWhatsAppPage() {
   return (
     <>
       <PageHeader title="WhatsApp Accounts" description="Every WhatsApp Business number registered to a client." breadcrumb={[{ label: "Admin", href: "/admin" }, { label: "WhatsApp Accounts" }]} />
-      <Alert tone="info" title="Management only" className="mb-4">
-        Numbers are registered per client from <strong>Clients → WhatsApp</strong>. Live connection to the Meta WhatsApp Cloud API (and the Connected status) arrives in the WhatsApp phase.
-      </Alert>
+      <MetaReadiness />
       <Card>
         <FilterBar>
           <SearchBar label="Search numbers" placeholder="Number, name or client…" value={q} onChange={(e) => setQ(e.target.value)} className="sm:w-72" />

@@ -12,6 +12,7 @@ import * as demoRoute from "@/app/api/organizations/[orgId]/whatsapp/connect/dem
 import * as accountRoute from "@/app/api/organizations/[orgId]/whatsapp/accounts/[accountId]/route";
 import * as disconnectRoute from "@/app/api/organizations/[orgId]/whatsapp/accounts/[accountId]/disconnect/route";
 import * as tokenRoute from "@/app/api/organizations/[orgId]/whatsapp/accounts/[accountId]/token/route";
+import * as adsRoute from "@/app/api/organizations/[orgId]/ads/route";
 import * as diagnoseRoute from "@/app/api/organizations/[orgId]/whatsapp/accounts/[accountId]/diagnose/route";
 import * as webhookInfoRoute from "@/app/api/organizations/[orgId]/whatsapp/accounts/[accountId]/webhook/route";
 import * as metaWebhook from "@/app/api/webhooks/meta/route";
@@ -38,7 +39,7 @@ type GraphCall = { method: string; url: URL; auth: string | null };
 let calls: GraphCall[] = [];
 
 /** Fake Graph API. Only graph.facebook.com is intercepted. */
-function mockMeta(cfg: { wabaId: string; phoneNumberId: string; local: string; token?: string; fail?: { status: number; message: string }; phoneOutsideWaba?: boolean }) {
+function mockMeta(cfg: { wabaId: string; phoneNumberId: string; local: string; token?: string; fail?: { status: number; message: string }; phoneOutsideWaba?: boolean; platform?: string }) {
   calls = [];
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -50,10 +51,11 @@ function mockMeta(cfg: { wabaId: string; phoneNumberId: string; local: string; t
     const path = url.pathname.replace(/^\/v[\d.]+\//, "");
     if (path === "oauth/access_token") return reply({ access_token: cfg.token ?? "EAAG-exchanged-token-xyz" });
     if (path === `${cfg.wabaId}/subscribed_apps`) return reply({ success: true });
+    if (path === `${cfg.phoneNumberId}/register`) return reply({ success: true });
     if (path === `${cfg.wabaId}/phone_numbers`) return reply({ data: cfg.phoneOutsideWaba ? [] : [{ id: cfg.phoneNumberId }] });
     if (path === cfg.wabaId) return reply({ id: cfg.wabaId, name: "Jay Shri Enterprises", currency: "INR", timezone_id: "71", owner_business_info: { id: "998877", name: "Jay Shri" } });
     if (path === cfg.phoneNumberId) {
-      return reply({ id: cfg.phoneNumberId, display_phone_number: `+91 ${cfg.local.slice(0, 5)} ${cfg.local.slice(5)}`, verified_name: "Jay Shri", quality_rating: "GREEN", messaging_limit_tier: "TIER_1K", code_verification_status: "VERIFIED" });
+      return reply({ id: cfg.phoneNumberId, display_phone_number: `+91 ${cfg.local.slice(0, 5)} ${cfg.local.slice(5)}`, verified_name: "Jay Shri", quality_rating: "GREEN", messaging_limit_tier: "TIER_1K", code_verification_status: "VERIFIED", ...(cfg.platform ? { platform_type: cfg.platform } : {}) });
     }
     return reply({ error: { message: "Unknown path" } }, 404);
   });
@@ -275,8 +277,40 @@ describe("Meta Embedded Signup", () => {
     const conn = await db.whatsAppConnection.findFirstOrThrow({ where: { organizationId: org.id, method: "embedded_signup" }, include: { webhook: true } });
     expect(decryptSecret(conn.encryptedAccessToken)).toBe("EAAG-exchanged-token-xyz");
     expect(conn.webhook?.status).toBe("subscribed");
+    // A number that isn't on the Cloud API yet is registered with a PIN, which is stored encrypted.
+    const reg = calls.find((c) => c.method === "POST" && c.url.pathname.endsWith(`/${ids.phoneNumberId}/register`));
+    expect(reg).toBeDefined();
+    expect(decryptSecret(conn.encryptedRegistrationPin)).toMatch(/^\d{6}$/);
+    expect(JSON.stringify(done.body)).not.toContain(decryptSecret(conn.encryptedRegistrationPin));
 
     expect((await completeRoute.POST(post({ state, code: "AQD-code-from-meta", ...ids }), p(org.id))).status).toBe(400);
+  });
+
+  it("does not register a number that is already on the Cloud API, and a failed registration does not fail the connection", async () => {
+    configure();
+    const a = await makeTenant();
+    actAs(a.owner);
+    const s1 = await json(await startRoute.POST(post({ method: "embedded_signup" }), p(a.org.id)));
+    const ids1 = metaIds();
+    mockMeta({ ...ids1, platform: "CLOUD_API" });
+    const r1 = await json(await completeRoute.POST(post({ state: s1.body.state, code: "AQD-code-one-1", ...ids1 }), p(a.org.id)));
+    expect(r1.status).toBe(201);
+    expect(calls.some((c) => c.url.pathname.endsWith("/register"))).toBe(false);
+
+    const b = await makeTenant();
+    actAs(b.owner);
+    const s2 = await json(await startRoute.POST(post({ method: "embedded_signup" }), p(b.org.id)));
+    const ids2 = metaIds();
+    mockMeta({ ...ids2 });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const orig = globalThis.fetch;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input).includes("/register")) return new Response(JSON.stringify({ error: { message: "Registration failed" } }), { status: 400 });
+      return orig(input, init);
+    });
+    const done = await json(await completeRoute.POST(post({ state: s2.body.state, code: "AQD-code-two-2", ...ids2 }), p(b.org.id)));
+    expect(done.status).toBe(201);
+    expect((await db.whatsAppConnection.findFirstOrThrow({ where: { organizationId: b.org.id } })).encryptedRegistrationPin).toBe("");
   });
 
   it("rejects a state from another organization and expired states", async () => {
@@ -466,6 +500,31 @@ describe("webhook endpoint /api/webhooks/meta", () => {
     const events = await db.webhookEvent.findMany({ where: { organizationId: org.id } });
     expect(events.every((e) => e.status === "processed")).toBe(true);
     expect((await db.webhookConfiguration.findFirstOrThrow({ where: { organizationId: org.id } })).lastEventAt).not.toBeNull();
+  });
+
+  it("keeps the Click-to-WhatsApp ad a customer came from and reports it per ad, per workspace", async () => {
+    const a = await makeTenant();
+    const b = await makeTenant();
+    actAs(a.owner);
+    const r = await connectManual(a.org.id);
+    const referral = { source_url: "https://fb.me/ad123", source_id: "6001122334455", source_type: "ad", headline: "Diwali sale: 20% off", body: "Chat to claim", ctwa_clid: "AfXyz" };
+    for (const phone of ["919811100001", "919811100002"]) {
+      const msg = envelope(r.ids.wabaId, { metadata: { phone_number_id: r.ids.phoneNumberId }, messages: [{ id: `wamid.ad${seq++}`, from: phone, type: "text", text: { body: "Hi, interested" }, timestamp: "1", referral }] });
+      expect((await metaWebhook.POST(signed(msg, r.secret))).status).toBe(200);
+    }
+    const plain = envelope(r.ids.wabaId, { metadata: { phone_number_id: r.ids.phoneNumberId }, messages: [{ id: `wamid.pl${seq++}`, from: "919811100003", type: "text", text: { body: "hello" }, timestamp: "1" }] });
+    await metaWebhook.POST(signed(plain, r.secret));
+
+    const rows = await db.adReferral.findMany({ where: { organizationId: a.org.id } });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ sourceType: "ad", sourceId: "6001122334455", headline: "Diwali sale: 20% off", ctwaClid: "AfXyz" });
+
+    const sum = await json(await adsRoute.GET(req("/x?days=30"), p(a.org.id)));
+    expect(sum.status).toBe(200);
+    expect(sum.body).toMatchObject({ totalChats: 2, customers: 2, ads: [{ sourceId: "6001122334455", chats: 2, customers: 2 }] });
+    actAs(b.owner);
+    expect((await json(await adsRoute.GET(req("/x?days=30"), p(b.org.id)))).body).toMatchObject({ totalChats: 0, ads: [] });
+    expect([403, 404]).toContain((await adsRoute.GET(req("/x"), p(a.org.id))).status);
   });
 
   it("signed events for unknown WABAs are stored as ignored (platform secret)", async () => {
