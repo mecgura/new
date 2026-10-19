@@ -8,6 +8,7 @@ import { wouldExceed } from "@/lib/plans";
 import { assertBillingActive } from "@/services/billing/entitlements";
 import type { OrgAccess } from "@/lib/session";
 import { MetaApiError } from "@/providers/meta/graph";
+import { assertCanAfford, categoryOfMessage, chargeMessage } from "@/services/wallet-pricing";
 import { downloadMedia, sendMessage as metaSend, uploadMedia, type OutboundPayload } from "@/providers/meta/messages";
 import { can, getVisibleConversation, toMessageDto, visibilityWhere } from "@/services/inbox/conversations";
 import { normalizePhone, recordConsent, upsertInboundContact } from "@/services/inbox/contacts";
@@ -132,6 +133,7 @@ export function toPayload(input: Exclude<SendInput, { type: "template" } | { typ
 /** Sends one stored message and reports it to webhook subscribers (message.sent / message.failed). */
 export async function transmit(messageId: string, account: Parameters<typeof transmitInner>[1], to: string, payload: OutboundPayload, replyToExternalId: string | undefined) {
   const result = await transmitInner(messageId, account, to, payload, replyToExternalId);
+  if (result.status === "sent") await chargeMessage(messageId).catch((e) => console.error("[wallet] charging failed for", messageId, e));
   await emitMessageEvent(result.status === "sent" ? "message.sent" : "message.failed", messageId);
   return result;
 }
@@ -191,6 +193,7 @@ export async function sendMessage(access: OrgAccess, conversationId: string, inp
     built = toPayload(input, mediaId);
   }
   const { payload, body, stored } = built;
+  if (!account.isDemo) await assertCanAfford(conv.organizationId, categoryOfMessage(input.type === "template" ? "template" : input.type, stored));
   const isMedia = input.type === "image" || input.type === "video" || input.type === "audio" || input.type === "document";
 
   const msg = await db.message.create({
@@ -331,6 +334,13 @@ export async function sendSystemText(organizationId: string, conversationId: str
   if (!conv.lastInboundAt || Date.now() - conv.lastInboundAt.getTime() >= WINDOW_MS) throw new SystemSendError("The 24-hour window is closed.");
   const input = buttons.length ? ({ type: "interactive", body: text.slice(0, 1024), buttons: buttons.slice(0, 3).map((b, i) => ({ id: `btn_${i + 1}`, title: b.slice(0, 20) })) } as const) : ({ type: "text", body: text.slice(0, 4096) } as const);
   const { payload, body, stored } = toPayload(input);
+  if (!acct.isDemo) {
+    try {
+      await assertCanAfford(organizationId, "service");
+    } catch (e) {
+      throw new SystemSendError(e instanceof ApiError ? e.message : "Wallet balance is too low.");
+    }
+  }
   const msg = await db.message.create({
     data: { organizationId, conversationId, direction: "outbound", type: input.type, body, payload: JSON.stringify({ ...stored, ...origin }), status: "pending", isDemo: acct.isDemo },
   });

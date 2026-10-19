@@ -4,6 +4,7 @@ import * as React from "react";
 import { Alert, Button, Card, CardBody, CardHeader, ConfirmationDialog, Field, Input, useToast } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
 import { formatINR } from "@/lib/catalog";
+import { FeeEditor } from "@/components/wallet/fee-editor";
 import { WalletBalance, WalletLedger, WalletLoading, useWallet } from "@/components/wallet/wallet-parts";
 
 /** Super Admin: add money received from the client, take back a mistaken credit, set the low-balance alert. */
@@ -86,6 +87,7 @@ export function AdminWallet({ organizationId }: { organizationId: string }) {
           </div>
         </CardBody>
       </Card>
+      <FeeEditor url={`${url}/prices`} scope="client" />
       <Alert tone="info">This is prepaid MECGURA service credit. It does not pay Meta: the client&apos;s WhatsApp message charges are billed by Meta to their own WhatsApp Business account.</Alert>
       <WalletLedger data={data} onPage={setPage} />
       <ConfirmationDialog

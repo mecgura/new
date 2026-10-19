@@ -29,6 +29,10 @@ import * as quality from "@/app/api/organizations/[orgId]/quality/route";
 import * as cron from "@/app/api/cron/campaigns/route";
 import * as metaWebhook from "@/app/api/webhooks/meta/route";
 import { processCampaign, runDueCampaigns } from "@/services/campaigns/sender";
+import { runCompliance } from "@/services/campaigns/compliance";
+import { encryptSecret } from "@/lib/crypto";
+import { creditWallet, getWallet } from "@/services/wallet";
+import { setPrices } from "@/services/wallet-pricing";
 
 type U = Awaited<ReturnType<typeof makeUser>>;
 type Tenant = { orgId: string; owner: U; manager: U; agent: U; accountId: string; wabaId: string };
@@ -454,5 +458,75 @@ describe("live WhatsApp account (Meta mocked)", () => {
     const titles = (q.body.alerts as { title: string }[]).map((a) => a.title);
     expect(titles.some((x) => x.includes("live_offer"))).toBe(true);
     expect(titles.some((x) => x.includes("low quality"))).toBe(true);
+  });
+});
+
+describe("MECGURA message fee on campaigns (wallet)", () => {
+  const PLAIN = { name: "plain_offer", category: "MARKETING", body: "New stock is in at our store. Reply STOP to unsubscribe." };
+
+  /** A live (non-demo) account, an approved template, a campaign in "sending" and three opted-in recipients. */
+  async function liveCampaign() {
+    const t = await makeTenant();
+    const tid = await approvedTemplate(t, PLAIN);
+    const conn = await db.whatsAppConnection.create({ data: { organizationId: t.orgId, method: "manual", status: "active", encryptedAccessToken: encryptSecret("EAAGtesttoken") } });
+    await db.whatsAppAccount.update({ where: { id: t.accountId }, data: { isDemo: false, status: "connected", phoneNumberId: `pn${Date.now()}${n}`, connectionId: conn.id } });
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i++) ids.push(await addContact(t, { name: `C${i}`, optInStatus: "opted_in" }));
+    const camp = await db.campaign.create({
+      data: { organizationId: t.orgId, name: "Fee test", whatsappAccountId: t.accountId, templateId: tid, status: "sending", startedAt: new Date(), audience: JSON.stringify({ mode: "contacts", contactIds: ids }), variables: "{}", totalRecipients: 3 },
+    });
+    for (const id of ids) {
+      const c = await db.contact.findUniqueOrThrow({ where: { id } });
+      await db.campaignRecipient.create({ data: { organizationId: t.orgId, campaignId: camp.id, contactId: id, phone: c.phone, name: c.name, variables: "{}" } });
+    }
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (new URL(String(input)).hostname !== "graph.facebook.com") throw new Error("unexpected fetch");
+      return new Response(JSON.stringify({ messages: [{ id: `wamid.${Math.random().toString(36).slice(2)}` }] }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    return { t, camp };
+  }
+
+  it("the compliance review fails when the wallet can't cover the audience, and passes when it can", async () => {
+    const { t, camp } = await liveCampaign();
+    await setPrices(t.orgId, { marketing: 100 }, t.owner.id);
+    await creditWallet(t.orgId, { actorUserId: t.owner.id }, { amount: 250 });
+    const low = (await runCompliance(camp.id)).report;
+    const check = low.checks.find((c) => c.key === "wallet");
+    expect(check).toMatchObject({ status: "fail" });
+    expect(check?.detail).toMatch(/3 × ₹1 marketing fee/);
+    expect(low.canSend).toBe(false);
+    await creditWallet(t.orgId, { actorUserId: t.owner.id }, { amount: 100 });
+    const ok = (await runCompliance(camp.id)).report;
+    expect(ok.checks.find((c) => c.key === "wallet")?.status).toBe("pass");
+    expect(ok.canSend).toBe(true);
+  });
+
+  it("no price set: nothing is checked, charged or blocked, even with an empty wallet", async () => {
+    const { t, camp } = await liveCampaign();
+    const report = (await runCompliance(camp.id)).report;
+    expect(report.checks.some((c) => c.key === "wallet")).toBe(false);
+    const run = await processCampaign(camp.id);
+    expect(run).toMatchObject({ sent: 3, done: true });
+    expect((await getWallet(t.orgId)).balance).toBe(0);
+  });
+
+  it("sending charges per message and pauses (nothing lost) when the wallet runs out; adding credit lets it finish", async () => {
+    const { t, camp } = await liveCampaign();
+    await setPrices(t.orgId, { marketing: 100 }, t.owner.id);
+    await creditWallet(t.orgId, { actorUserId: t.owner.id }, { amount: 250 });
+    const first = await processCampaign(camp.id);
+    expect(first).toMatchObject({ sent: 2, done: false });
+    const paused = await db.campaign.findUniqueOrThrow({ where: { id: camp.id } });
+    expect(paused.status).toBe("paused");
+    expect(paused.statusReason).toMatch(/Wallet balance is too low/);
+    expect(await db.campaignRecipient.count({ where: { campaignId: camp.id, status: "queued" } })).toBe(1);
+    expect((await getWallet(t.orgId)).balance).toBe(50);
+
+    await creditWallet(t.orgId, { actorUserId: t.owner.id }, { amount: 100 });
+    await db.campaign.update({ where: { id: camp.id }, data: { status: "sending", statusReason: "" } });
+    const second = await processCampaign(camp.id);
+    expect(second).toMatchObject({ sent: 1, done: true });
+    expect((await getWallet(t.orgId)).balance).toBe(50);
+    expect(await db.walletEntry.count({ where: { organizationId: t.orgId, reason: "usage" } })).toBe(3);
   });
 });

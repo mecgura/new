@@ -2,7 +2,7 @@
 
 import { Alert } from "@/components/ds";
 import { siteConfig } from "@/config/site";
-import { WalletBalance, WalletLedger, WalletLoading, useWallet } from "@/components/wallet/wallet-parts";
+import { WalletBalance, WalletFees, WalletLedger, WalletLoading, useWallet } from "@/components/wallet/wallet-parts";
 
 /** The client's own wallet: balance and history. Credit is added by MECGURA after payment is received. */
 export function ClientWallet({ orgId }: { orgId: string }) {
@@ -25,6 +25,7 @@ export function ClientWallet({ orgId }: { orgId: string }) {
         ) : null}
         .
       </Alert>
+      <WalletFees prices={data.prices} />
       <WalletLedger data={data} onPage={setPage} />
     </div>
   );

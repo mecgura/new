@@ -39,6 +39,7 @@ import { formatINR, formatNumber } from "@/lib/catalog";
 import { FEATURES, FEATURE_KEYS, LIMIT_META, limitLabel, parseFeatures, type FeatureKey, type PlanLimits } from "@/lib/plans";
 import { istFmt } from "@/components/campaigns/types";
 import { MiniBars } from "@/components/app/mini-bars";
+import { FeeEditor } from "@/components/wallet/fee-editor";
 
 type Plan = {
   id: string;
@@ -77,6 +78,7 @@ const TABS = [
   { id: "plans", label: "Plans", icon: CreditCard },
   { id: "invoices", label: "Invoices", icon: Receipt },
   { id: "payments", label: "Payments", icon: AlertTriangle },
+  { id: "fees", label: "Message fees", icon: IndianRupee },
   { id: "settings", label: "Settings", icon: Settings2 },
 ] as const;
 const INV_TONE: Record<string, BadgeTone> = { paid: "success", open: "warning", overdue: "danger", payment_failed: "danger", void: "neutral" };
@@ -97,6 +99,7 @@ export default function AdminBillingPage() {
       {tab === "plans" ? <PlansTab /> : null}
       {tab === "invoices" ? <InvoicesTab /> : null}
       {tab === "payments" ? <PaymentsTab /> : null}
+      {tab === "fees" ? <FeeEditor url="/api/admin/wallet-prices" scope="default" /> : null}
       {tab === "settings" ? <SettingsTab /> : null}
     </>
   );

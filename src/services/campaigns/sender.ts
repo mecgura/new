@@ -1,5 +1,7 @@
 import { db } from "@/lib/db";
 import { billingState } from "@/services/billing/entitlements";
+import { categoryOfMessage, feeFor } from "@/services/wallet-pricing";
+import { getWallet } from "@/services/wallet";
 import { audit } from "@/lib/audit";
 import { publish } from "@/lib/realtime/broker";
 import { emitCampaignCompleted } from "@/services/webhooks/events";
@@ -64,10 +66,19 @@ export async function processCampaign(campaignId: string, budgetMs = 50_000): Pr
     return { ...tally, done: false };
   }
 
+  // MECGURA's per-message fee: sending stops (paused, nothing lost) when the wallet can't cover the next message.
+  const fee = acct.isDemo ? 0 : await feeFor(c.organizationId, categoryOfMessage("template", { category: t.category }));
+  let funds = fee > 0 ? (await getWallet(c.organizationId)).balance : Infinity;
+
   while (Date.now() - started < budgetMs) {
     const batch = await db.campaignRecipient.findMany({ where: { campaignId, status: "queued" }, orderBy: { createdAt: "asc" }, take: BATCH });
     if (!batch.length) break;
     for (const r of batch) {
+      if (fee > 0 && funds < fee) {
+        await stop(c.id, c.organizationId, "paused", "Wallet balance is too low to send the next message. Add credit, then resume the campaign.");
+        publish(c.organizationId, { type: "campaign.updated", campaignId: c.id });
+        return { ...tally, done: false };
+      }
       const claimed = await db.campaignRecipient.updateMany({ where: { id: r.id, status: "queued" }, data: { status: "sending", attemptedAt: new Date() } });
       if (!claimed.count) continue;
 
@@ -106,6 +117,7 @@ export async function processCampaign(campaignId: string, budgetMs = 50_000): Pr
         await db.campaignRecipient.update({ where: { id: r.id }, data: { status: "sent", sentAt: sent.sentAt ?? now } });
         if (acct.isDemo && acct.phoneRecordId) await db.phoneNumber.update({ where: { id: acct.phoneRecordId }, data: { messagesSent: { increment: 1 } } });
         tally.sent++;
+        if (fee > 0) funds -= fee;
       } else {
         await db.campaignRecipient.update({ where: { id: r.id }, data: { status: "failed", failedAt: now, error: sent.error } });
         tally.failed++;

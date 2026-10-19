@@ -692,3 +692,10 @@ export const walletMoveSchema = z.object({
 });
 
 export const walletSettingsSchema = z.object({ lowBalanceRupees: rupees(1_000_000) });
+
+const priceField = z.union([rupees(10_000), z.null()]).optional();
+/** Per-message MECGURA fee in rupees per category; null removes the row (client: use the default; default: free). */
+export const walletPricesSchema = z
+  .object({ marketing: priceField, utility: priceField, authentication: priceField, service: priceField })
+  .strict()
+  .refine((v) => Object.values(v).some((x) => x !== undefined), "Send at least one price");

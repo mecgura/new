@@ -5,6 +5,9 @@ import { paramProblem, templateSlots, type Slot, type SlotValues } from "@/lib/t
 import type { VariableMapping } from "@/lib/validations";
 import { toDef } from "@/services/templates/templates";
 import { audienceWhere, parseAudience } from "@/services/campaigns/audience";
+import { categoryOfMessage, feeFor } from "@/services/wallet-pricing";
+import { getWallet } from "@/services/wallet";
+import { formatINR } from "@/lib/catalog";
 
 export const REMOVAL_REASONS = ["invalid_phone", "duplicate", "opted_out", "suppressed", "no_consent", "frequency_cap", "missing_variable"] as const;
 export type RemovalReason = (typeof REMOVAL_REASONS)[number];
@@ -193,6 +196,17 @@ export async function runCompliance(campaignId: string): Promise<{ report: Compl
     const tier = acct.phone?.messagingLimitTier ?? "";
     if (TIER_LIMITS[tier] && eligible > TIER_LIMITS[tier]) {
       check("tier", "Messaging limit", "warn", `Meta lets this number start ${TIER_LIMITS[tier]} new conversations per 24 h (${tier}). Recipients above that will fail — split the campaign.`);
+    }
+  }
+  // 6. Wallet (MECGURA's per-message fee; free until an admin sets a price)
+  if (acct && !acct.isDemo && t) {
+    const cat = categoryOfMessage("template", { category: t.category });
+    const fee = await feeFor(c.organizationId, cat);
+    if (fee > 0) {
+      const need = fee * eligible;
+      const { balance } = await getWallet(c.organizationId);
+      if (balance < need) check("wallet", "Wallet balance", "fail", `${formatINR(need)} needed (${eligible} × ${formatINR(fee)} ${cat} fee) but the wallet has ${formatINR(balance)}. Ask MECGURA to add credit.`);
+      else check("wallet", "Wallet balance", "pass", `${formatINR(need)} will be used (${eligible} × ${formatINR(fee)}); ${formatINR(balance - need)} left.`);
     }
   }
   if (!checks.some((x) => x.key === "audience")) {

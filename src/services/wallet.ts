@@ -145,7 +145,8 @@ export async function creditWallet(organizationId: string, actor: WalletActor, i
 export async function debitWallet(organizationId: string, actor: WalletActor | null, input: Omit<Move, "reason"> & { reason?: "correction" | "usage" }) {
   const r = await move(organizationId, "debit", { ...input, reason: input.reason ?? "correction" }, actor?.actorUserId ?? null);
   if (!r.replayed) {
-    await audit({ action: "wallet.debited", actorUserId: actor?.actorUserId ?? null, organizationId, targetType: "wallet_entry", targetId: r.entryId, metadata: { amount: input.amount, reason: input.reason ?? "correction" }, req: actor?.req });
+    // Per-message usage is already in the ledger; auditing every message would only add noise.
+    if ((input.reason ?? "correction") !== "usage") await audit({ action: "wallet.debited", actorUserId: actor?.actorUserId ?? null, organizationId, targetType: "wallet_entry", targetId: r.entryId, metadata: { amount: input.amount, reason: input.reason ?? "correction" }, req: actor?.req });
     const w = await db.wallet.findUnique({ where: { organizationId } });
     if (w && w.lowBalanceThreshold > 0 && w.balance <= w.lowBalanceThreshold && w.balance + input.amount > w.lowBalanceThreshold) {
       await notifyOwners(organizationId, "Wallet balance is low", `Your wallet balance is ${formatINR(w.balance)}. Ask MECGURA to add credit so sending isn't interrupted.`);

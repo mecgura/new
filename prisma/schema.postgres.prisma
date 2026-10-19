@@ -1253,3 +1253,16 @@ model WalletEntry {
   @@index([walletId, createdAt])
   @@index([organizationId, createdAt])
 }
+
+// MECGURA's own per-message service fee (paise) by Meta message category. organizationId "" = the default for every client;
+// a row with a client id overrides the default for that client. No row = free. Meta's own charges are not part of this.
+model WalletPrice {
+  id             String   @id @default(cuid())
+  organizationId String   @default("")
+  category       String // marketing | utility | authentication | service
+  pricePaise     Int
+  updatedById    String?
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, category])
+}

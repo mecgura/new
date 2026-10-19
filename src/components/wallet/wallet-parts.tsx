@@ -8,7 +8,7 @@ import { formatINR } from "@/lib/catalog";
 
 export type WalletView = { balance: number; currency: string; lowBalanceThreshold: number; low: boolean };
 export type WalletEntry = { id: string; direction: "credit" | "debit"; amount: number; balanceAfter: number; reason: string; note: string; reference: string; createdAt: string; createdBy: string | null };
-export type WalletData = { wallet: WalletView; entries: WalletEntry[]; total: number; page: number; pageSize: number };
+export type WalletData = { wallet: WalletView; prices?: Record<"marketing" | "utility" | "authentication" | "service", number>; entries: WalletEntry[]; total: number; page: number; pageSize: number };
 
 const dateTime = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 const REASONS: Record<string, string> = { topup: "Credit added", correction: "Correction", usage: "Message usage", refund: "Refund" };
@@ -53,6 +53,39 @@ export function WalletBalance({ wallet }: { wallet: WalletView }) {
           </Alert>
         ) : null}
       </CardBody>
+    </Card>
+  );
+}
+
+const FEE_ROWS: [keyof NonNullable<WalletData["prices"]>, string][] = [
+  ["marketing", "Marketing template"],
+  ["utility", "Utility template"],
+  ["authentication", "Authentication (OTP) template"],
+  ["service", "Service reply (inside the 24-hour window)"],
+];
+
+/** MECGURA's per-message fee for this client (read-only). Free rows are shown as "Free". */
+export function WalletFees({ prices }: { prices: WalletData["prices"] }) {
+  if (!prices) return null;
+  return (
+    <Card>
+      <CardHeader title="Message fees" description="What MECGURA takes from your wallet for each message sent. Meta's own charges are separate." />
+      <Table caption="Message fees">
+        <THead>
+          <tr>
+            <TH>Message type</TH>
+            <TH className="text-right">MECGURA fee</TH>
+          </tr>
+        </THead>
+        <TBody>
+          {FEE_ROWS.map(([key, label]) => (
+            <TR key={key}>
+              <TD>{label}</TD>
+              <TD className="text-right">{prices[key] ? `${formatINR(prices[key])} / message` : "Free"}</TD>
+            </TR>
+          ))}
+        </TBody>
+      </Table>
     </Card>
   );
 }

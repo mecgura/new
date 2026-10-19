@@ -13,6 +13,7 @@ export type ApiErrorCode =
   | "FORBIDDEN"
   | "NOT_FOUND"
   | "CONFLICT"
+  | "PAYMENT_REQUIRED"
   | "RATE_LIMITED"
   | "SERVICE_UNAVAILABLE"
   | "SERVER_ERROR";
@@ -23,6 +24,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   FORBIDDEN: 403,
   NOT_FOUND: 404,
   CONFLICT: 409,
+  PAYMENT_REQUIRED: 402,
   RATE_LIMITED: 429,
   SERVICE_UNAVAILABLE: 503,
   SERVER_ERROR: 500,
@@ -34,6 +36,7 @@ const DEFAULT_MESSAGE: Record<ApiErrorCode, string> = {
   FORBIDDEN: "Permission denied",
   NOT_FOUND: "Not found",
   CONFLICT: "Conflict",
+  PAYMENT_REQUIRED: "Payment required",
   RATE_LIMITED: "Too many requests. Please try again later.",
   SERVICE_UNAVAILABLE: "Service unavailable",
   SERVER_ERROR: "Something went wrong. Please try again.",
