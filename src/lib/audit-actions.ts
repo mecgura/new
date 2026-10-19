@@ -41,6 +41,7 @@ export const AUDIT_ACTIONS = [
   "whatsapp.connected",
   "whatsapp.connect_failed",
   "whatsapp.disconnected",
+  "whatsapp.deleted",
   "whatsapp.settings_changed",
   "whatsapp.webhook_verified",
   // Phase 4 — inbox & CRM
@@ -171,6 +172,7 @@ export function describeAction(action: string): string {
     "whatsapp.connected": "WhatsApp number connected",
     "whatsapp.connect_failed": "WhatsApp connection failed",
     "whatsapp.disconnected": "WhatsApp number disconnected",
+    "whatsapp.deleted": "WhatsApp number deleted",
     "whatsapp.settings_changed": "WhatsApp settings changed",
     "whatsapp.webhook_verified": "Webhook verified",
     "conversation.assigned": "Conversation assigned",

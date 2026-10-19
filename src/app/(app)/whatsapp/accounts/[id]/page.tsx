@@ -9,7 +9,7 @@ import { idSchema } from "@/lib/validations";
 import { Alert, Badge, Card, CardBody, CardHeader, PageHeader } from "@/components/ds";
 import { NoWorkspace, OwnerOnly, ServiceDisabled } from "@/components/whatsapp/states";
 import { QualityBadge, StatusBadge } from "@/components/whatsapp/status-badge";
-import { AccountSettingsForm, ConnectionCheck, DisconnectButton, ReplaceTokenForm } from "@/components/whatsapp/account-actions";
+import { AccountSettingsForm, ConnectionCheck, DeleteButton, DisconnectButton, ReplaceTokenForm } from "@/components/whatsapp/account-actions";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "WhatsApp number" };
@@ -58,7 +58,14 @@ export default async function WhatsAppAccountPage({ params, searchParams }: { pa
           </span>
         }
         description={account.phoneNumber}
-        actions={ctx.canManage && live ? <DisconnectButton orgId={ctx.orgId} accountId={account.id} label={account.phoneNumber} isDemo={account.isDemo} size="md" /> : null}
+        actions={
+          ctx.canManage ? (
+            <div className="flex flex-wrap gap-2">
+              {live ? <DisconnectButton orgId={ctx.orgId} accountId={account.id} label={account.phoneNumber} isDemo={account.isDemo} size="md" /> : null}
+              {account.status !== "connected" ? <DeleteButton orgId={ctx.orgId} accountId={account.id} label={account.phoneNumber} size="md" /> : null}
+            </div>
+          ) : null
+        }
       />
       <nav aria-label="Number sections" className="mb-6 flex gap-1 border-b border-app-border">
         {TABS.map((t) => (

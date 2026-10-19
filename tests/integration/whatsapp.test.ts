@@ -682,3 +682,28 @@ describe("replacing the access token", () => {
     expect((await tokenRoute.POST(post({ accessToken: TOKEN() }), p(b.org.id, { accountId: r.accountId }))).status).toBe(404);
   });
 });
+
+describe("deleting a number", () => {
+  it("demo numbers are deleted with their chats; live numbers must be disconnected first; other tenants get 404", async () => {
+    const { org, owner } = await makeTenant();
+    const other = await makeTenant();
+    actAs(owner);
+    const d = await json(await demoRoute.POST(req("/x", { method: "POST", body: { businessName: "Del Store" } }), params({ orgId: org.id })));
+    const accountId = (d.body.account as { id: string }).id;
+    const contact = await db.contact.create({ data: { organizationId: org.id, phone: `+9197${String(Date.now()).slice(-8)}` } });
+    await db.conversation.create({ data: { organizationId: org.id, contactId: contact.id, whatsappAccountId: accountId } });
+    const ctx = (id: string) => params({ orgId: org.id, accountId: id });
+    actAs(other.owner);
+    expect((await accountRoute.DELETE(req("/x", { method: "DELETE" }), params({ orgId: org.id, accountId }))).status).toBe(403);
+    actAs(owner);
+    // A connected (live) number is refused.
+    await db.whatsAppAccount.update({ where: { id: accountId }, data: { status: "connected" } });
+    expect((await accountRoute.DELETE(req("/x", { method: "DELETE" }), ctx(accountId))).status).toBe(409);
+    await db.whatsAppAccount.update({ where: { id: accountId }, data: { status: "demo" } });
+    expect((await accountRoute.DELETE(req("/x", { method: "DELETE" }), ctx(accountId))).status).toBe(200);
+    expect(await db.whatsAppAccount.count({ where: { id: accountId } })).toBe(0);
+    expect(await db.conversation.count({ where: { organizationId: org.id } })).toBe(0);
+    expect((await accountRoute.DELETE(req("/x", { method: "DELETE" }), ctx(accountId))).status).toBe(404);
+    expect(await db.auditLog.count({ where: { organizationId: org.id, action: "whatsapp.deleted" } })).toBe(1);
+  });
+});

@@ -468,6 +468,27 @@ export async function disconnectAccount(ctx: ActorCtx, accountId: string) {
   return getAccount(ctx.organizationId, acc.id);
 }
 
+/**
+ * Permanently removes a number that is not live (demo, never finished, or disconnected). Its conversations and messages are
+ * deleted with it; templates, campaigns and automations are kept. A live number must be disconnected first.
+ */
+export async function deleteAccount(ctx: ActorCtx, accountId: string) {
+  const acc = await db.whatsAppAccount.findFirst({ where: { id: accountId, organizationId: ctx.organizationId } });
+  if (!acc) throw new ApiError("NOT_FOUND", "WhatsApp account not found.");
+  if (acc.status === "connected") throw new ApiError("CONFLICT", "Disconnect this number first, then delete it.");
+  await db.$transaction(async (tx) => {
+    await tx.whatsAppAccount.delete({ where: { id: acc.id } });
+    if (acc.phoneRecordId) await tx.phoneNumber.deleteMany({ where: { id: acc.phoneRecordId } });
+    if (acc.wabaRecordId && acc.isDemo && !(await tx.whatsAppAccount.count({ where: { wabaRecordId: acc.wabaRecordId } }))) {
+      await tx.whatsAppBusinessAccount.deleteMany({ where: { id: acc.wabaRecordId } });
+    }
+    if (acc.connectionId && !(await tx.whatsAppAccount.count({ where: { connectionId: acc.connectionId } }))) {
+      await tx.whatsAppConnection.deleteMany({ where: { id: acc.connectionId } });
+    }
+  });
+  await audit({ action: "whatsapp.deleted", actorUserId: ctx.actorUserId, organizationId: ctx.organizationId, targetType: "whatsapp_account", targetId: acc.id, metadata: { phoneNumber: acc.phoneNumber, isDemo: acc.isDemo }, req: ctx.req });
+}
+
 /** Webhook setup details for one account (owners only — includes the verify token for developer setups). */
 export async function getWebhookInfo(organizationId: string, accountId: string) {
   const acc = await db.whatsAppAccount.findFirst({ where: { id: accountId, organizationId }, include: { connection: { include: { webhook: true } } } });

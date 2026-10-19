@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, CircleAlert, Plug2, Settings2, SlidersHorizontal, Stethoscope, XCircle } from "lucide-react";
+import { CheckCircle2, CircleAlert, Plug2, Settings2, SlidersHorizontal, Stethoscope, Trash2, XCircle } from "lucide-react";
 import { Alert, Button, Card, CardBody, CardHeader, ConfirmationDialog, Field, Input, buttonVariants, useToast } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
 
@@ -43,6 +43,39 @@ export function DisconnectButton({ orgId, accountId, label, isDemo, size = "sm" 
   );
 }
 
+export function DeleteButton({ orgId, accountId, label, size = "sm" }: { orgId: string; accountId: string; label: string; size?: "sm" | "md" }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [open, setOpen] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  async function confirm() {
+    setBusy(true);
+    const r = await apiFetch(`/api/organizations/${orgId}/whatsapp/accounts/${accountId}`, { method: "DELETE" });
+    setBusy(false);
+    if (!r.ok) return toast(r.error, "error");
+    setOpen(false);
+    toast(`${label} deleted`);
+    router.push("/whatsapp/accounts");
+    router.refresh();
+  }
+  return (
+    <>
+      <Button size={size} variant="ghost" onClick={() => setOpen(true)}>
+        <Trash2 aria-hidden="true" /> Delete
+      </Button>
+      <ConfirmationDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        onConfirm={confirm}
+        loading={busy}
+        title="Delete this number?"
+        description={`${label} is removed from MECGURA together with all its conversations and messages. Templates, campaigns and automations are kept. This cannot be undone.`}
+        confirmLabel="Delete permanently"
+      />
+    </>
+  );
+}
+
 export function CardActions({ orgId, accountId, label, isDemo, status, canManage }: { orgId: string; accountId: string; label: string; isDemo: boolean; status: string; canManage: boolean }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -55,6 +88,7 @@ export function CardActions({ orgId, accountId, label, isDemo, status, canManage
         </Link>
       ) : null}
       {canManage && (status === "connected" || status === "demo") ? <DisconnectButton orgId={orgId} accountId={accountId} label={label} isDemo={isDemo} /> : null}
+      {canManage && status !== "connected" ? <DeleteButton orgId={orgId} accountId={accountId} label={label} /> : null}
       {canManage && (status === "pending" || status === "disconnected") ? (
         <Link href="/whatsapp/connect" className={buttonVariants({ size: "sm", variant: "primary" })}>
           {status === "pending" ? "Connect" : "Reconnect"}
