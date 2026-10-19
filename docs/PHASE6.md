@@ -32,7 +32,7 @@
 | Assign agent | Assigns to a specific person, or to the least-busy agent (online first, then fewest open chats). Leaves a system note and a notification. |
 | Update contact | Sets lead status, lifecycle, name, email or a custom field. Supports `{{reply}}`. |
 | Webhook | POSTs JSON (contact, trigger, reply) to an https URL. Private and internal addresses are blocked (SSRF guard). Redirects are not followed. Uses an `X-Mecgura-Idempotency-Key` header. |
-| AI response | Claude (`claude-opus-5-5`, low effort, server-side refusal fallback) writes a short reply from the business's instructions plus the recent chat. It can send the reply and/or save it to a field. Needs `ANTHROPIC_API_KEY`; without it the step fails with a clear message. |
+| AI response | Claude (`claude-haiku-5-5` by default, `AI_MODEL` overrides, low effort, server-side refusal fallback) writes a short reply from the business's instructions plus the recent chat. It can send the reply and/or save it to a field. Needs `ANTHROPIC_API_KEY`; without it the step fails with a clear message. |
 | End | Ends the run. |
 
 ## Triggers

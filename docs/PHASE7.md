@@ -87,7 +87,7 @@ On handoff:
 | | Live AI | Demo AI |
 | --- | --- | --- |
 | Needs | `ANTHROPIC_API_KEY` | nothing |
-| Engine | Claude (`claude-opus-5-5`, official SDK, low effort, server-side fallback). Tools with `strict: true`, at most 4 tool rounds per message. The prompt plus knowledge base is cached. | Keyword rules: FAQ match, product/service lookup, price words, handoff keywords, booking intent with date/time regex, email/name/city extraction |
+| Engine | Claude (`claude-haiku-5-5` by default, `AI_MODEL` overrides, official SDK, low effort, server-side fallback). Tools with `strict: true`, at most 4 tool rounds per message. The prompt plus knowledge base is cached. | Keyword rules: FAQ match, product/service lookup, price words, handoff keywords, booking intent with date/time regex, email/name/city extraction |
 | Answers on | all numbers it covers | **demo numbers and the test chat only** — live customers never get rule-based replies |
 | Labelled | "AI agent" | "Demo AI — rule-based, not production AI" (banner, test chat, inbox badge, message payload, activity log) |
 | Usage | counts `ai_replies` | not counted |

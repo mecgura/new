@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-export const AI_MODEL = "claude-opus-5-5";
+/** Default is the cheapest current model; set AI_MODEL on the server (for example claude-sonnet-5-5) to change it without a code change. */
+export const AI_MODEL = process.env.AI_MODEL?.trim() || "claude-haiku-5-5";
 
 /** Names (never values) of what the AI Response step needs. */
 export function aiConfigured(): boolean {
