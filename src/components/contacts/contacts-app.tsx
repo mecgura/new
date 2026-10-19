@@ -3,13 +3,14 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, Upload, UserPlus, Users } from "lucide-react";
+import { Download, Trash2, Upload, UserPlus, Users } from "lucide-react";
 import {
   Alert,
   Badge,
   Button,
   Card,
   Checkbox,
+  ConfirmationDialog,
   EmptyState,
   ErrorState,
   Field,
@@ -81,6 +82,11 @@ export function ContactsApp({ orgId, perms }: { orgId: string; perms: InboxPerms
   const [team, setTeam] = React.useState<TeamMember[]>([]);
   const [addOpen, setAddOpen] = React.useState(false);
   const [importOpen, setImportOpen] = React.useState(false);
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [allMatching, setAllMatching] = React.useState(false);
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+  const toast = useToast();
   const qs = new URLSearchParams({ tab, q, tagId, leadStatus, page: String(page), pageSize: "25" }).toString();
 
   const load = React.useCallback(async () => {
@@ -103,8 +109,39 @@ export function ContactsApp({ orgId, perms }: { orgId: string; perms: InboxPerms
 
   const resetPage = <T,>(fn: (v: T) => void) => (v: T) => {
     setPage(1);
+    setSelected(new Set());
+    setAllMatching(false);
     fn(v);
   };
+  const pageIds = data?.items.map((c) => c.id) ?? [];
+  const pageAllSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  const selectedCount = allMatching ? (data?.total ?? 0) : selected.size;
+  function togglePage() {
+    setAllMatching(false);
+    setSelected(pageAllSelected ? new Set() : new Set(pageIds));
+  }
+  function toggleOne(id: string) {
+    setAllMatching(false);
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  async function bulkDelete() {
+    setDeleting(true);
+    const body = allMatching ? { filter: { tab, q, tagId, leadStatus }, expectedCount: data?.total ?? 0 } : { ids: [...selected] };
+    const r = await apiFetch<{ deleted: number }>(`/api/organizations/${orgId}/contacts/bulk-delete`, { method: "POST", body });
+    setDeleting(false);
+    setConfirmDelete(false);
+    if (!r.ok) return toast(r.error, "error");
+    toast(`${r.data.deleted} contact${r.data.deleted === 1 ? "" : "s"} deleted`);
+    setSelected(new Set());
+    setAllMatching(false);
+    setPage(1);
+    void load();
+  }
 
   return (
     <>
@@ -156,9 +193,30 @@ export function ContactsApp({ orgId, perms }: { orgId: string; perms: InboxPerms
           <EmptyState icon={Users} title={q || tagId || leadStatus ? "No contacts match" : "No contacts here yet"} description="Contacts are created automatically when customers message you, or add / import them." />
         ) : (
           <>
+            {perms["contacts:delete"] && selectedCount > 0 ? (
+              <div className="flex flex-wrap items-center gap-3 border-b border-app-border bg-app-primary-soft px-4 py-2.5 text-small">
+                <span className="font-medium text-app-text">{selectedCount} selected</span>
+                {!allMatching && pageAllSelected && data.total > pageIds.length ? (
+                  <button type="button" className="text-app-primary underline" onClick={() => setAllMatching(true)}>
+                    Select all {data.total} contacts in this list
+                  </button>
+                ) : null}
+                <Button size="sm" variant="danger" onClick={() => setConfirmDelete(true)}>
+                  <Trash2 aria-hidden="true" /> Delete
+                </Button>
+                <button type="button" className="text-app-muted underline" onClick={() => { setSelected(new Set()); setAllMatching(false); }}>
+                  Clear
+                </button>
+              </div>
+            ) : null}
             <Table caption="Contacts" aria-busy={loading} className="min-w-[1000px]">
               <THead>
                 <tr>
+                  {perms["contacts:delete"] ? (
+                    <TH className="w-10">
+                      <input type="checkbox" aria-label="Select all contacts on this page" checked={pageAllSelected} onChange={togglePage} className="size-4 accent-emerald-600" />
+                    </TH>
+                  ) : null}
                   <TH>Name</TH>
                   <TH>Phone</TH>
                   <TH>Tags</TH>
@@ -172,6 +230,11 @@ export function ContactsApp({ orgId, perms }: { orgId: string; perms: InboxPerms
               <TBody>
                 {data.items.map((c) => (
                   <TR key={c.id}>
+                    {perms["contacts:delete"] ? (
+                      <TD>
+                        <input type="checkbox" aria-label={`Select ${c.name || c.phone}`} checked={allMatching || selected.has(c.id)} onChange={() => toggleOne(c.id)} className="size-4 accent-emerald-600" />
+                      </TD>
+                    ) : null}
                     <TD>
                       <Link href={`/contacts/${c.id}`} className="font-medium hover:text-app-primary-hover">
                         {c.name || "Unnamed"}
@@ -213,6 +276,15 @@ export function ContactsApp({ orgId, perms }: { orgId: string; perms: InboxPerms
         )}
       </Card>
       <AddContactModal open={addOpen} onClose={() => setAddOpen(false)} orgId={orgId} team={team} onCreated={() => { setAddOpen(false); void load(); }} />
+      <ConfirmationDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={bulkDelete}
+        loading={deleting}
+        title={`Delete ${selectedCount} contact${selectedCount === 1 ? "" : "s"}?`}
+        description="The contacts, their conversations, notes and consent history are permanently deleted. This cannot be undone."
+        confirmLabel="Delete permanently"
+      />
       <ImportModal open={importOpen} onClose={() => setImportOpen(false)} orgId={orgId} onDone={load} />
     </>
   );

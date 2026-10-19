@@ -798,3 +798,21 @@ export const voiceCallSchema = z
   .strict();
 
 export const packApplySchema = z.object({ packId: z.string().trim().min(1).max(40).regex(/^[a-z_]+$/) }).strict();
+
+export const bulkDeleteContactsSchema = z.union([
+  z.object({ ids: z.array(idSchema).min(1).max(500) }).strict(),
+  z
+    .object({
+      filter: z
+        .object({
+          tab: z.enum(["all", "customers", "leads", "opted_in", "opted_out", "suppressed"]).default("all"),
+          q: z.string().trim().max(100).default(""),
+          tagId: z.string().max(64).default(""),
+          leadStatus: z.enum(["", "new", "contacted", "qualified", "proposal", "won", "lost"]).default(""),
+          ownerUserId: z.string().max(64).default(""),
+        })
+        .strict(),
+      expectedCount: z.number().int().min(1).max(10_000),
+    })
+    .strict(),
+]);

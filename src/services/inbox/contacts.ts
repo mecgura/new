@@ -255,6 +255,32 @@ export async function deleteContact(ctx: Ctx, id: string) {
   await audit({ action: "contact.deleted", actorUserId: ctx.actorUserId, organizationId: ctx.organizationId, targetType: "contact", targetId: id, req: ctx.req });
 }
 
+export const MAX_BULK_DELETE = 10_000;
+
+/**
+ * Deletes many contacts (with their chats, notes and consent history). Either an explicit id list, or everything that
+ * matches the current filters — then `expectedCount` must equal how many match right now, so a stale screen can't delete more.
+ */
+export async function deleteContacts(ctx: Ctx, input: { ids: string[] } | { filter: ContactFilters; expectedCount: number }) {
+  let ids: string[];
+  if ("ids" in input) {
+    ids = (await db.contact.findMany({ where: { organizationId: ctx.organizationId, id: { in: input.ids } }, select: { id: true } })).map((c) => c.id);
+  } else {
+    const where = filterWhere(ctx.organizationId, input.filter);
+    const count = await db.contact.count({ where });
+    if (count !== input.expectedCount) throw new ApiError("CONFLICT", `The list changed (${count} contacts match now, not ${input.expectedCount}). Reload and try again.`);
+    if (count > MAX_BULK_DELETE) throw new ApiError("VALIDATION_ERROR", `Delete up to ${MAX_BULK_DELETE} contacts at a time. Narrow the filter first.`);
+    ids = (await db.contact.findMany({ where, select: { id: true }, take: MAX_BULK_DELETE })).map((c) => c.id);
+  }
+  let deleted = 0;
+  for (let i = 0; i < ids.length; i += 500) {
+    const r = await db.contact.deleteMany({ where: { organizationId: ctx.organizationId, id: { in: ids.slice(i, i + 500) } } });
+    deleted += r.count;
+  }
+  await audit({ action: "contacts.bulk_deleted", actorUserId: ctx.actorUserId, organizationId: ctx.organizationId, targetType: "contact", metadata: { deleted }, req: ctx.req });
+  return { deleted };
+}
+
 export async function setContactTags(ctx: Ctx, contactId: string, names: string[], opts: { silent?: boolean } = {}) {
   const c = await db.contact.findFirst({ where: { id: contactId, organizationId: ctx.organizationId }, select: { id: true } });
   if (!c) throw new ApiError("NOT_FOUND", "Contact not found.");
