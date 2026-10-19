@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BarChart3, Bot, Check, Inbox, Megaphone, Network, ShieldCheck, Wallet, Workflow } from "lucide-react";
+import { BarChart3, Bot, Check, Inbox, Mail, Megaphone, MessageCircle, Network, Phone, ShieldCheck, Wallet, Workflow } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { siteConfig } from "@/config/site";
@@ -53,6 +53,14 @@ async function loadPlans() {
   } catch {
     return [];
   }
+}
+
+const whatsappDigits = siteConfig.contact.whatsapp;
+/** 917837722567 → +91 78377 22567 (Indian mobile grouping; other lengths are shown as typed). */
+const phoneLabel = /^91\d{10}$/.test(whatsappDigits) ? `+91 ${whatsappDigits.slice(2, 7)} ${whatsappDigits.slice(7)}` : `+${whatsappDigits}`;
+
+function planHref(plan: string) {
+  return `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(`Hi MECGURA, I am interested in the ${plan} plan.`)}`;
 }
 
 function contactHref() {
@@ -160,6 +168,12 @@ export default async function Landing() {
                     {p.selfServe ? <span className="text-small font-normal text-app-muted"> / month</span> : null}
                   </p>
                   <p className="mt-1 text-small text-app-muted">{p.description}</p>
+                  <a
+                    href={planHref(p.name)}
+                    className={buttonVariants({ variant: "secondary", size: "sm", className: "mt-4 w-full" })}
+                  >
+                    {p.selfServe ? "Get started" : "Talk to us"}
+                  </a>
                   <ul className="mt-4 space-y-1.5 text-small">
                     <li className="flex gap-2">
                       <Check className="mt-0.5 size-4 shrink-0 text-app-primary" aria-hidden="true" />
@@ -186,6 +200,26 @@ export default async function Landing() {
           </section>
         ) : null}
 
+        <section id="contact" aria-labelledby="contact-title" className="mx-auto max-w-3xl px-4 py-12">
+          <div className="glass rounded-[var(--radius-card)] p-6 text-center sm:p-8">
+            <h2 id="contact-title" className="font-display text-3xl font-bold">
+              Talk to us
+            </h2>
+            <p className="mt-2 text-app-muted">Questions, a demo or setup help. We reply on WhatsApp and email.</p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <a href={`https://wa.me/${whatsappDigits}?text=${encodeURIComponent("Hi MECGURA, I would like to know more about the WhatsApp platform.")}`} className={buttonVariants({ size: "lg", className: "w-full" })}>
+                <MessageCircle aria-hidden="true" /> WhatsApp
+              </a>
+              <a href={`tel:+${whatsappDigits}`} className={buttonVariants({ variant: "secondary", size: "lg", className: "w-full" })}>
+                <Phone aria-hidden="true" /> {phoneLabel}
+              </a>
+              <a href={`mailto:${siteConfig.contact.email}`} className={buttonVariants({ variant: "secondary", size: "lg", className: "w-full" })}>
+                <Mail aria-hidden="true" /> {siteConfig.contact.email}
+              </a>
+            </div>
+          </div>
+        </section>
+
         <section aria-labelledby="faq" className="mx-auto max-w-3xl px-4 py-12">
           <h2 id="faq" className="mb-6 text-center font-display text-3xl font-bold">
             Questions
@@ -203,7 +237,9 @@ export default async function Landing() {
 
       <footer className="border-t border-app-border">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-6 text-small text-app-muted">
-          <p>© {new Date().getFullYear()} MECGURA</p>
+          <p>
+            © {new Date().getFullYear()} MECGURA · <a href={`mailto:${siteConfig.contact.email}`} className="hover:text-app-text">{siteConfig.contact.email}</a> · <a href={`tel:+${whatsappDigits}`} className="hover:text-app-text">{phoneLabel}</a>
+          </p>
           <nav aria-label="Legal" className="flex gap-5">
             <Link href="/privacy" className="hover:text-app-text">
               Privacy
