@@ -178,3 +178,11 @@ Model: **client's own WABA** — Meta bills its message charges to the client's 
 * API: `GET/POST/PATCH /api/admin/organizations/{id}/wallet`, `GET /api/organizations/{orgId}/wallet`.
 * Not yet (next phases): per-message price card and automatic deduction on campaigns/templates (W2), reconcile with Meta's `pricing` webhook field (W3), Razorpay self top-up + GST invoices (W4).
 * Prepaid-credit accounting, GST on advances and refund policy: confirm with your CA before going live.
+
+## Live updates (polling)
+
+Serverless instances don't share memory, so the inbox no longer holds a stream open. `publish()` stores each event in `RealtimeEvent` (ids only, deleted after an hour) and the browser polls `GET /api/organizations/{orgId}/realtime?after=<cursor>` every 3 s while the tab is visible (20 s when hidden). Agents only receive events for chats they can see; a screen that fell more than 200 events behind is told to reload.
+
+## Public pages
+
+`/` is a public landing page (features, channel roadmap with honest "coming soon" labels, plans read from the database). `/privacy`, `/terms`, `/data-deletion` are public. Everything else requires sign-in. `robots.txt` allows only the public pages.

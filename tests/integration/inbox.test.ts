@@ -411,54 +411,67 @@ describe("tenant isolation", () => {
   });
 });
 
-describe("realtime (SSE)", () => {
-  // Keeps one in-flight read across calls so a timed-out wait never drops a chunk.
-  function sseReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
-    const dec = new TextDecoder();
-    let pending: Promise<ReadableStreamReadResult<Uint8Array>> | null = null;
-    return async (pattern: RegExp, ms = 1500) => {
-      let buf = "";
-      const deadline = Date.now() + ms;
-      while (Date.now() < deadline) {
-        pending ??= reader.read();
-        const chunk = await Promise.race([pending, new Promise<null>((r) => setTimeout(() => r(null), Math.max(0, deadline - Date.now())))]);
-        if (!chunk) break;
-        pending = null;
-        if (chunk.done) break;
-        buf += dec.decode(chunk.value);
-        if (pattern.test(buf)) return buf;
-      }
-      return buf;
-    };
+describe("realtime (polling)", () => {
+  type Poll = { cursor: number; events: { type: string; conversationId?: string }[]; resync: boolean };
+  const poll = async (orgId: string, after?: number) => {
+    const r = await json(await realtimeRoute.GET(req(`/x${after === undefined ? "" : `?after=${after}`}`), P(orgId)));
+    expect(r.status).toBe(200);
+    return r.body as unknown as Poll;
+  };
+  // Events are stored after the response; wait (briefly) until the one we expect is visible.
+  async function pollUntil(orgId: string, after: number, match: (p: Poll) => boolean) {
+    let last = await poll(orgId, after);
+    for (let i = 0; i < 40 && !match(last); i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      last = await poll(orgId, after);
+    }
+    return last;
   }
 
-  it("streams events; agents don't receive events for chats assigned to someone else", async () => {
+  it("returns what happened after a cursor; agents don't receive events for chats assigned to someone else", async () => {
     const tt = await makeTenant();
     actAs(tt.owner);
     const r = await inbound(tt);
     await assign.POST(post({ toUserId: tt.agent2.id }), P(tt.orgId, { cid: r.conversationId }));
+    await new Promise((res) => setTimeout(res, 150));
 
-    const ac = new AbortController();
     actAs(tt.agent1);
-    const res = await realtimeRoute.GET(new Request("http://localhost:3000/x", { headers: { host: "localhost:3000" }, signal: ac.signal }), P(tt.orgId));
-    expect(res.headers.get("content-type")).toContain("text/event-stream");
-    const readUntil = sseReader(res.body!.getReader());
-    expect(await readUntil(/event: ready/)).toContain("event: ready");
+    const start = await poll(tt.orgId);
+    expect(start.events).toEqual([]);
+    expect(start.cursor).toBeGreaterThan(0);
 
     actAs(tt.owner);
     await notes.POST(post({ body: "Private to agent two's chat" }), P(tt.orgId, { cid: r.conversationId }));
-    const hidden = await readUntil(/message\.created/, 400);
-    expect(hidden).not.toContain(r.conversationId);
-
     const other = await inbound(tt); // unassigned → visible to agent1
-    const seen = await readUntil(new RegExp(`event: message\\.created\\ndata: [^\\n]*${other.conversationId}`));
-    expect(seen).toContain("event: message.created");
+    await new Promise((res) => setTimeout(res, 150));
+
+    actAs(tt.agent1);
+    const seen = await pollUntil(tt.orgId, start.cursor, (p) => p.events.some((e) => e.type === "message.created" && e.conversationId === other.conversationId));
+    expect(seen.events.some((e) => e.conversationId === r.conversationId)).toBe(false); // agent two's chat is hidden
+    expect(seen.events.some((e) => e.type === "message.created" && e.conversationId === other.conversationId)).toBe(true);
 
     // Assigning the unassigned chat to someone else must tell agent1 so it leaves their list.
+    actAs(tt.owner);
     await assign.POST(post({ toUserId: tt.agent2.id }), P(tt.orgId, { cid: other.conversationId }));
-    const moved = await readUntil(new RegExp(`event: conversation\\.updated\\ndata: [^\\n]*${other.conversationId}`));
-    expect(moved).toContain("event: conversation.updated");
-    ac.abort();
+    actAs(tt.agent1);
+    const moved = await pollUntil(tt.orgId, seen.cursor, (p) => p.events.some((e) => e.type === "conversation.updated" && e.conversationId === other.conversationId));
+    expect(moved.events.some((e) => e.type === "conversation.updated" && e.conversationId === other.conversationId)).toBe(true);
+
+    // The owner sees the private chat's events too, and polling again from the new cursor returns nothing new.
+    actAs(tt.owner);
+    expect((await poll(tt.orgId, start.cursor)).events.some((e) => e.conversationId === r.conversationId)).toBe(true);
+    actAs(tt.agent1);
+    expect((await poll(tt.orgId, moved.cursor)).events).toEqual([]);
+  });
+
+  it("a screen that fell too far behind is told to reload instead of replaying a flood", async () => {
+    const tt = await makeTenant();
+    actAs(tt.owner);
+    await db.realtimeEvent.createMany({ data: Array.from({ length: 205 }, () => ({ organizationId: tt.orgId, type: "contact.updated", data: JSON.stringify({ type: "contact.updated", contactId: "x" }) })) });
+    const r = await poll(tt.orgId, 0);
+    expect(r.resync).toBe(true);
+    expect(r.events).toEqual([]);
+    expect((await poll(tt.orgId, r.cursor)).resync).toBe(false);
   });
 });
 

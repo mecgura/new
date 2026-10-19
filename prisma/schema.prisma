@@ -1266,3 +1266,17 @@ model WalletPrice {
 
   @@unique([organizationId, category])
 }
+
+// Short-lived log of live-update events (ids only). Serverless instances don't share memory, so the browser polls this
+// instead of holding a stream open. Rows older than an hour are deleted.
+model RealtimeEvent {
+  seq              Int      @id @default(autoincrement())
+  organizationId   String
+  type             String
+  data             String // JSON of the event (ids and routing data only)
+  assignedToUserId String?
+  createdAt        DateTime @default(now())
+
+  @@index([organizationId, seq])
+  @@index([createdAt])
+}

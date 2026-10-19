@@ -1,12 +1,13 @@
 import { EventEmitter } from "node:events";
+import { db } from "@/lib/db";
+import { runAfterResponse } from "@/lib/background";
 
 /**
  * Realtime fan-out for the inbox. Events carry ids + minimal routing data only;
  * clients re-fetch through the normal (authorized) APIs.
  *
- * The default broker is in-process. With more than one server instance (e.g.
- * serverless), plug in a shared broker (Redis pub/sub, Postgres LISTEN/NOTIFY,
- * Pusher/Ably) by implementing `RealtimeBroker` and calling `setRealtimeBroker`.
+ * The in-process broker serves the same instance (and tests). Across serverless instances events are shared through the
+ * database: `publish` stores them and the browser polls `GET /realtime?after=<cursor>`.
  */
 export type RealtimeEvent =
   | { type: "message.created"; conversationId: string; messageId: string; assignedToUserId: string | null }
@@ -49,10 +50,19 @@ export function setRealtimeBroker(broker: RealtimeBroker) {
   g.__mecguraRealtime = broker;
 }
 
+/**
+ * Notifies this instance's subscribers and stores the event so browsers (which poll /realtime) see it no matter which
+ * serverless instance handled the request. Storing never blocks or breaks the request that published it.
+ */
 export function publish(organizationId: string, event: RealtimeEvent) {
   try {
     realtime().publish(organizationId, event);
   } catch (e) {
     console.error("[realtime] publish failed", e);
   }
+  runAfterResponse(() =>
+    db.realtimeEvent.create({
+      data: { organizationId, type: event.type, data: JSON.stringify(event), assignedToUserId: "assignedToUserId" in event ? (event.assignedToUserId ?? null) : null },
+    })
+  );
 }
