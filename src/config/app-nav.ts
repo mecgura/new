@@ -23,6 +23,7 @@ import {
   Contact,
   Gauge,
   Webhook,
+  Globe,
   type LucideIcon,
 } from "lucide-react";
 
@@ -94,6 +95,7 @@ export const ADMIN_NAV: NavSection[] = [
       { label: "Usage", icon: Gauge, href: "/admin/usage" },
       { label: "Analytics", icon: BarChart3, href: "/admin/analytics" },
       { label: "Logs & Audit", icon: ScrollText, href: "/admin/audit-logs" },
+      { label: "Website", icon: Globe, href: "/admin/site" },
       { label: "Settings", icon: Settings, href: "/admin/settings" },
     ],
   },

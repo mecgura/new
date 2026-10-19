@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
+import type * as React from "react";
 import Link from "next/link";
-import type { CSSProperties } from "react";
-import { BarChart3, Bot, Camera, Check, Globe, Inbox, Mail, Megaphone, MessageCircle, MessagesSquare, Phone, ShieldCheck, Sparkles, Workflow } from "lucide-react";
+import { BadgeCheck, Bot, Camera, Check, CheckCheck, Globe, Mail, Megaphone, MessageCircle, MessagesSquare, Phone, Plug, Smartphone, Sparkles, Workflow } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { siteConfig } from "@/config/site";
 import { formatINR, formatNumber } from "@/lib/catalog";
 import { FEATURES, isUnlimited, parseFeatures } from "@/lib/plans";
 import { Logo } from "@/components/layout/logo";
+import { getHomeContent } from "@/services/site/home-content";
+import { FloatingChat } from "@/components/home/floating-chat";
+import { ScrollReveal } from "@/components/home/scroll-reveal";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -16,28 +19,23 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-const FEATURE_CARDS = [
-  { icon: Inbox, tone: "clay-mint", title: "One shared inbox", text: "Every customer chat in one place. Assign, tag, add private notes and reply as a team." },
-  { icon: Megaphone, tone: "clay-peach", title: "Safe campaigns", text: "Approved templates to opted-in contacts only, with a compliance check before every send." },
-  { icon: Workflow, tone: "clay-lilac", title: "Automations", text: "Welcome messages, lead capture and reminders that run on their own, no code." },
-  { icon: Bot, tone: "clay-sky", title: "AI agent", text: "Answers common questions and hands over to your team when a person is needed." },
-  { icon: BarChart3, tone: "clay-butter", title: "Clear analytics", text: "Messages, replies and campaign results, so you see what works." },
-  { icon: ShieldCheck, tone: "clay-mint", title: "Private by design", text: "Every client gets a separate workspace, numbers and data." },
-];
+const SERVICE_ICONS = [MessageCircle, Megaphone, Workflow, Bot, Sparkles, Smartphone, Mail, Globe];
 
 const CHANNELS = [
-  { icon: MessageCircle, tone: "clay-mint", name: "WhatsApp", state: "Live" },
-  { icon: Mail, tone: "clay-peach", name: "Email", state: "Live" },
-  { icon: Globe, tone: "clay-sky", name: "Website chat", state: "Live" },
-  { icon: MessagesSquare, tone: "clay-lilac", name: "Messenger", state: "Live" },
-  { icon: Camera, tone: "clay-butter", name: "Instagram", state: "Live" },
-  { icon: Phone, tone: "clay-mint", name: "AI calling", state: "Practice mode" },
+  { icon: MessageCircle, name: "WhatsApp", soon: false },
+  { icon: Mail, name: "Email", soon: false },
+  { icon: Globe, name: "Website chat", soon: false },
+  { icon: MessagesSquare, name: "Messenger", soon: false },
+  { icon: Camera, name: "Instagram", soon: false },
+  { icon: Smartphone, name: "SMS", soon: true },
+  { icon: Smartphone, name: "RCS", soon: true },
+  { icon: Phone, name: "AI calling", soon: true },
 ];
 
 const STEPS = [
-  { n: "1", tone: "clay-mint", title: "We set you up", text: "MECGURA creates your workspace, connects your WhatsApp number and gets templates approved." },
-  { n: "2", tone: "clay-peach", title: "Bring your contacts", text: "Import your list with consent. Opt-outs are respected automatically." },
-  { n: "3", tone: "clay-lilac", title: "Chat and campaign", text: "Your team replies from one inbox while campaigns and automations run in the background." },
+  { n: "1", title: "We set you up", text: "MECGURA creates your workspace, connects your WhatsApp number and gets templates approved." },
+  { n: "2", title: "Bring your contacts", text: "Import your list with consent. Opt-outs are respected automatically." },
+  { n: "3", title: "Chat and campaign", text: "Your team replies from one inbox while campaigns and automations run in the background." },
 ];
 
 const FAQ = [
@@ -61,122 +59,167 @@ const phoneLabel = /^91\d{10}$/.test(whatsappDigits) ? `+91 ${whatsappDigits.sli
 const wa = (text: string) => `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(text)}`;
 
 export default async function Landing() {
-  const [plans, session] = await Promise.all([loadPlans(), auth().catch(() => null)]);
+  const [plans, session, content] = await Promise.all([loadPlans(), auth().catch(() => null), getHomeContent()]);
   const signedIn = Boolean(session?.user);
   const appHref = signedIn ? "/dashboard" : "/login";
   return (
-    <div className="clay-root min-h-dvh overflow-x-hidden">
-      <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5">
-        <Logo />
-        <nav aria-label="Main" className="flex items-center gap-1 sm:gap-2">
-          <a href="#channels" className="clay-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--clay-ink)] md:inline">Channels</a>
-          <a href="#pricing" className="clay-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--clay-ink)] md:inline">Pricing</a>
-          <a href="#contact" className="clay-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--clay-ink)] md:inline">Contact</a>
-          <Link href={appHref} className="clay-btn clay-btn-soft !min-h-11 !px-5 text-small">
-            {signedIn ? "Open workspace" : "Sign in"}
-          </Link>
-        </nav>
+    <div className="wa-root min-h-dvh overflow-x-hidden">
+      <ScrollReveal />
+      <header className="wa-topbar sticky top-0 z-30">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+          <Logo />
+          <nav aria-label="Main" className="flex items-center gap-1 sm:gap-2">
+            <a href="#services" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Services</a>
+            <a href="#channels" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Channels</a>
+            {plans.length ? <a href="#pricing" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Pricing</a> : null}
+            <a href="#contact" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Contact</a>
+            <Link href={appHref} className="wa-btn !min-h-10 !px-5 text-small">{signedIn ? "Open workspace" : "Sign in"}</Link>
+          </nav>
+        </div>
       </header>
 
       <main id="main-content">
-        <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 pb-16 pt-8 lg:grid-cols-2 lg:pt-14">
+        <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 pb-16 pt-10 lg:grid-cols-2 lg:pt-16">
           <div>
-            <p className="clay-card inline-flex items-center gap-2 !rounded-full px-4 py-1.5 text-small font-semibold">
-              <Sparkles className="size-4 text-emerald-600" aria-hidden="true" /> WhatsApp and more, for Indian businesses
-            </p>
+            <p className="wa-pill"><BadgeCheck className="size-3.5" aria-hidden="true" /> Official WhatsApp Business Platform</p>
             <h1 className="mt-5 font-display text-4xl font-bold leading-[1.1] sm:text-5xl lg:text-6xl">
-              Every customer chat. <span className="text-emerald-600">One friendly inbox.</span>
+              Talk to your customers where they already are.
             </h1>
-            <p className="clay-muted mt-5 max-w-xl text-lg">
-              WhatsApp, email, website chat, Messenger and Instagram land in one place. Your team replies together, campaigns stay compliant and an AI agent helps after hours.
+            <p className="wa-muted mt-5 max-w-xl text-lg">
+              WhatsApp, Instagram, Messenger, email and website chat land in one inbox. Your team replies together, campaigns stay compliant and an AI agent helps after hours.
             </p>
-            <div className="mt-8 flex flex-wrap gap-4">
-              <a href={wa("Hi MECGURA, I would like a demo of the platform.")} className="clay-btn">
-                <MessageCircle className="size-5" aria-hidden="true" /> Book a demo
-              </a>
-              <Link href={appHref} className="clay-btn clay-btn-soft">
-                {signedIn ? "Open workspace" : "Client sign in"}
-              </Link>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <a href={wa("Hi MECGURA, I would like a demo of the platform.")} className="wa-btn"><MessageCircle className="size-5" aria-hidden="true" /> Book a demo on WhatsApp</a>
+              <Link href={appHref} className="wa-btn wa-btn-ghost">{signedIn ? "Open workspace" : "Client sign in"}</Link>
             </div>
           </div>
 
-          <div className="relative mx-auto h-[28rem] w-full max-w-md" aria-hidden="true">
-            <div className="clay-card absolute inset-x-6 top-4 bottom-2 rotate-[-2deg] p-5">
-              <div className="clay-pressed flex items-center gap-3 px-4 py-3">
-                <span className="clay-blob clay-mint grid size-10 place-items-center"><MessageCircle className="size-5 text-[#06281a]" /></span>
+          <div className="mx-auto w-full max-w-sm" aria-hidden="true">
+            <div className="overflow-hidden rounded-[1.75rem] border border-[var(--wa-line)] bg-white shadow-xl">
+              <div className="flex items-center gap-3 bg-[#075e54] px-4 py-3 text-white">
+                <span className="grid size-9 place-items-center rounded-full bg-white/15 font-bold">S</span>
                 <div>
-                  <p className="text-small font-bold">Customer chat</p>
-                  <p className="clay-muted text-caption">replies in minutes</p>
+                  <p className="text-sm font-bold leading-tight">Sharma Sweets</p>
+                  <p className="text-xs text-white/80">online</p>
                 </div>
               </div>
-              <div className="mt-5 space-y-3 text-small">
-                <p className="clay-pressed max-w-[78%] px-4 py-3">Hi! Is my order on its way?</p>
-                <p className="clay-mint ml-auto max-w-[78%] rounded-[1.25rem] px-4 py-3 font-semibold text-[#06281a] shadow-[6px_8px_16px_rgba(47,191,132,0.35),inset_2px_3px_5px_rgba(255,255,255,0.5)]">Yes! It is out for delivery today.</p>
-                <p className="clay-pressed max-w-[70%] px-4 py-3">Great, thank you!</p>
-                <p className="clay-lilac ml-auto max-w-[78%] rounded-[1.25rem] px-4 py-3 font-semibold text-[#2a1b6b] shadow-[6px_8px_16px_rgba(130,110,230,0.35),inset_2px_3px_5px_rgba(255,255,255,0.5)]">Anything else we can help with?</p>
+              <div className="wa-chat-bg flex min-h-[21rem] flex-col gap-2.5 p-4">
+                <p className="wa-bubble wa-in wa-seq" style={{ "--d": "0.3s" } as React.CSSProperties}>Hi! Is my Diwali box order on its way?<span className="wa-time">10:42</span></p>
+                <p className="wa-bubble wa-out wa-seq" style={{ "--d": "1.4s" } as React.CSSProperties}>Yes! It is out for delivery today. Track it here: sharma.in/t/4821<span className="wa-time">10:42 <CheckCheck className="wa-ticks inline size-3.5" /></span></p>
+                <p className="wa-bubble wa-in wa-seq" style={{ "--d": "2.6s" } as React.CSSProperties}>Great, thank you!<span className="wa-time">10:43</span></p>
+                <p className="wa-bubble wa-out wa-seq" style={{ "--d": "3.6s" } as React.CSSProperties}>Anything else we can help with? 😊<span className="wa-time">10:43 <CheckCheck className="wa-ticks inline size-3.5" /></span></p>
+                <p className="wa-bubble wa-in wa-seq !w-16" style={{ "--d": "4.6s" } as React.CSSProperties}><span className="wa-dot" /><span className="wa-dot" /><span className="wa-dot" /></p>
               </div>
             </div>
-            <span className="clay-blob clay-peach clay-bob absolute -left-1 top-10 grid size-16 place-items-center" style={{ "--r": "-6deg" } as CSSProperties}><Mail className="size-7 text-[#6b2f12]" /></span>
-            <span className="clay-blob clay-sky clay-bob absolute -right-1 top-28 grid size-14 place-items-center [animation-delay:-2s]"><Globe className="size-6 text-[#0b3a63]" /></span>
-            <span className="clay-blob clay-butter clay-bob absolute bottom-6 left-2 grid size-14 place-items-center [animation-delay:-4s]"><Camera className="size-6 text-[#6b4d00]" /></span>
           </div>
         </section>
 
-        <section id="channels" aria-labelledby="channels-title" className="mx-auto max-w-6xl px-4 py-14">
-          <h2 id="channels-title" className="text-center font-display text-3xl font-bold sm:text-4xl">One inbox, every channel</h2>
-          <p className="clay-muted mx-auto mt-3 max-w-xl text-center">Customers write where they like. Your team answers from the same screen.</p>
-          <ul className="mt-10 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-6">
-            {CHANNELS.map((c) => (
-              <li key={c.name} className="clay-card flex flex-col items-center px-3 py-6 text-center">
-                <span className={`clay-blob ${c.tone} grid size-16 place-items-center`}><c.icon className="size-7 text-[#12241b]" aria-hidden="true" /></span>
-                <p className="mt-4 font-bold">{c.name}</p>
-                <span className="clay-pressed mt-2 inline-block !rounded-full px-3 py-0.5 text-caption font-semibold">{c.state}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
+        {content.services.length ? (
+          <section id="services" aria-labelledby="services-title" className="mx-auto max-w-6xl px-4 py-14">
+            <h2 id="services-title" data-reveal className="text-center font-display text-3xl font-bold sm:text-4xl">What we do for you</h2>
+            <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {content.services.map((sv, i) => {
+                const Icon = SERVICE_ICONS[i % SERVICE_ICONS.length];
+                return (
+                  <div key={sv.id} data-reveal style={{ "--d": `${(i % 3) * 0.08}s` } as React.CSSProperties} className="wa-card p-6">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="wa-icon"><Icon className="size-5" aria-hidden="true" /></span>
+                      {sv.state === "soon" ? <span className="wa-pill wa-pill-soon">Coming soon</span> : null}
+                    </div>
+                    <h3 className="mt-4 text-lg font-bold">{sv.title}</h3>
+                    <p className="wa-muted mt-1.5">{sv.text}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
 
-        <section aria-labelledby="features" className="mx-auto max-w-6xl px-4 py-14">
-          <h2 id="features" className="text-center font-display text-3xl font-bold sm:text-4xl">Everything your team needs</h2>
-          <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {FEATURE_CARDS.map((f) => (
-              <div key={f.title} className="clay-card p-6">
-                <span className={`clay-blob ${f.tone} grid size-14 place-items-center`}><f.icon className="size-6 text-[#12241b]" aria-hidden="true" /></span>
-                <h3 className="mt-4 text-lg font-bold">{f.title}</h3>
-                <p className="clay-muted mt-1.5">{f.text}</p>
-              </div>
-            ))}
+        <section id="channels" aria-labelledby="channels-title" className="wa-band">
+          <div className="mx-auto max-w-6xl px-4 py-14">
+            <h2 id="channels-title" data-reveal className="text-center font-display text-3xl font-bold sm:text-4xl">One inbox, every channel</h2>
+            <p data-reveal className="mx-auto mt-3 max-w-xl text-center text-white/80">Customers write where they like. Your team answers from the same screen.</p>
+            <ul className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              {CHANNELS.map((c, i) => (
+                <li key={c.name} data-reveal style={{ "--d": `${(i % 4) * 0.07}s` } as React.CSSProperties} className="rounded-2xl bg-white/10 p-5 text-center ring-1 ring-white/15">
+                  <c.icon className="mx-auto size-7" aria-hidden="true" />
+                  <p className="mt-3 font-bold">{c.name}</p>
+                  <span className={`mt-2 inline-block rounded-full px-3 py-0.5 text-caption font-semibold ${c.soon ? "bg-[#fff4d6] text-[#7a5a00]" : "bg-[#25d366] text-[#06281a]"}`}>{c.soon ? "Coming soon" : "Live"}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
+
+        {content.integrations.length ? (
+          <section aria-labelledby="integrations-title" className="mx-auto max-w-6xl px-4 py-14">
+            <h2 id="integrations-title" data-reveal className="text-center font-display text-3xl font-bold sm:text-4xl">Works with the tools you use</h2>
+            <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {content.integrations.map((it, i) => (
+                <li key={it.id} data-reveal style={{ "--d": `${(i % 3) * 0.07}s` } as React.CSSProperties} className="wa-card flex items-center gap-4 p-4">
+                  <span className="wa-icon shrink-0"><Plug className="size-5" aria-hidden="true" /></span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-bold">{it.name}</p>
+                    {it.note ? <p className="wa-muted truncate text-small">{it.note}</p> : null}
+                  </div>
+                  <span className={`wa-pill shrink-0 ${it.state === "soon" ? "wa-pill-soon" : ""}`}>{it.state === "soon" ? "Soon" : "Live"}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         <section aria-labelledby="how" className="mx-auto max-w-6xl px-4 py-14">
-          <h2 id="how" className="text-center font-display text-3xl font-bold sm:text-4xl">How it works</h2>
-          <ol className="mt-10 grid gap-6 md:grid-cols-3">
-            {STEPS.map((st) => (
-              <li key={st.n} className="clay-card p-6">
-                <span className={`clay-blob ${st.tone} grid size-12 place-items-center text-lg font-bold text-[#12241b]`}>{st.n}</span>
+          <h2 id="how" data-reveal className="text-center font-display text-3xl font-bold sm:text-4xl">How it works</h2>
+          <ol className="mt-10 grid gap-5 md:grid-cols-3">
+            {STEPS.map((st, i) => (
+              <li key={st.n} data-reveal style={{ "--d": `${i * 0.1}s` } as React.CSSProperties} className="wa-card p-6">
+                <span className="grid size-10 place-items-center rounded-full bg-[#128c7e] text-lg font-bold text-white">{st.n}</span>
                 <h3 className="mt-4 text-lg font-bold">{st.title}</h3>
-                <p className="clay-muted mt-1.5">{st.text}</p>
+                <p className="wa-muted mt-1.5">{st.text}</p>
               </li>
             ))}
           </ol>
         </section>
 
+        {content.team.length ? (
+          <section aria-labelledby="team-title" className="mx-auto max-w-6xl px-4 py-14">
+            <h2 id="team-title" data-reveal className="text-center font-display text-3xl font-bold sm:text-4xl">Our team</h2>
+            <ul className="mt-10 flex flex-wrap justify-center gap-5">
+              {content.team.map((m, i) => (
+                <li key={m.id} data-reveal style={{ "--d": `${(i % 4) * 0.07}s` } as React.CSSProperties} className="wa-card w-[calc(50%-0.625rem)] p-5 text-center sm:w-52">
+                  {m.photo ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={m.photo} alt={m.name} width={96} height={96} loading="lazy" className="mx-auto size-24 rounded-full object-cover" />
+                  ) : (
+                    <span className="mx-auto grid size-24 place-items-center rounded-full bg-[#e7f7ee] text-2xl font-bold text-[#075e54]" aria-hidden="true">
+                      {m.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
+                    </span>
+                  )}
+                  <p className="mt-3 font-bold">{m.name}</p>
+                  {m.role ? <p className="text-small font-semibold text-[#128c7e]">{m.role}</p> : null}
+                  {m.bio ? <p className="wa-muted mt-1 text-small">{m.bio}</p> : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
         {plans.length ? (
           <section id="pricing" aria-labelledby="pricing-title" className="mx-auto max-w-6xl px-4 py-14">
-            <h2 id="pricing-title" className="text-center font-display text-3xl font-bold sm:text-4xl">Simple plans</h2>
-            <p className="clay-muted mx-auto mt-3 max-w-xl text-center">Platform plans in rupees. Meta&apos;s WhatsApp charges are billed by Meta separately.</p>
-            <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <h2 id="pricing-title" data-reveal className="text-center font-display text-3xl font-bold sm:text-4xl">Simple plans</h2>
+            <p data-reveal className="wa-muted mx-auto mt-3 max-w-xl text-center">Platform plans in rupees. Meta&apos;s WhatsApp charges are billed by Meta separately.</p>
+            <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
               {plans.map((p, i) => (
-                <div key={p.id} className={`clay-card flex flex-col p-6 ${plans.length >= 3 && i === 1 ? "ring-4 ring-emerald-400/60" : ""}`}>
-                  {plans.length >= 3 && i === 1 ? <span className="clay-blob clay-mint mb-3 inline-block self-start px-3 py-0.5 text-caption font-bold text-[#06281a]">Recommended</span> : null}
+                <div key={p.id} data-reveal style={{ "--d": `${i * 0.07}s` } as React.CSSProperties} className={`wa-card flex flex-col p-6 ${plans.length >= 3 && i === 1 ? "!border-[#128c7e] ring-2 ring-[#128c7e]/30" : ""}`}>
+                  {plans.length >= 3 && i === 1 ? <span className="wa-pill mb-3 self-start">Recommended</span> : null}
                   <h3 className="text-lg font-bold">{p.name}</h3>
                   <p className="mt-2 font-display text-4xl font-bold">
                     {p.selfServe ? formatINR(p.priceMonthly) : "Custom"}
-                    {p.selfServe ? <span className="clay-muted text-small font-medium"> / month</span> : null}
+                    {p.selfServe ? <span className="wa-muted text-small font-medium"> / month</span> : null}
                   </p>
-                  <p className="clay-muted mt-1 text-small">{p.description}</p>
-                  <a href={wa(`Hi MECGURA, I am interested in the ${p.name} plan.`)} className="clay-btn clay-btn-soft mt-5 !min-h-11 w-full text-small">
+                  <p className="wa-muted mt-1 text-small">{p.description}</p>
+                  <a href={wa(`Hi MECGURA, I am interested in the ${p.name} plan.`)} className="wa-btn wa-btn-ghost mt-5 !min-h-11 w-full text-small">
                     {p.selfServe ? "Get started" : "Talk to us"}
                   </a>
                   <ul className="mt-5 space-y-2 text-small">
@@ -187,7 +230,7 @@ export default async function Landing() {
                       ...parseFeatures(p.features).map((k) => FEATURES[k]),
                     ].map((line) => (
                       <li key={line} className="flex gap-2">
-                        <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
+                        <Check className="mt-0.5 size-4 shrink-0 text-[#128c7e]" aria-hidden="true" />
                         {line}
                       </li>
                     ))}
@@ -199,33 +242,33 @@ export default async function Landing() {
         ) : null}
 
         <section id="contact" aria-labelledby="contact-title" className="mx-auto max-w-4xl px-4 py-14">
-          <div className="clay-card p-8 text-center sm:p-12">
+          <div data-reveal className="wa-card p-8 text-center sm:p-12">
             <h2 id="contact-title" className="font-display text-3xl font-bold sm:text-4xl">Let&apos;s talk</h2>
-            <p className="clay-muted mx-auto mt-3 max-w-lg">Questions, a demo or setup help. We reply on WhatsApp and email.</p>
-            <div className="mt-8 grid gap-4 sm:grid-cols-3">
-              <a href={wa("Hi MECGURA, I would like to know more about the platform.")} className="clay-btn w-full"><MessageCircle className="size-5" aria-hidden="true" /> WhatsApp</a>
-              <a href={`tel:+${whatsappDigits}`} className="clay-btn clay-btn-soft w-full"><Phone className="size-5" aria-hidden="true" /> {phoneLabel}</a>
-              <a href={`mailto:${siteConfig.contact.email}`} className="clay-btn clay-btn-soft w-full !px-3 text-small"><Mail className="size-5 shrink-0" aria-hidden="true" /> {siteConfig.contact.email}</a>
+            <p className="wa-muted mx-auto mt-3 max-w-lg">Questions, a demo or setup help. We reply on WhatsApp and email.</p>
+            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+              <a href={wa("Hi MECGURA, I would like to know more about the platform.")} className="wa-btn w-full"><MessageCircle className="size-5" aria-hidden="true" /> WhatsApp</a>
+              <a href={`tel:+${whatsappDigits}`} className="wa-btn wa-btn-ghost w-full"><Phone className="size-5" aria-hidden="true" /> {phoneLabel}</a>
+              <a href={`mailto:${siteConfig.contact.email}`} className="wa-btn wa-btn-ghost w-full !px-3 text-small"><Mail className="size-5 shrink-0" aria-hidden="true" /> {siteConfig.contact.email}</a>
             </div>
           </div>
         </section>
 
         <section aria-labelledby="faq" className="mx-auto max-w-3xl px-4 py-14">
-          <h2 id="faq" className="text-center font-display text-3xl font-bold sm:text-4xl">Questions</h2>
-          <div className="mt-8 space-y-4">
+          <h2 id="faq" data-reveal className="text-center font-display text-3xl font-bold sm:text-4xl">Questions</h2>
+          <div className="mt-8 space-y-3">
             {FAQ.map((f) => (
-              <details key={f.q} className="clay-card group px-6 py-4">
+              <details key={f.q} data-reveal className="wa-card px-6 py-4">
                 <summary className="cursor-pointer list-none font-bold marker:hidden">{f.q}</summary>
-                <p className="clay-muted mt-2">{f.a}</p>
+                <p className="wa-muted mt-2">{f.a}</p>
               </details>
             ))}
           </div>
         </section>
       </main>
 
-      <footer className="mx-auto max-w-6xl px-4 pb-10 pt-6">
-        <div className="clay-pressed flex flex-wrap items-center justify-between gap-4 px-6 py-5 text-small">
-          <p className="clay-muted">
+      <footer className="border-t border-[var(--wa-line)] bg-white">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-6 text-small">
+          <p className="wa-muted">
             © {new Date().getFullYear()} MECGURA · <a href={`mailto:${siteConfig.contact.email}`} className="hover:underline">{siteConfig.contact.email}</a> · <a href={`tel:+${whatsappDigits}`} className="hover:underline">{phoneLabel}</a>
           </p>
           <nav aria-label="Legal" className="flex flex-wrap gap-5 font-semibold">
@@ -236,6 +279,7 @@ export default async function Landing() {
           </nav>
         </div>
       </footer>
+      <FloatingChat digits={whatsappDigits} />
     </div>
   );
 }

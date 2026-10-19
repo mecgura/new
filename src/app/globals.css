@@ -236,84 +236,128 @@ dialog.ds-dialog::backdrop {
 }
 
 /* =====================================================================
-   CLAYMORPHISM (public home page only): soft pastel surfaces with puffy,
-   inflated edges made from a light and a dark outer shadow plus inner
-   highlights. Scoped under .clay-root so the app stays on its own system.
+   HOME PAGE (public): clean WhatsApp-style look. Off-white chat wallpaper,
+   white cards, WhatsApp greens, chat bubbles. Scoped under .wa-root so the
+   app keeps its own design system. Motion is subtle and respects
+   prefers-reduced-motion.
    ===================================================================== */
-.clay-root {
-  --clay-bg: #e9f0ec;
-  --clay-ink: #12241b;
-  --clay-muted: #4f6458;
-  --clay-shadow: rgba(106, 140, 124, 0.38);
-  background-color: var(--clay-bg);
-  background-image:
-    radial-gradient(40rem 28rem at 8% 0%, rgba(185, 168, 255, 0.35), transparent 60%),
-    radial-gradient(36rem 26rem at 100% 10%, rgba(255, 201, 168, 0.4), transparent 60%),
-    radial-gradient(40rem 30rem at 50% 100%, rgba(169, 216, 255, 0.35), transparent 60%);
-  color: var(--clay-ink);
+.wa-root {
+  --wa-bg: #efeae2;
+  --wa-ink: #111b21;
+  --wa-muted: #54656f;
+  --wa-line: #e1e6e9;
+  --wa-green: #25d366;
+  --wa-teal: #075e54;
+  --wa-teal-2: #128c7e;
+  --wa-bubble-out: #d9fdd3;
+  background-color: var(--wa-bg);
+  background-image: radial-gradient(rgba(7, 94, 84, 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+  color: var(--wa-ink);
   color-scheme: light;
   font-family: var(--font-sans);
 }
-.clay-root :focus-visible {
-  outline: 3px solid #1f9d6b;
+.wa-root :focus-visible {
+  outline: 3px solid var(--wa-teal-2);
   outline-offset: 3px;
-  border-radius: 18px;
+  border-radius: 10px;
 }
-.clay-muted {
-  color: var(--clay-muted);
+.wa-muted { color: var(--wa-muted); }
+.wa-topbar {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--wa-line);
 }
-.clay-card {
-  background: linear-gradient(145deg, #f7fbf9, #e2ebe6);
-  border-radius: 2rem;
-  box-shadow: 12px 14px 28px var(--clay-shadow), -10px -10px 22px rgba(255, 255, 255, 0.95), inset 3px 3px 6px rgba(255, 255, 255, 0.85), inset -4px -5px 10px rgba(106, 140, 124, 0.14);
+.wa-band { background: var(--wa-teal); color: #fff; }
+.wa-card {
+  background: #fff;
+  border: 1px solid var(--wa-line);
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px rgba(11, 20, 26, 0.06);
 }
-.clay-pressed {
-  background: #e3ece7;
-  border-radius: 1.25rem;
-  box-shadow: inset 5px 5px 10px rgba(106, 140, 124, 0.3), inset -5px -5px 10px rgba(255, 255, 255, 0.9);
-}
-.clay-blob {
-  border-radius: 9999px;
-  box-shadow: 8px 10px 20px var(--clay-shadow), -6px -6px 14px rgba(255, 255, 255, 0.9), inset 3px 4px 7px rgba(255, 255, 255, 0.65), inset -5px -6px 10px rgba(0, 0, 0, 0.1);
-}
-.clay-mint { background: linear-gradient(145deg, #86e8bd, #2fbf84); }
-.clay-lilac { background: linear-gradient(145deg, #d3c8ff, #a894f5); }
-.clay-peach { background: linear-gradient(145deg, #ffdcc6, #ffad84); }
-.clay-sky { background: linear-gradient(145deg, #c4e6ff, #7cc0f5); }
-.clay-butter { background: linear-gradient(145deg, #fff0b8, #ffd45c); }
-.clay-btn {
+.wa-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  min-height: 3.25rem;
-  padding: 0 1.75rem;
+  min-height: 3rem;
+  padding: 0 1.5rem;
   border-radius: 9999px;
   font-weight: 700;
-  color: #06281a;
-  background: linear-gradient(145deg, #86e8bd, #2fbf84);
-  box-shadow: 8px 10px 20px rgba(47, 191, 132, 0.4), -5px -5px 12px rgba(255, 255, 255, 0.9), inset 3px 3px 6px rgba(255, 255, 255, 0.55), inset -4px -5px 9px rgba(0, 90, 55, 0.22);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  color: #fff;
+  background: var(--wa-teal-2);
+  transition: background-color 0.15s ease, transform 0.15s ease;
 }
-.clay-btn:hover { transform: translateY(-2px); }
-.clay-btn:active {
-  transform: translateY(1px);
-  box-shadow: inset 5px 5px 10px rgba(0, 90, 55, 0.3), inset -4px -4px 8px rgba(255, 255, 255, 0.4);
+.wa-btn:hover { background: var(--wa-teal); }
+.wa-btn:active { transform: scale(0.98); }
+.wa-btn-ghost {
+  color: var(--wa-teal);
+  background: #fff;
+  border: 1px solid var(--wa-line);
 }
-.clay-btn-soft {
-  color: var(--clay-ink);
-  background: linear-gradient(145deg, #f7fbf9, #e0eae5);
-  box-shadow: 8px 10px 20px var(--clay-shadow), -6px -6px 14px rgba(255, 255, 255, 0.95), inset 2px 2px 5px rgba(255, 255, 255, 0.9), inset -3px -4px 8px rgba(106, 140, 124, 0.15);
+.wa-btn-ghost:hover { background: #f4f7f6; }
+.wa-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 9999px;
+  padding: 0.15rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #e7f7ee;
+  color: #0b6b3a;
 }
-.clay-btn-soft:active {
-  box-shadow: inset 5px 5px 10px rgba(106, 140, 124, 0.3), inset -5px -5px 10px rgba(255, 255, 255, 0.9);
+.wa-pill-soon { background: #fff4d6; color: #7a5a00; }
+.wa-icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.8rem;
+  background: #e7f7ee;
+  color: var(--wa-teal);
 }
-@keyframes clay-bob {
-  0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); }
-  50% { transform: translateY(-12px) rotate(var(--r, 0deg)); }
+.wa-bubble {
+  position: relative;
+  max-width: 82%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  box-shadow: 0 1px 1px rgba(11, 20, 26, 0.13);
 }
-.clay-bob { animation: clay-bob 6s ease-in-out infinite; }
+.wa-in { background: #fff; border-top-left-radius: 0.2rem; }
+.wa-out { background: var(--wa-bubble-out); margin-left: auto; border-top-right-radius: 0.2rem; }
+.wa-time { display: block; margin-top: 0.1rem; text-align: right; font-size: 0.65rem; color: #667781; }
+.wa-ticks { color: #53bdeb; }
+.wa-chat-bg {
+  background-color: #efeae2;
+  background-image: radial-gradient(rgba(7, 94, 84, 0.09) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+@keyframes wa-pop {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+.wa-seq { opacity: 0; animation: wa-pop 0.45s ease forwards; animation-delay: var(--d, 0s); }
+@keyframes wa-dot {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}
+.wa-dot { display: inline-block; width: 6px; height: 6px; margin: 0 1.5px; border-radius: 9999px; background: #667781; animation: wa-dot 1.2s infinite; }
+.wa-dot:nth-child(2) { animation-delay: 0.15s; }
+.wa-dot:nth-child(3) { animation-delay: 0.3s; }
+/* Scroll reveal: hidden only once the script has marked the page, so no-JS visitors see everything. */
+.wa-js [data-reveal] { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; transition-delay: var(--d, 0s); }
+.wa-js [data-reveal].is-in { opacity: 1; transform: none; }
+@keyframes wa-ring {
+  0% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.5); }
+  100% { box-shadow: 0 0 0 16px rgba(37, 211, 102, 0); }
+}
+.wa-fab { animation: wa-ring 2.4s ease-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .clay-bob { animation: none; transform: rotate(var(--r, 0deg)); }
-  .clay-btn { transition: none; }
+  .wa-seq { animation: none; opacity: 1; }
+  .wa-dot, .wa-fab { animation: none; }
+  .wa-js [data-reveal] { opacity: 1; transform: none; transition: none; }
+  .wa-btn { transition: none; }
 }
