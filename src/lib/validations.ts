@@ -816,3 +816,31 @@ export const bulkDeleteContactsSchema = z.union([
     })
     .strict(),
 ]);
+
+// ---- Ads Manager (click-to-WhatsApp) ---------------------------------------------
+
+export const adConnectSchema = z
+  .object({
+    adAccountId: z.string().trim().regex(/^\d{5,20}$/, "Ad account ID is a number (without act_)"),
+    pageId: z.string().trim().regex(/^\d{5,20}$/, "Page ID is a number"),
+    accessToken: z.string().trim().min(50, "Access token looks too short").max(1024).regex(/^[A-Za-z0-9_\-|.]+$/, "Access token contains invalid characters"),
+  })
+  .strict();
+
+export const adCreateSchema = z
+  .object({
+    name: z.string().trim().min(3).max(100),
+    whatsappAccountId: idSchema,
+    dailyBudgetRupees: z.number().min(100).max(10_000),
+    message: z.string().trim().min(5, "Write the ad text").max(500),
+    headline: z.string().trim().max(40).default(""),
+    imageHash: z.string().trim().min(5).max(100).regex(/^[A-Za-z0-9]+$/, "Upload the image first"),
+    ageMin: z.number().int().min(18).max(65).default(18),
+    ageMax: z.number().int().min(18).max(65).default(55),
+    gender: z.enum(["all", "male", "female"]).default("all"),
+    startAt: z.coerce.date().nullable().default(null),
+    endAt: z.coerce.date().nullable().default(null),
+  })
+  .strict();
+
+export const adStatusSchema = z.object({ action: z.enum(["activate", "pause", "archive"]), confirmBudget: z.boolean().optional() }).strict();

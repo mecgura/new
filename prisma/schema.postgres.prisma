@@ -69,6 +69,8 @@ model Organization {
   whatsappAccounts        WhatsAppAccount[]
   channelAccounts         ChannelAccount[]
   voiceCalls              VoiceCall[]
+  adConnection            AdConnection?
+  adCampaigns             AdCampaign[]
   usageCounters           UsageCounter[]
   wabas                   WhatsAppBusinessAccount[]
   phoneNumbers            PhoneNumber[]
@@ -1427,4 +1429,58 @@ model VoiceCall {
 
   @@index([organizationId, createdAt])
   @@index([contactId])
+}
+
+
+// The Meta ad account + Facebook Page this workspace's click-to-WhatsApp ads run under. The access token (for example an agency
+// system-user token with partner access to the client's ad account) is encrypted and never returned.
+model AdConnection {
+  id             String   @id @default(cuid())
+  organizationId String   @unique
+  adAccountId    String // digits only (without "act_")
+  adAccountName  String   @default("")
+  pageId         String
+  pageName       String   @default("")
+  currency       String   @default("INR")
+  encryptedToken String
+  tokenLast4     String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// A click-to-WhatsApp ad created from MECGURA. It is always created PAUSED on Meta; going live is a separate, confirmed step.
+model AdCampaign {
+  id                String    @id @default(cuid())
+  organizationId    String
+  name              String
+  status            String    @default("draft") // draft | paused | active | failed | archived
+  dailyBudget       Int // paise
+  whatsappAccountId String
+  message           String // primary text
+  headline          String    @default("")
+  imageHash         String    @default("")
+  ageMin            Int       @default(18)
+  ageMax            Int       @default(55)
+  gender            String    @default("all") // all | male | female
+  startAt           DateTime?
+  endAt             DateTime?
+  metaCampaignId    String    @default("")
+  metaAdSetId       String    @default("")
+  metaCreativeId    String    @default("")
+  metaAdId          String    @default("")
+  lastError         String    @default("")
+  spend             Int       @default(0) // paise, from Meta insights
+  impressions       Int       @default(0)
+  clicks            Int       @default(0)
+  syncedAt          DateTime?
+  createdByUserId   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([metaAdId])
 }

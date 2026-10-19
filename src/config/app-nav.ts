@@ -11,6 +11,7 @@ import {
   Megaphone,
   Mail,
   Phone,
+  Rocket,
   Sparkles,
   MessageCircle,
   ScrollText,
@@ -37,7 +38,7 @@ export type NavItem = {
   /** Extra path prefixes that also mark this item active. */
   also?: string[];
   /** Shown locked (and the page refuses) unless the admin enabled this service for the workspace. */
-  service?: "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT";
+  service?: "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER";
   /** Module ships in a later phase: rendered disabled with a "Soon" badge, never a fake page. */
   comingSoon?: boolean;
 };
@@ -56,6 +57,7 @@ export const CLIENT_NAV: NavSection[] = [
       { label: "Templates", icon: FileText, href: "/templates" },
       { label: "Automations", icon: Workflow, href: "/automations" },
       { label: "Lead Ads", icon: Target, href: "/lead-ads" },
+      { label: "Ads Manager", icon: Rocket, href: "/ads", service: "ADS_MANAGER" },
       { label: "Channels", icon: Mail, href: "/channels", service: "OMNICHANNEL" },
       { label: "Flows", icon: GitBranch, href: "/flows" },
       { label: "AI Agent", icon: Bot, href: "/ai", service: "AI_ASSISTANT" },
