@@ -19,21 +19,23 @@ async function main() {
     console.log("SEED_ADMIN_EMAIL not set — skipping the admin account (plans are still seeded).");
   } else {
     const seedPassword = process.env.SEED_ADMIN_PASSWORD;
+    const resetRequested = process.env.SEED_ADMIN_RESET === "true";
     const existingAdmin = await db.user.findUnique({ where: { email: adminEmail } });
-    if (seedPassword) {
-      // Explicit password provided → (re)set it.
+    if (!existingAdmin) {
+      // First run: create the admin. A password is required.
+      if (!seedPassword) throw new Error("SEED_ADMIN_PASSWORD environment variable is required to create the admin account.");
       const passwordHash = await bcrypt.hash(seedPassword, 12);
-      await db.user.upsert({
-        where: { email: adminEmail },
-        update: { passwordHash, role: "SUPER_ADMIN", name: "MECGURA Admin" },
-        create: { email: adminEmail, name: "MECGURA Admin", passwordHash, role: "SUPER_ADMIN" },
-      });
+      await db.user.create({ data: { email: adminEmail, name: "MECGURA Admin", passwordHash, role: "SUPER_ADMIN" } });
       console.log(`Seeded admin user: ${adminEmail}`);
-    } else if (existingAdmin) {
-      // No password provided and admin already exists → keep current password untouched.
-      console.log("Kept existing admin password (set SEED_ADMIN_PASSWORD to change it).");
+    } else if (resetRequested && seedPassword) {
+      // Only an explicit reset (SEED_ADMIN_RESET=true) overwrites a password. A normal redeploy never does,
+      // so a password the admin changed in the app survives every deploy.
+      const passwordHash = await bcrypt.hash(seedPassword, 12);
+      await db.user.update({ where: { email: adminEmail }, data: { passwordHash, role: "SUPER_ADMIN", sessionVersion: { increment: 1 } } });
+      console.log(`Reset admin password for ${adminEmail} (SEED_ADMIN_RESET=true).`);
     } else {
-      throw new Error("SEED_ADMIN_PASSWORD environment variable is required to create the admin account.");
+      if (existingAdmin.role !== "SUPER_ADMIN") await db.user.update({ where: { email: adminEmail }, data: { role: "SUPER_ADMIN" } });
+      console.log("Admin already exists: password left untouched (set SEED_ADMIN_RESET=true with SEED_ADMIN_PASSWORD to reset it).");
     }
   }
 

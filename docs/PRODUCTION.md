@@ -102,7 +102,7 @@ Migrations live in `prisma/migrations` (SQLite). **Production (PostgreSQL)** use
 | `ANTHROPIC_API_KEY` | AI live | Claude |
 | `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | payments live | Razorpay |
 | `RESEND_API_KEY`, `EMAIL_FROM` | email | password reset |
-| `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_DEMO_PASSWORD` | seeding only | first admin / QA tenants |
+| `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_DEMO_PASSWORD`, `SEED_ADMIN_RESET` | seeding only | first admin (created once) / QA tenants / explicit admin password reset |
 
 Only `NEXT_PUBLIC_*` variables reach the browser (baked in at build time). `.env` files are git-ignored; `.env.example` holds names only.
 
@@ -151,7 +151,7 @@ After deploy:
 
 ## 9c. Vercel
 
-* Build Command: `npm run build:vercel` — applies the schema (`prisma db push`, additive), seeds plans (and the first admin when `SEED_ADMIN_EMAIL` + `SEED_ADMIN_PASSWORD` are set), then builds. Remove `SEED_ADMIN_PASSWORD` after the first successful deploy so later deploys never reset the admin password.
+* Build Command: `npm run build:vercel` — applies the schema (`prisma db push`, additive), seeds plans (and the first admin when `SEED_ADMIN_EMAIL` + `SEED_ADMIN_PASSWORD` are set), then builds. The admin is created only when missing; a redeploy never resets an existing password (an explicit reset needs `SEED_ADMIN_RESET=true`). `SEED_ADMIN_PASSWORD` can be removed after the first deploy.
 * Required Production env: `DATABASE_URL`, `PRISMA_SCHEMA=prisma/schema.postgres.prisma`, `AUTH_SECRET`, `WHATSAPP_ENCRYPTION_KEY`, `NEXT_PUBLIC_APP_URL`, `CRON_SECRET`.
 * Cron: Vercel **Hobby** only allows daily crons, so no per-minute cron is declared. Campaign/automation timers run when `GET /api/cron/campaigns` is called with `Authorization: Bearer $CRON_SECRET` — point an external pinger (cron-job.org, UptimeRobot, GitHub Actions) at it every minute, or upgrade to Pro and add a cron in `vercel.json`.
 

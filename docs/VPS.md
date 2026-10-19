@@ -51,7 +51,7 @@ Open `https://your-domain.example/login`.
   nano .env          # edit SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD
   docker compose up -d --force-recreate app
   ```
-  Startup re-runs the seed: with `SEED_ADMIN_PASSWORD` set it (re)sets that account's password. A **new** `SEED_ADMIN_EMAIL` creates a second Super Admin; remove the old one in Admin → Users. After the first login, delete `SEED_ADMIN_PASSWORD` from `.env` so restarts never reset it.
+  Startup re-runs the seed: it creates the admin only if missing and never changes an existing password (to force a reset run `deploy/reset-admin.sh`, or set `SEED_ADMIN_RESET=true` together with `SEED_ADMIN_PASSWORD`). A **new** `SEED_ADMIN_EMAIL` creates a second Super Admin; remove the old one in Admin → Users. After the first login, delete `SEED_ADMIN_PASSWORD` from `.env` so restarts never reset it.
 
 ## Updating later
 ```bash

@@ -53,3 +53,4 @@ next-env.d.ts
 
 # test database
 test.db*
+seed-test.db*
