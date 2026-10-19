@@ -393,7 +393,7 @@ describe("AI agent", () => {
     expect(JSON.parse(c.customFields)).toMatchObject({ city: "Amritsar" });
     // Second request carried the assistant turn unchanged plus both tool results.
     const second = sdk.create.mock.calls[1][0] as { messages: { role: string; content: unknown }[]; system: { cache_control?: unknown }[]; model: string };
-    expect(second.model).toBe("claude-opus-5-5");
+    expect(second.model).toBe("claude-haiku-5-5");
     expect(second.system[0].cache_control).toEqual({ type: "ephemeral" });
     expect(second.messages.at(-2)?.role).toBe("assistant");
     expect((second.messages.at(-1)?.content as { tool_use_id: string }[]).map((r) => r.tool_use_id)).toEqual(["tu1", "tu2"]);
