@@ -11,6 +11,7 @@ import {
   Megaphone,
   Mail,
   Phone,
+  Sparkles,
   MessageCircle,
   ScrollText,
   Settings,
@@ -58,6 +59,7 @@ export const CLIENT_NAV: NavSection[] = [
       { label: "AI Agent", icon: Bot, href: "/ai" },
       { label: "AI Calling", icon: Phone, href: "/voice" },
       { label: "Analytics", icon: BarChart3, href: "/analytics" },
+      { label: "Industry packs", icon: Sparkles, href: "/packs" },
     ],
   },
   {

@@ -796,3 +796,5 @@ export const voiceCallSchema = z
     consentNote: z.string().trim().min(5, "Record who agreed to be called and how").max(300),
   })
   .strict();
+
+export const packApplySchema = z.object({ packId: z.string().trim().min(1).max(40).regex(/^[a-z_]+$/) }).strict();

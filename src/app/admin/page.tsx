@@ -19,6 +19,7 @@ import { formatINR, formatNumber, ACTIVE_NUMBER_STATUSES } from "@/lib/catalog";
 import { isEmailConfigured } from "@/lib/mailer";
 import { mrrAt } from "@/lib/services/clients";
 import { dayKey, monthPrefix } from "@/lib/services/usage";
+import { getClientHealth } from "@/services/analytics/health";
 import { Avatar, Badge, Card, CardBody, CardHeader, EmptyState, PageHeader, StatCard, buttonVariants } from "@/components/ds";
 import { ActivityChart, type DayCount } from "@/components/app/activity-chart";
 
@@ -94,6 +95,7 @@ export default async function AdminDashboardPage() {
 
   const healthy = status.dbOk;
 
+  const health = await getClientHealth();
   return (
     <>
       <PageHeader
@@ -167,6 +169,34 @@ export default async function AdminDashboardPage() {
                   <time dateTime={r.createdAt.toISOString()} className="shrink-0 text-caption text-app-subtle">
                     {dateTime.format(r.createdAt)}
                   </time>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+        <Card className="xl:col-span-3">
+          <CardHeader title="Needs attention" description={`Checked ${health.checked} active client${health.checked === 1 ? "" : "s"} with a WhatsApp number`} />
+          {health.flagged.length === 0 ? (
+            <EmptyState icon={CheckCircle2} title="Nothing needs attention" description="Wallets, invoices and message traffic look fine." className="py-8" />
+          ) : (
+            <ul className="divide-y divide-app-border">
+              {health.flagged.map((c) => (
+                <li key={c.id}>
+                  <Link href={`/admin/clients/${c.id}`} className="flex flex-wrap items-center gap-3 px-5 py-3 hover:bg-app-hover/60">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-body text-app-text">{c.name}</p>
+                      <p className="truncate text-caption text-app-subtle">
+                        {c.messages7d} messages this week · wallet {formatINR(c.walletBalance)}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {c.issues.map((i) => (
+                        <Badge key={i} tone="warning">
+                          {i}
+                        </Badge>
+                      ))}
+                    </div>
+                  </Link>
                 </li>
               ))}
             </ul>

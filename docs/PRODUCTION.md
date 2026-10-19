@@ -193,3 +193,16 @@ Serverless instances don't share memory, so the inbox no longer holds a stream o
 * **Click-to-WhatsApp**: the `referral` object Meta sends with a customer's first message is stored (`AdReferral`), shown in the inbox customer panel and summarised under Analytics → Click-to-WhatsApp ads.
 * **Embedded Signup**: Admin → WhatsApp Accounts shows what's missing (`META_APP_ID`, `META_APP_SECRET`, `META_EMBEDDED_SIGNUP_CONFIG_ID`, `META_WEBHOOK_VERIFY_TOKEN`). New numbers added through Embedded Signup are registered for the Cloud API with a generated PIN (stored encrypted) when Meta hasn't done so; coexistence numbers are not registered. Set `META_GRAPH_API_VERSION` to change the Graph version (default v23.0).
 * Realtime events, wallet and fees: see the sections above.
+
+
+## Phases 2-4 and extras (added)
+
+* **Channels** (`/channels`): email inbox (demo until `RESEND_API_KEY` + `EMAIL_FROM` and a verified domain), website chat widget (`/widget.js`, public key per inbox), Messenger and Instagram DMs (same `/api/webhooks/meta` endpoint; subscribe the Page / Instagram `messages` field). See `docs/CHANNELS.md` for what is verified and what is not.
+* **AI calling** (`/voice`): practice mode only; no voice provider is connected.
+* **Wallet top-up online**: `POST /api/organizations/<org>/wallet/topup` creates an invoice (kind `topup`) paid through the normal Razorpay checkout; the pre-tax amount is credited once the signed payment confirmation arrives (or when an admin records a bank transfer on that invoice). GST on prepaid credit follows the admin tax setting; **have your CA confirm the treatment** before taking real money.
+* **Weekly report**: `/api/cron/weekly-report` (secret `CRON_SECRET`; `vercel.json` schedules it Mondays 09:00 IST). In-app notification to workspace owners, plus email when the workspace has a notification email and email is configured. WhatsApp delivery of the report is not built: a business-initiated WhatsApp message needs an approved template.
+* **Industry packs** (`/packs`): tags, a draft AI assistant and template drafts per business type. Nothing is submitted or sent.
+* **Admin "Needs attention"** on `/admin`: empty or low wallets, overdue invoices, failed sends, silent clients.
+* Not built: agency white-label (needs an agency to client hierarchy and custom domains; scope it when the first agency needs it).
+
+New environment variables: none required. Optional: `RESEND_API_KEY`, `EMAIL_FROM` (email channel, reports), `CRON_SECRET` (cron endpoints).

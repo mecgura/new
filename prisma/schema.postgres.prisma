@@ -271,6 +271,7 @@ model OrganizationSettings {
   notificationEmail String   @default("")
   // JSON-encoded weekly hours (SQLite + PostgreSQL compatible)
   businessHours     String   @default("{}")
+  weeklyReportAt    DateTime? // last weekly summary sent
   updatedAt         DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)

@@ -134,11 +134,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     return { date: key, label: dayLabel.format(d), count: counts.get(key) ?? 0 };
   });
 
+  const orgScope = { organizationId: active.organizationId };
+  const [approvedTemplates, contactCount, campaignCount, automationCount] = await Promise.all([
+    db.messageTemplate.count({ where: { ...orgScope, status: "approved" } }),
+    db.contact.count({ where: orgScope }),
+    db.campaign.count({ where: orgScope }),
+    db.automation.count({ where: orgScope }),
+  ]);
   const checklist = [
     { done: Boolean(user.name && user.name.trim().length >= 2), label: "Complete your profile", href: "/settings" },
     { done: memberCount > 1, label: "Invite your team", href: "/team" },
     { done: numbers > 0, label: "Connect your WhatsApp Business number", href: "/whatsapp/connect" },
     { done: sent + received > 0, label: "Exchange your first messages", href: "/inbox" },
+    { done: contactCount > 1, label: "Add or import your contacts", href: "/contacts" },
+    { done: approvedTemplates > 0, label: "Get a message template approved", href: "/templates" },
+    { done: campaignCount + automationCount > 0, label: "Create your first campaign or automation", href: "/campaigns" },
   ];
 
   return (

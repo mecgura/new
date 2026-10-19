@@ -276,6 +276,7 @@ describe("5. public and secret-protected surfaces", () => {
       ["POST", "/api/webhooks/payments/razorpay", "{}"],
       ["POST", "/api/webhooks/payments/nope", "{}"],
       ["GET", "/api/cron/campaigns", ""],
+      ["GET", "/api/cron/weekly-report", ""],
       ["POST", "/api/automations/hooks/someid", "{}"],
     ];
     for (const [m, url, body] of cases) {
@@ -321,6 +322,7 @@ describe("5. public and secret-protected surfaces", () => {
         "/api/auth/reset-password",
         "/api/automations/hooks/[aid]",
         "/api/cron/campaigns",
+        "/api/cron/weekly-report",
         "/api/health",
         "/api/webchat/[key]",
         "/api/webhooks/channels/[key]",
