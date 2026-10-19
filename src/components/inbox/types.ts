@@ -1,3 +1,6 @@
+/** Contacts from non-phone channels store an "email:" / "visitor:" placeholder in the phone column; show only the address. */
+export const prettyId = (v: string) => v.replace(/^(email|visitor|instagram|messenger):/, "");
+
 export type Tag = { id: string; name: string; color: string };
 
 export type Conversation = {
@@ -8,6 +11,8 @@ export type Conversation = {
   lastMessagePreview: string;
   lastInboundAt: string | null;
   windowOpen: boolean;
+  channel: string;
+  subject: string;
   windowExpiresAt: string | null;
   isDemo: boolean;
   contact: { id: string; name: string; phone: string; optInStatus: string; tags: Tag[] };

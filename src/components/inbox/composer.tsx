@@ -141,18 +141,22 @@ export function Composer({
       <div className="flex items-end gap-2">
         {mode === "reply" ? (
           <div className="flex shrink-0 gap-0.5">
-            <IconButton label="Attach file" onClick={() => fileRef.current?.click()} disabled={replyDisabled || windowClosed || sending}>
-              <Paperclip aria-hidden="true" />
-            </IconButton>
-            <IconButton label="Send template" onClick={() => setTemplateOpen(true)} disabled={replyDisabled || sending}>
-              <FileText aria-hidden="true" />
-            </IconButton>
-            <IconButton label="Send buttons" onClick={() => setButtonsOpen(true)} disabled={replyDisabled || windowClosed || sending}>
-              <LayoutList aria-hidden="true" />
-            </IconButton>
-            <IconButton label="Send WhatsApp Flow" onClick={() => setFlowOpen(true)} disabled={replyDisabled || windowClosed || sending}>
-              <ClipboardList aria-hidden="true" />
-            </IconButton>
+            {conversation.channel === "whatsapp" ? (
+              <>
+                <IconButton label="Attach file" onClick={() => fileRef.current?.click()} disabled={replyDisabled || windowClosed || sending}>
+                  <Paperclip aria-hidden="true" />
+                </IconButton>
+                <IconButton label="Send template" onClick={() => setTemplateOpen(true)} disabled={replyDisabled || sending}>
+                  <FileText aria-hidden="true" />
+                </IconButton>
+                <IconButton label="Send buttons" onClick={() => setButtonsOpen(true)} disabled={replyDisabled || windowClosed || sending}>
+                  <LayoutList aria-hidden="true" />
+                </IconButton>
+                <IconButton label="Send WhatsApp Flow" onClick={() => setFlowOpen(true)} disabled={replyDisabled || windowClosed || sending}>
+                  <ClipboardList aria-hidden="true" />
+                </IconButton>
+              </>
+            ) : null}
             <input ref={fileRef} type="file" accept={ACCEPT} className="hidden" onChange={(e) => e.target.files?.[0] && sendFile(e.target.files[0])} aria-hidden="true" tabIndex={-1} />
           </div>
         ) : null}

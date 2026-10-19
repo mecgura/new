@@ -735,3 +735,45 @@ export const leadSourceUpdateSchema = z
   .refine((v) => Object.keys(v).length > 0, "Nothing to change");
 
 export const testLeadSchema = z.object({ phone: z.string().trim().min(8).max(20), name: z.string().trim().max(120).default("Test lead") }).strict();
+
+// ---- Channels (email, web chat) ------------------------------------------------
+
+export const channelCreateSchema = z
+  .object({
+    kind: z.enum(["email", "webchat"]),
+    name: z.string().trim().min(1).max(100),
+    address: z.string().trim().toLowerCase().max(200).default(""),
+  })
+  .strict()
+  .superRefine((v, ctx) => {
+    if (v.kind === "email" && !z.string().email().safeParse(v.address).success) ctx.addIssue({ code: "custom", path: ["address"], message: "Enter a valid email address" });
+  });
+
+export const channelUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100).optional(),
+    status: z.enum(["demo", "active", "disabled"]).optional(),
+    settings: z.record(z.string().max(40), z.string().max(300)).optional(),
+  })
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, "Nothing to change");
+
+export const channelSimulateSchema = z
+  .object({
+    from: z.string().trim().toLowerCase().email().max(200),
+    name: z.string().trim().max(120).default(""),
+    subject: z.string().trim().max(200).default(""),
+    body: z.string().trim().min(1).max(5000),
+  })
+  .strict();
+
+/** Normalised inbound email, posted by a mail forwarder / inbound provider to the inbox's secret URL. */
+export const inboundEmailSchema = z
+  .object({
+    from: z.string().trim().toLowerCase().email().max(200),
+    fromName: z.string().trim().max(120).default(""),
+    subject: z.string().trim().max(200).default(""),
+    text: z.string().trim().min(1).max(20_000),
+    messageId: z.string().trim().min(3).max(300).optional(),
+  })
+  .strict();

@@ -271,6 +271,7 @@ describe("5. public and secret-protected surfaces", () => {
     vi.stubEnv("CRON_SECRET", "cron-secret-value");
     const cases: [string, string, string][] = [
       ["POST", "/api/webhooks/meta", "{}"],
+      ["POST", "/api/webhooks/channels/someid", "{}"],
       ["POST", "/api/webhooks/payments/razorpay", "{}"],
       ["POST", "/api/webhooks/payments/nope", "{}"],
       ["GET", "/api/cron/campaigns", ""],
@@ -320,6 +321,7 @@ describe("5. public and secret-protected surfaces", () => {
         "/api/automations/hooks/[aid]",
         "/api/cron/campaigns",
         "/api/health",
+        "/api/webhooks/channels/[key]",
         "/api/webhooks/meta",
         "/api/webhooks/payments/[gateway]",
       ].sort()

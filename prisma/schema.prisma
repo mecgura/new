@@ -67,6 +67,7 @@ model Organization {
   settings                OrganizationSettings?
   subscriptions           Subscription[]
   whatsappAccounts        WhatsAppAccount[]
+  channelAccounts         ChannelAccount[]
   usageCounters           UsageCounter[]
   wabas                   WhatsAppBusinessAccount[]
   phoneNumbers            PhoneNumber[]
@@ -491,6 +492,7 @@ model Contact {
   owner                User?                 @relation("ContactOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   tags                 ContactTag[]
   conversations        Conversation[]
+  identities           ContactIdentity[]
   notes                ContactNote[]
   consents             ConsentRecord[]
   campaignRecipients   CampaignRecipient[]
@@ -534,7 +536,11 @@ model Conversation {
   id                 String    @id @default(cuid())
   organizationId     String
   contactId          String
-  whatsappAccountId  String
+  whatsappAccountId  String? // null for non-WhatsApp channels
+  channel            String    @default("whatsapp") // whatsapp | email | webchat | instagram | messenger
+  channelAccountId   String?
+  externalThreadId   String    @default("") // email thread / visitor id etc.
+  subject            String    @default("")
   status             String    @default("open") // open | closed
   assignedToUserId   String?
   unreadCount        Int       @default(0)
@@ -552,12 +558,14 @@ model Conversation {
 
   organization    Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   contact         Contact                  @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  whatsappAccount WhatsAppAccount          @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+  whatsappAccount WhatsAppAccount?         @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+  channelAccount  ChannelAccount?          @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
   assignedTo      User?                    @relation("ConversationAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
   messages        Message[]
   assignments     ConversationAssignment[]
 
   @@unique([whatsappAccountId, contactId])
+  @@unique([channelAccountId, contactId, externalThreadId])
   @@index([organizationId, lastMessageAt])
   @@index([organizationId, assignedToUserId])
   @@index([organizationId, status])
@@ -1349,4 +1357,39 @@ model Lead {
 
   @@index([organizationId, createdAt])
   @@index([sourceId, createdAt])
+}
+
+
+// A connected non-WhatsApp inbox: email address, web chat widget, Instagram, Messenger.
+model ChannelAccount {
+  id             String   @id @default(cuid())
+  organizationId String
+  kind           String // email | webchat | instagram | messenger
+  name           String
+  address        String   @default("") // email address / widget public key / page id
+  publicKey      String   @unique // inbound webhook + widget key (random)
+  status         String   @default("demo") // demo | active | disabled
+  settings       String   @default("{}") // JSON, non-secret
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+
+  @@index([organizationId, kind])
+}
+
+// One contact, many identities (phone, email, social ids).
+model ContactIdentity {
+  id             String   @id @default(cuid())
+  organizationId String
+  contactId      String
+  kind           String // phone | email | instagram | messenger | visitor
+  value          String
+  createdAt      DateTime @default(now())
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, kind, value])
+  @@index([contactId])
 }

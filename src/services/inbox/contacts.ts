@@ -136,8 +136,8 @@ export async function getContactDetail(organizationId: string, id: string) {
       status: cv.status,
       lastMessageAt: cv.lastMessageAt,
       lastMessagePreview: cv.lastMessagePreview,
-      account: cv.whatsappAccount.displayName,
-      accountPhone: cv.whatsappAccount.phoneNumber,
+      account: cv.whatsappAccount?.displayName ?? "Email / web chat",
+      accountPhone: cv.whatsappAccount?.phoneNumber ?? "",
       assignedTo: cv.assignedTo ? cv.assignedTo.name ?? cv.assignedTo.email : null,
     })),
   };

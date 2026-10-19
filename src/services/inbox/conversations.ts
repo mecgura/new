@@ -22,6 +22,7 @@ const listInclude = {
   contact: { select: { id: true, name: true, phone: true, optInStatus: true, tags: { include: { tag: { select: { id: true, name: true, color: true } } } } } },
   assignedTo: { select: { id: true, name: true, email: true } },
   whatsappAccount: { select: { id: true, displayName: true, phoneNumber: true, status: true, isDemo: true } },
+  channelAccount: { select: { id: true, name: true, address: true, status: true, kind: true } },
 } as const;
 
 type ConvRow = Awaited<ReturnType<typeof db.conversation.findFirstOrThrow<{ include: typeof listInclude }>>>;
@@ -29,7 +30,9 @@ type ConvRow = Awaited<ReturnType<typeof db.conversation.findFirstOrThrow<{ incl
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export function toConversationDto(c: ConvRow) {
-  const windowOpen = Boolean(c.lastInboundAt && Date.now() - c.lastInboundAt.getTime() < WINDOW_MS);
+  // Only WhatsApp has a 24-hour customer-service window; email and web chat can always be answered.
+  const windowOpen = c.channel !== "whatsapp" || Boolean(c.lastInboundAt && Date.now() - c.lastInboundAt.getTime() < WINDOW_MS);
+  const ca = c.channelAccount;
   return {
     id: c.id,
     status: c.status,
@@ -38,11 +41,14 @@ export function toConversationDto(c: ConvRow) {
     lastMessagePreview: c.lastMessagePreview,
     lastInboundAt: c.lastInboundAt,
     windowOpen,
-    windowExpiresAt: c.lastInboundAt ? new Date(c.lastInboundAt.getTime() + WINDOW_MS) : null,
+    windowExpiresAt: c.channel !== "whatsapp" ? null : c.lastInboundAt ? new Date(c.lastInboundAt.getTime() + WINDOW_MS) : null,
     isDemo: c.isDemo,
     contact: { id: c.contact.id, name: c.contact.name, phone: c.contact.phone, optInStatus: c.contact.optInStatus, tags: c.contact.tags.map((t) => t.tag) },
     assignedTo: c.assignedTo ? { id: c.assignedTo.id, name: c.assignedTo.name ?? c.assignedTo.email } : null,
-    account: c.whatsappAccount,
+    channel: c.channel,
+    subject: c.subject,
+    // Non-WhatsApp inboxes are shown through the same "account" shape so the inbox UI needs no special case.
+    account: c.whatsappAccount ?? { id: ca?.id ?? "", displayName: ca?.name ?? "", phoneNumber: ca?.address ?? "", status: ca?.status ?? "demo", isDemo: ca?.status === "demo" },
   };
 }
 export type ConversationDto = ReturnType<typeof toConversationDto>;
@@ -66,7 +72,7 @@ export async function listConversations(access: OrgAccess, f: ConversationFilter
       q ? { OR: [{ contact: { name: { contains: q } } }, { lastMessagePreview: { contains: q } }, ...(digits.length >= 3 ? [{ contact: { phone: { contains: digits } } }] : [])] } : {},
     ],
     ...(f.status !== "all" ? { status: f.status } : {}),
-    ...(f.accountId ? { whatsappAccountId: f.accountId } : {}),
+    ...(f.accountId ? { OR: [{ whatsappAccountId: f.accountId }, { channelAccountId: f.accountId }] } : {}),
     ...(f.tagId ? { contact: { tags: { some: { tagId: f.tagId } } } } : {}),
   };
   const [rows, total, ...counts] = await Promise.all([

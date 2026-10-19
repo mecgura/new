@@ -20,7 +20,8 @@ const ANSWERABLE = new Set(["text", "button", "interactive"]);
 const HISTORY = 20;
 
 /** The active agent answering a WhatsApp number (agents with no numbers selected answer all numbers). */
-export async function agentForAccount(organizationId: string, whatsappAccountId: string): Promise<AiAgent | null> {
+export async function agentForAccount(organizationId: string, whatsappAccountId: string | null): Promise<AiAgent | null> {
+  if (!whatsappAccountId) return null; // the AI agent answers WhatsApp numbers only
   const agents = await db.aiAgent.findMany({ where: { organizationId, status: "active" }, orderBy: { updatedAt: "desc" } });
   return agents.find((a) => agentParts(a).accountIds.includes(whatsappAccountId)) ?? agents.find((a) => !agentParts(a).accountIds.length) ?? null;
 }
@@ -215,7 +216,7 @@ export async function handleInboundForAi(organizationId: string, ev: InboundForA
     await log(agent, { conversationId: conv.id, contactId: ev.contactId, mode: "", kind: "skipped", input: ev.text, error: "The AI agent isn't included in this workspace's plan." });
     return { status: "not_in_plan" };
   }
-  const mode = engineMode(conv.whatsappAccount.isDemo);
+  const mode = engineMode(conv.whatsappAccount?.isDemo ?? false);
   if (mode === "live" && !(await monthlyQuotaLeft(organizationId, "aiReplies"))) {
     await log(agent, { conversationId: conv.id, contactId: ev.contactId, mode: "live", kind: "skipped", input: ev.text, error: "This month's AI reply allowance on the plan is used up." });
     return { status: "quota_reached" };
@@ -276,7 +277,7 @@ async function summarize(agent: AiAgent, cfg: AgentConfig, conversationId: strin
 // Team-facing controls (inbox) and hooks from human activity
 // ---------------------------------------------------------------------------
 
-export async function conversationAiState(organizationId: string, conv: { id: string; whatsappAccountId: string; aiStatus: string; aiHandoffReason: string; aiResumeAt: Date | null; isDemo: boolean }) {
+export async function conversationAiState(organizationId: string, conv: { id: string; whatsappAccountId: string | null; aiStatus: string; aiHandoffReason: string; aiResumeAt: Date | null; isDemo: boolean }) {
   const agent = await agentForAccount(organizationId, conv.whatsappAccountId);
   return {
     agent: agent ? { id: agent.id, name: agent.name, resume: agentParts(agent).handoff.resume } : null,
@@ -308,7 +309,7 @@ export async function conversationAiAction(access: OrgAccess, conversationId: st
     return { ok: true };
   }
   if (!agent) throw new ApiError("CONFLICT", "No active AI agent answers this number.");
-  const mode = engineMode(conv.whatsappAccount.isDemo) ?? "demo";
+  const mode = engineMode(conv.whatsappAccount?.isDemo ?? false) ?? "demo";
   const cfg = await agentConfig(agent);
   let summary: string;
   try {

@@ -34,7 +34,7 @@ import { AiControl } from "@/components/inbox/ai-control";
 import { Composer } from "@/components/inbox/composer";
 import { CustomerPanel } from "@/components/inbox/customer-panel";
 import { useRealtime, type LiveEvent } from "@/components/inbox/use-realtime";
-import type { Account, Conversation, Message, TeamMember } from "@/components/inbox/types";
+import { prettyId, type Account, type Conversation, type Message, type TeamMember } from "@/components/inbox/types";
 
 type Props = { orgId: string; me: { id: string; name: string; role: string; agentStatus: string }; perms: InboxPerms; accounts: Account[]; activeAccountId?: string };
 
@@ -291,11 +291,11 @@ export function InboxApp(props: Props) {
               <IconButton label="Back to conversations" className="md:hidden" onClick={() => select(null)}>
                 <ArrowLeft aria-hidden="true" />
               </IconButton>
-              <Avatar name={conv.contact.name || conv.contact.phone} size="sm" />
+              <Avatar name={conv.contact.name || prettyId(conv.contact.phone)} size="sm" />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-body font-semibold text-app-text">{conv.contact.name || conv.contact.phone}</p>
+                <p className="truncate text-body font-semibold text-app-text">{conv.contact.name || prettyId(conv.contact.phone)}</p>
                 <p className="truncate text-caption text-app-muted">
-                  {conv.contact.phone} · via {conv.account.displayName}
+                  {prettyId(conv.contact.phone)} · via {conv.account.displayName}{conv.channel !== "whatsapp" ? ` (${conv.channel === "email" ? "Email" : conv.channel})` : ""}{conv.subject ? ` · ${conv.subject}` : ""}
                   {conv.isDemo ? " · Demo" : ""}
                 </p>
               </div>
@@ -383,7 +383,7 @@ export function InboxApp(props: Props) {
               </ul>
               <div ref={bottomRef} />
             </div>
-            {conv.isDemo ? <DemoReplyBar onSend={demoReply} /> : null}
+            {conv.isDemo && conv.channel === "whatsapp" ? <DemoReplyBar onSend={demoReply} /> : null}
             <Composer
               orgId={orgId}
               conversation={conv}

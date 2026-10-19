@@ -30,3 +30,9 @@ The inbox, assignment, notes, tags, AI agent, automations, analytics and wallet 
 5. Voice (provider interface, call logs, summaries); live calls only with real provider credentials.
 
 Every new channel is labelled "demo" until its credentials exist, never pretends to send, and has the same tenant-isolation and security-sweep tests as WhatsApp.
+
+## Status
+
+* Done: `ChannelAccount` and `ContactIdentity` tables; `Conversation.whatsappAccountId` is nullable with `channel`, `channelAccountId`, `subject`; email inbox (demo until a provider is configured, Resend for sending, normalised JSON inbound webhook at `/api/webhooks/channels/<secret key>`); `/channels` page; inbox shows channel and hides WhatsApp-only tools.
+* Email limits today: plain text, no attachments, no wallet fee, no campaigns/templates/automations/AI on email chats (those stay WhatsApp-only and refuse cleanly).
+* Contacts from non-phone channels store a placeholder in `phone` (`email:name@x.com`) because phone is the unique key; `ContactIdentity` holds the real identity.

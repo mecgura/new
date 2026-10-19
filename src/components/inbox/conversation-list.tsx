@@ -4,7 +4,7 @@ import * as React from "react";
 import { MessageSquareDashed } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, Badge, EmptyState, ErrorState, LoadingState, SearchBar, Select } from "@/components/ds";
-import { shortTime, type Account, type Conversation } from "@/components/inbox/types";
+import { prettyId, shortTime, type Account, type Conversation } from "@/components/inbox/types";
 
 export type ListFilters = { tab: "all" | "unread" | "assigned" | "mine"; q: string; status: "open" | "closed" | "all"; accountId: string };
 
@@ -100,10 +100,10 @@ export function ConversationList({
                       active ? "bg-app-primary-soft" : "hover:bg-app-hover/60"
                     )}
                   >
-                    <Avatar name={c.contact.name || c.contact.phone} size="md" />
+                    <Avatar name={c.contact.name || prettyId(c.contact.phone)} size="md" />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-baseline justify-between gap-2">
-                        <span className={cn("truncate text-body", c.unreadCount ? "font-semibold text-app-text" : "text-app-text")}>{c.contact.name || c.contact.phone}</span>
+                        <span className={cn("truncate text-body", c.unreadCount ? "font-semibold text-app-text" : "text-app-text")}>{c.contact.name || prettyId(c.contact.phone)}</span>
                         <time className="shrink-0 text-caption text-app-subtle" dateTime={c.lastMessageAt}>
                           {shortTime(c.lastMessageAt)}
                         </time>

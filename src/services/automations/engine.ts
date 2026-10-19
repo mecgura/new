@@ -487,7 +487,7 @@ async function conversationFor(r: RunCtx, contactId: string) {
     const c = await db.conversation.findFirst({ where: { id: existingId, organizationId: orgId }, include: { whatsappAccount: { include: { connection: { select: { encryptedAccessToken: true } } } } } });
     if (c) return c;
   }
-  const live = { organizationId: orgId, contactId, whatsappAccount: { status: { in: ["connected", "demo"] } } };
+  const live = { organizationId: orgId, contactId, channel: "whatsapp", whatsappAccount: { status: { in: ["connected", "demo"] } } };
   const recent =
     (r.automation.whatsappAccountId ? await db.conversation.findFirst({ where: { ...live, whatsappAccountId: r.automation.whatsappAccountId } }) : null) ??
     (await db.conversation.findFirst({ where: live, orderBy: { lastMessageAt: "desc" } }));
@@ -513,6 +513,7 @@ async function sendOutbound(r: RunCtx, conv: Conv, contact: { id: string; phone:
   if (contact.optInStatus === "opted_out") throw new StepError("The contact opted out — not messaged.");
   if (contact.suppressed) throw new StepError("The contact is on the suppression list — not messaged.");
   const acct = conv.whatsappAccount;
+  if (!acct) throw new StepError("This chat is not on WhatsApp.");
   if (acct.status !== "connected" && acct.status !== "demo") throw new StepError("The WhatsApp number is disconnected.");
   const billing = await billingState(r.ex.organizationId);
   if (billing.state === "blocked") throw new StepError(billing.reason);
@@ -554,7 +555,7 @@ async function messageStep(r: RunCtx): Promise<Outcome> {
     messageId = await sendOutbound(r, conv, contact, { ...built, type: input.type });
   } else if (d.fallbackTemplateId) {
     // Outside the 24-hour window WhatsApp only allows approved templates.
-    const t = await requireApprovedTemplate(r.ex.organizationId, conv.whatsappAccount.wabaRecordId, { templateId: d.fallbackTemplateId }).catch((e: Error) => {
+    const t = await requireApprovedTemplate(r.ex.organizationId, conv.whatsappAccount?.wabaRecordId ?? null, { templateId: d.fallbackTemplateId }).catch((e: Error) => {
       throw new StepError(`Fallback template: ${e.message}`);
     });
     if (t.category === "MARKETING" && contact.optInStatus !== "opted_in") throw new StepError("The 24-hour window is closed and the contact has no marketing opt-in.");
@@ -573,7 +574,7 @@ async function templateStep(r: RunCtx): Promise<Outcome> {
   const d = r.node.data as NodeDataMap["template"];
   const contact = await requireContact(r);
   const conv = await conversationFor(r, contact.id);
-  const t = await requireApprovedTemplate(r.ex.organizationId, conv.whatsappAccount.wabaRecordId, { templateId: d.templateId }).catch((e: Error) => {
+  const t = await requireApprovedTemplate(r.ex.organizationId, conv.whatsappAccount?.wabaRecordId ?? null, { templateId: d.templateId }).catch((e: Error) => {
     throw new StepError(e.message);
   });
   if (t.category === "MARKETING" && contact.optInStatus !== "opted_in") throw new StepError("Marketing templates need a recorded opt-in — this contact has none.");
@@ -660,7 +661,7 @@ async function aiStep(r: RunCtx): Promise<Outcome> {
   try {
     text = await generateReply({
       instructions: d.instructions,
-      businessName: conv.whatsappAccount.displayName,
+      businessName: conv.whatsappAccount?.displayName ?? "",
       history: recent.reverse().map((m) => ({ role: m.direction === "inbound" ? ("customer" as const) : ("business" as const), text: m.body })),
     });
   } catch (e) {

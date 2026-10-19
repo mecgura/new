@@ -41,6 +41,7 @@ export const ORG_PERMISSIONS = {
   "dashboard:read": ["CLIENT_OWNER", "MANAGER", "AGENT"],
   "whatsapp:read": ["CLIENT_OWNER", "MANAGER", "AGENT"],
   "whatsapp:manage": ["CLIENT_OWNER"],
+  "channels:manage": ["CLIENT_OWNER"], // email, web chat, Instagram, Messenger inboxes
   // Inbox. Agents only see conversations assigned to them or unassigned.
   "inbox:read": ["CLIENT_OWNER", "MANAGER", "AGENT"],
   "inbox:view_all": ["CLIENT_OWNER", "MANAGER"],
@@ -109,6 +110,7 @@ export const PERMISSION_LABELS: Partial<Record<OrgPermission, string>> = {
   "contacts:export": "Export CSV",
   "members:manage": "Manage team",
   "whatsapp:manage": "Connect WhatsApp numbers",
+  "channels:manage": "Connect email, web chat and social inboxes",
   "team:status": "Set own availability",
   "templates:manage": "Create & submit templates",
   "campaigns:manage": "Build & send campaigns",

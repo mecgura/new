@@ -59,6 +59,7 @@ async function preflight(access: OrgAccess, conversationId: string, kind: "templ
   if (!can(access, "inbox:view_all") && conv.assignedToUserId !== access.user.id) {
     throw new ApiError("FORBIDDEN", "Take this chat before replying.");
   }
+  if (!conv.whatsappAccountId) throw new ApiError("CONFLICT", "This chat is not on WhatsApp.");
   const account = await db.whatsAppAccount.findUniqueOrThrow({
     where: { id: conv.whatsappAccountId },
     include: { connection: { select: { encryptedAccessToken: true, status: true } } },
@@ -168,6 +169,12 @@ async function transmitInner(
 
 /** `opts.origin` marks messages sent by software (the public API) rather than a teammate: it is stored with the message and does not make the AI agent step back. */
 export async function sendMessage(access: OrgAccess, conversationId: string, input: SendInput, upload?: { file: Blob; filename: string; mimeType: string; size: number }, opts: { origin?: Record<string, unknown> } = {}) {
+  // Email / web chat / social chats are answered by their own adapter; everything below is WhatsApp.
+  const kind = await db.conversation.findFirst({ where: { id: conversationId, organizationId: access.organizationId }, select: { channel: true } });
+  if (kind && kind.channel !== "whatsapp") {
+    const { sendChannelReply } = await import("@/services/channels/send");
+    return sendChannelReply(access, conversationId, input, opts);
+  }
   const { conv, account, contact } = await preflight(access, conversationId, input.type === "template" ? "template" : "session");
   const replyTo = input.replyToId ? await db.message.findFirst({ where: { id: input.replyToId, conversationId } }) : null;
   if (input.replyToId && !replyTo) throw new ApiError("VALIDATION_ERROR", "The message you're replying to isn't in this conversation.");
@@ -329,6 +336,7 @@ export async function sendSystemText(organizationId: string, conversationId: str
   });
   if (!conv) throw new SystemSendError("Conversation not found.");
   const acct = conv.whatsappAccount;
+  if (!acct) throw new SystemSendError("This chat is not on WhatsApp.");
   if (acct.status !== "connected" && acct.status !== "demo") throw new SystemSendError("The WhatsApp number is disconnected.");
   if (conv.contact.optInStatus === "opted_out" || conv.contact.suppressed) throw new SystemSendError("The contact opted out or is suppressed — not messaged.");
   if (!conv.lastInboundAt || Date.now() - conv.lastInboundAt.getTime() >= WINDOW_MS) throw new SystemSendError("The 24-hour window is closed.");
@@ -568,6 +576,7 @@ export async function openAttachment(access: OrgAccess, attachmentId: string) {
   if (!att || att.message.organizationId !== access.organizationId) throw new ApiError("NOT_FOUND", "Attachment not found.");
   const conv = await getVisibleConversation(access, att.message.conversationId);
   if (att.message.isDemo || !att.providerMediaId) throw new ApiError("NOT_FOUND", "This attachment isn't stored (demo or sent by link).");
+  if (!conv.whatsappAccountId) throw new ApiError("NOT_FOUND", "This attachment isn't stored on a WhatsApp chat.");
   const account = await db.whatsAppAccount.findUniqueOrThrow({ where: { id: conv.whatsappAccountId }, include: { connection: { select: { encryptedAccessToken: true } } } });
   if (!account.connection?.encryptedAccessToken) throw new ApiError("CONFLICT", "The number is disconnected; media can't be fetched.");
   try {
