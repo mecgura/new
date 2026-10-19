@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BarChart3, Bot, Check, Inbox, Mail, Megaphone, MessageCircle, Network, Phone, ShieldCheck, Wallet, Workflow } from "lucide-react";
+import type { CSSProperties } from "react";
+import { BarChart3, Bot, Camera, Check, Globe, Inbox, Mail, Megaphone, MessageCircle, MessagesSquare, Phone, ShieldCheck, Sparkles, Workflow } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { siteConfig } from "@/config/site";
 import { formatINR, formatNumber } from "@/lib/catalog";
 import { FEATURES, isUnlimited, parseFeatures } from "@/lib/plans";
 import { Logo } from "@/components/layout/logo";
-import { buttonVariants } from "@/components/ds";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -17,33 +17,33 @@ export const metadata: Metadata = {
 };
 
 const FEATURE_CARDS = [
-  { icon: Inbox, title: "Shared team inbox", text: "Every customer chat in one place. Assign, tag, add private notes, and reply inside the 24-hour window." },
-  { icon: Megaphone, title: "Campaigns with a safety check", text: "Approved templates, opted-in contacts only. A compliance review runs before every send." },
-  { icon: Workflow, title: "Automations and Flows", text: "Welcome messages, lead capture, appointment reminders and WhatsApp Flows without writing code." },
-  { icon: Bot, title: "AI agent with human handoff", text: "Answers common questions and hands over to your team when a person is needed." },
-  { icon: Network, title: "API and webhooks", text: "Connect your website, CRM or tools. Signed webhooks and API keys per workspace." },
-  { icon: BarChart3, title: "Analytics", text: "Messages, delivery, replies and campaign results. See what works." },
-  { icon: Wallet, title: "Prepaid wallet", text: "Clear per-message fees and a ledger of every credit and deduction." },
-  { icon: ShieldCheck, title: "Built for separation", text: "Each client has their own private workspace, numbers and data." },
+  { icon: Inbox, tone: "clay-mint", title: "One shared inbox", text: "Every customer chat in one place. Assign, tag, add private notes and reply as a team." },
+  { icon: Megaphone, tone: "clay-peach", title: "Safe campaigns", text: "Approved templates to opted-in contacts only, with a compliance check before every send." },
+  { icon: Workflow, tone: "clay-lilac", title: "Automations", text: "Welcome messages, lead capture and reminders that run on their own, no code." },
+  { icon: Bot, tone: "clay-sky", title: "AI agent", text: "Answers common questions and hands over to your team when a person is needed." },
+  { icon: BarChart3, tone: "clay-butter", title: "Clear analytics", text: "Messages, replies and campaign results, so you see what works." },
+  { icon: ShieldCheck, tone: "clay-mint", title: "Private by design", text: "Every client gets a separate workspace, numbers and data." },
 ];
 
 const CHANNELS = [
-  { name: "WhatsApp Business", state: "Live", note: "Official Cloud API" },
-  { name: "Email", state: "Coming soon", note: "Shared inbox for email threads" },
-  { name: "Instagram and Messenger", state: "Coming soon", note: "DMs in the same inbox" },
-  { name: "AI calling", state: "Planned", note: "Voice follow-ups for leads" },
+  { icon: MessageCircle, tone: "clay-mint", name: "WhatsApp", state: "Live" },
+  { icon: Mail, tone: "clay-peach", name: "Email", state: "Live" },
+  { icon: Globe, tone: "clay-sky", name: "Website chat", state: "Live" },
+  { icon: MessagesSquare, tone: "clay-lilac", name: "Messenger", state: "Live" },
+  { icon: Camera, tone: "clay-butter", name: "Instagram", state: "Live" },
+  { icon: Phone, tone: "clay-mint", name: "AI calling", state: "Practice mode" },
 ];
 
 const STEPS = [
-  { n: "1", title: "We set up your workspace", text: "MECGURA creates your account, connects your WhatsApp Business number and gets your templates approved." },
-  { n: "2", title: "Import contacts with consent", text: "Bring your customer list with their opt-in status. Opt-outs are respected automatically." },
-  { n: "3", title: "Run campaigns and chats", text: "Your team replies from one inbox while campaigns and automations run in the background." },
+  { n: "1", tone: "clay-mint", title: "We set you up", text: "MECGURA creates your workspace, connects your WhatsApp number and gets templates approved." },
+  { n: "2", tone: "clay-peach", title: "Bring your contacts", text: "Import your list with consent. Opt-outs are respected automatically." },
+  { n: "3", tone: "clay-lilac", title: "Chat and campaign", text: "Your team replies from one inbox while campaigns and automations run in the background." },
 ];
 
 const FAQ = [
-  { q: "Who pays Meta's WhatsApp charges?", a: "Meta bills its own message charges to the payment method on your WhatsApp Business account. MECGURA's wallet and plan are separate, for the platform and service." },
-  { q: "Can I sign up myself?", a: "Accounts are created by MECGURA so your number, templates and consent process are set up correctly. Get in touch and we will set you up." },
-  { q: "Do I need a new phone number?", a: "You need a number that is not registered on the regular WhatsApp or WhatsApp Business app. We will guide you." },
+  { q: "Who pays Meta's WhatsApp charges?", a: "Meta bills its own message charges to the payment method on your WhatsApp Business account. MECGURA's plan and wallet are separate, for the platform and service." },
+  { q: "Can I sign up myself?", a: "Accounts are created by MECGURA so your number, templates and consent process are set up correctly. Message us and we will set you up." },
+  { q: "Do I need a new phone number?", a: "Usually a number that is not already on the regular WhatsApp app. If you already use the WhatsApp Business app, we will check what Meta allows for your number." },
   { q: "Where is my data?", a: "In your private workspace. See our Privacy Policy for what is stored and how to request deletion." },
 ];
 
@@ -58,139 +58,137 @@ async function loadPlans() {
 const whatsappDigits = siteConfig.contact.whatsapp;
 /** 917837722567 → +91 78377 22567 (Indian mobile grouping; other lengths are shown as typed). */
 const phoneLabel = /^91\d{10}$/.test(whatsappDigits) ? `+91 ${whatsappDigits.slice(2, 7)} ${whatsappDigits.slice(7)}` : `+${whatsappDigits}`;
-
-function planHref(plan: string) {
-  return `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(`Hi MECGURA, I am interested in the ${plan} plan.`)}`;
-}
-
-function contactHref() {
-  const { whatsapp, email } = siteConfig.contact;
-  if (whatsapp) return `https://wa.me/${whatsapp}?text=${encodeURIComponent("Hi MECGURA, I would like a demo of the WhatsApp platform.")}`;
-  if (email) return `mailto:${email}?subject=${encodeURIComponent("MECGURA platform demo")}`;
-  return "";
-}
+const wa = (text: string) => `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(text)}`;
 
 export default async function Landing() {
   const [plans, session] = await Promise.all([loadPlans(), auth().catch(() => null)]);
   const signedIn = Boolean(session?.user);
-  const href = contactHref();
+  const appHref = signedIn ? "/dashboard" : "/login";
   return (
-    <div className="app-root dark min-h-dvh">
+    <div className="clay-root min-h-dvh overflow-x-hidden">
       <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5">
         <Logo />
-        <nav aria-label="Main" className="flex items-center gap-2">
-          <a href="#pricing" className="hidden px-3 py-2 text-small text-app-muted hover:text-app-text sm:inline">
-            Pricing
-          </a>
-          <Link href={signedIn ? "/dashboard" : "/login"} className={buttonVariants({ variant: "secondary", size: "sm" })}>
+        <nav aria-label="Main" className="flex items-center gap-1 sm:gap-2">
+          <a href="#channels" className="clay-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--clay-ink)] md:inline">Channels</a>
+          <a href="#pricing" className="clay-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--clay-ink)] md:inline">Pricing</a>
+          <a href="#contact" className="clay-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--clay-ink)] md:inline">Contact</a>
+          <Link href={appHref} className="clay-btn clay-btn-soft !min-h-11 !px-5 text-small">
             {signedIn ? "Open workspace" : "Sign in"}
           </Link>
         </nav>
       </header>
 
       <main id="main-content">
-        <section className="mx-auto max-w-6xl px-4 pb-16 pt-10 text-center sm:pt-16">
-          <p className="mb-4 inline-block rounded-full border border-app-border px-3 py-1 text-small text-app-muted">WhatsApp platform for Indian businesses</p>
-          <h1 className="mx-auto max-w-3xl font-display text-4xl font-bold leading-tight sm:text-5xl">Talk to every customer on WhatsApp, from one inbox your whole team can use.</h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg text-app-muted">Shared inbox, consent-safe campaigns, automations and an AI agent on the official WhatsApp Business API, set up and supported by MECGURA.</p>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            {href ? (
-              <a href={href} className={buttonVariants({ size: "lg" })}>
-                Book a demo
+        <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 pb-16 pt-8 lg:grid-cols-2 lg:pt-14">
+          <div>
+            <p className="clay-card inline-flex items-center gap-2 !rounded-full px-4 py-1.5 text-small font-semibold">
+              <Sparkles className="size-4 text-emerald-600" aria-hidden="true" /> WhatsApp and more, for Indian businesses
+            </p>
+            <h1 className="mt-5 font-display text-4xl font-bold leading-[1.1] sm:text-5xl lg:text-6xl">
+              Every customer chat. <span className="text-emerald-600">One friendly inbox.</span>
+            </h1>
+            <p className="clay-muted mt-5 max-w-xl text-lg">
+              WhatsApp, email, website chat, Messenger and Instagram land in one place. Your team replies together, campaigns stay compliant and an AI agent helps after hours.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-4">
+              <a href={wa("Hi MECGURA, I would like a demo of the platform.")} className="clay-btn">
+                <MessageCircle className="size-5" aria-hidden="true" /> Book a demo
               </a>
-            ) : null}
-            <Link href={signedIn ? "/dashboard" : "/login"} className={buttonVariants({ variant: href ? "secondary" : "primary", size: "lg" })}>
-              {signedIn ? "Open workspace" : "Client sign in"}
-            </Link>
+              <Link href={appHref} className="clay-btn clay-btn-soft">
+                {signedIn ? "Open workspace" : "Client sign in"}
+              </Link>
+            </div>
+          </div>
+
+          <div className="relative mx-auto h-[28rem] w-full max-w-md" aria-hidden="true">
+            <div className="clay-card absolute inset-x-6 top-4 bottom-2 rotate-[-2deg] p-5">
+              <div className="clay-pressed flex items-center gap-3 px-4 py-3">
+                <span className="clay-blob clay-mint grid size-10 place-items-center"><MessageCircle className="size-5 text-[#06281a]" /></span>
+                <div>
+                  <p className="text-small font-bold">Customer chat</p>
+                  <p className="clay-muted text-caption">replies in minutes</p>
+                </div>
+              </div>
+              <div className="mt-5 space-y-3 text-small">
+                <p className="clay-pressed max-w-[78%] px-4 py-3">Hi! Is my order on its way?</p>
+                <p className="clay-mint ml-auto max-w-[78%] rounded-[1.25rem] px-4 py-3 font-semibold text-[#06281a] shadow-[6px_8px_16px_rgba(47,191,132,0.35),inset_2px_3px_5px_rgba(255,255,255,0.5)]">Yes! It is out for delivery today.</p>
+                <p className="clay-pressed max-w-[70%] px-4 py-3">Great, thank you!</p>
+                <p className="clay-lilac ml-auto max-w-[78%] rounded-[1.25rem] px-4 py-3 font-semibold text-[#2a1b6b] shadow-[6px_8px_16px_rgba(130,110,230,0.35),inset_2px_3px_5px_rgba(255,255,255,0.5)]">Anything else we can help with?</p>
+              </div>
+            </div>
+            <span className="clay-blob clay-peach clay-bob absolute -left-1 top-10 grid size-16 place-items-center" style={{ "--r": "-6deg" } as CSSProperties}><Mail className="size-7 text-[#6b2f12]" /></span>
+            <span className="clay-blob clay-sky clay-bob absolute -right-1 top-28 grid size-14 place-items-center [animation-delay:-2s]"><Globe className="size-6 text-[#0b3a63]" /></span>
+            <span className="clay-blob clay-butter clay-bob absolute bottom-6 left-2 grid size-14 place-items-center [animation-delay:-4s]"><Camera className="size-6 text-[#6b4d00]" /></span>
           </div>
         </section>
 
-        <section aria-labelledby="features" className="mx-auto max-w-6xl px-4 py-12">
-          <h2 id="features" className="mb-8 text-center font-display text-3xl font-bold">
-            Everything your team needs
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section id="channels" aria-labelledby="channels-title" className="mx-auto max-w-6xl px-4 py-14">
+          <h2 id="channels-title" className="text-center font-display text-3xl font-bold sm:text-4xl">One inbox, every channel</h2>
+          <p className="clay-muted mx-auto mt-3 max-w-xl text-center">Customers write where they like. Your team answers from the same screen.</p>
+          <ul className="mt-10 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-6">
+            {CHANNELS.map((c) => (
+              <li key={c.name} className="clay-card flex flex-col items-center px-3 py-6 text-center">
+                <span className={`clay-blob ${c.tone} grid size-16 place-items-center`}><c.icon className="size-7 text-[#12241b]" aria-hidden="true" /></span>
+                <p className="mt-4 font-bold">{c.name}</p>
+                <span className="clay-pressed mt-2 inline-block !rounded-full px-3 py-0.5 text-caption font-semibold">{c.state}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section aria-labelledby="features" className="mx-auto max-w-6xl px-4 py-14">
+          <h2 id="features" className="text-center font-display text-3xl font-bold sm:text-4xl">Everything your team needs</h2>
+          <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURE_CARDS.map((f) => (
-              <div key={f.title} className="rounded-2xl border border-app-border bg-app-elevated p-5">
-                <span className="mb-3 grid size-10 place-items-center rounded-xl bg-app-primary/10 text-app-primary">
-                  <f.icon className="size-5" aria-hidden="true" />
-                </span>
-                <h3 className="font-semibold">{f.title}</h3>
-                <p className="mt-1.5 text-small text-app-muted">{f.text}</p>
+              <div key={f.title} className="clay-card p-6">
+                <span className={`clay-blob ${f.tone} grid size-14 place-items-center`}><f.icon className="size-6 text-[#12241b]" aria-hidden="true" /></span>
+                <h3 className="mt-4 text-lg font-bold">{f.title}</h3>
+                <p className="clay-muted mt-1.5">{f.text}</p>
               </div>
             ))}
           </div>
         </section>
 
-        <section aria-labelledby="how" className="mx-auto max-w-6xl px-4 py-12">
-          <h2 id="how" className="mb-8 text-center font-display text-3xl font-bold">
-            How it works
-          </h2>
-          <ol className="grid gap-4 md:grid-cols-3">
-            {STEPS.map((s) => (
-              <li key={s.n} className="rounded-2xl border border-app-border p-5">
-                <span className="mb-3 grid size-8 place-items-center rounded-full bg-app-primary text-app-on-primary font-bold">{s.n}</span>
-                <h3 className="font-semibold">{s.title}</h3>
-                <p className="mt-1.5 text-small text-app-muted">{s.text}</p>
+        <section aria-labelledby="how" className="mx-auto max-w-6xl px-4 py-14">
+          <h2 id="how" className="text-center font-display text-3xl font-bold sm:text-4xl">How it works</h2>
+          <ol className="mt-10 grid gap-6 md:grid-cols-3">
+            {STEPS.map((st) => (
+              <li key={st.n} className="clay-card p-6">
+                <span className={`clay-blob ${st.tone} grid size-12 place-items-center text-lg font-bold text-[#12241b]`}>{st.n}</span>
+                <h3 className="mt-4 text-lg font-bold">{st.title}</h3>
+                <p className="clay-muted mt-1.5">{st.text}</p>
               </li>
             ))}
           </ol>
         </section>
 
-        <section aria-labelledby="channels" className="mx-auto max-w-6xl px-4 py-12">
-          <h2 id="channels" className="mb-2 text-center font-display text-3xl font-bold">
-            One inbox, more channels
-          </h2>
-          <p className="mb-8 text-center text-app-muted">WhatsApp is live today. The rest are on the roadmap and labelled honestly.</p>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {CHANNELS.map((c) => (
-              <div key={c.name} className="rounded-2xl border border-app-border p-5">
-                <p className="font-semibold">{c.name}</p>
-                <p className="mt-1 text-small text-app-muted">{c.note}</p>
-                <span className={`mt-3 inline-block rounded-full px-2.5 py-0.5 text-caption font-medium ${c.state === "Live" ? "bg-emerald-500/15 text-emerald-400" : "bg-white/5 text-app-muted"}`}>{c.state}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
         {plans.length ? (
-          <section id="pricing" aria-labelledby="pricing-title" className="mx-auto max-w-6xl px-4 py-12">
-            <h2 id="pricing-title" className="mb-2 text-center font-display text-3xl font-bold">
-              Plans
-            </h2>
-            <p className="mb-8 text-center text-app-muted">Platform plans in rupees. Meta&apos;s WhatsApp charges are billed by Meta separately.</p>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {plans.map((p) => (
-                <div key={p.id} className="flex flex-col rounded-2xl border border-app-border bg-app-elevated p-5">
-                  <h3 className="font-semibold">{p.name}</h3>
-                  <p className="mt-2 font-display text-3xl font-bold">
+          <section id="pricing" aria-labelledby="pricing-title" className="mx-auto max-w-6xl px-4 py-14">
+            <h2 id="pricing-title" className="text-center font-display text-3xl font-bold sm:text-4xl">Simple plans</h2>
+            <p className="clay-muted mx-auto mt-3 max-w-xl text-center">Platform plans in rupees. Meta&apos;s WhatsApp charges are billed by Meta separately.</p>
+            <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+              {plans.map((p, i) => (
+                <div key={p.id} className={`clay-card flex flex-col p-6 ${plans.length >= 3 && i === 1 ? "ring-4 ring-emerald-400/60" : ""}`}>
+                  {plans.length >= 3 && i === 1 ? <span className="clay-blob clay-mint mb-3 inline-block self-start px-3 py-0.5 text-caption font-bold text-[#06281a]">Recommended</span> : null}
+                  <h3 className="text-lg font-bold">{p.name}</h3>
+                  <p className="mt-2 font-display text-4xl font-bold">
                     {p.selfServe ? formatINR(p.priceMonthly) : "Custom"}
-                    {p.selfServe ? <span className="text-small font-normal text-app-muted"> / month</span> : null}
+                    {p.selfServe ? <span className="clay-muted text-small font-medium"> / month</span> : null}
                   </p>
-                  <p className="mt-1 text-small text-app-muted">{p.description}</p>
-                  <a
-                    href={planHref(p.name)}
-                    className={buttonVariants({ variant: "secondary", size: "sm", className: "mt-4 w-full" })}
-                  >
+                  <p className="clay-muted mt-1 text-small">{p.description}</p>
+                  <a href={wa(`Hi MECGURA, I am interested in the ${p.name} plan.`)} className="clay-btn clay-btn-soft mt-5 !min-h-11 w-full text-small">
                     {p.selfServe ? "Get started" : "Talk to us"}
                   </a>
-                  <ul className="mt-4 space-y-1.5 text-small">
-                    <li className="flex gap-2">
-                      <Check className="mt-0.5 size-4 shrink-0 text-app-primary" aria-hidden="true" />
-                      {isUnlimited(p.maxUsers) ? "Unlimited" : p.maxUsers} team members
-                    </li>
-                    <li className="flex gap-2">
-                      <Check className="mt-0.5 size-4 shrink-0 text-app-primary" aria-hidden="true" />
-                      {isUnlimited(p.maxWhatsAppNumbers) ? "Unlimited" : p.maxWhatsAppNumbers} WhatsApp number{p.maxWhatsAppNumbers === 1 ? "" : "s"}
-                    </li>
-                    <li className="flex gap-2">
-                      <Check className="mt-0.5 size-4 shrink-0 text-app-primary" aria-hidden="true" />
-                      {isUnlimited(p.maxMonthlyMessages) ? "Unlimited" : formatNumber(p.maxMonthlyMessages)} messages / month
-                    </li>
-                    {parseFeatures(p.features).map((k) => (
-                      <li key={k} className="flex gap-2">
-                        <Check className="mt-0.5 size-4 shrink-0 text-app-primary" aria-hidden="true" />
-                        {FEATURES[k]}
+                  <ul className="mt-5 space-y-2 text-small">
+                    {[
+                      `${isUnlimited(p.maxUsers) ? "Unlimited" : p.maxUsers} team members`,
+                      `${isUnlimited(p.maxWhatsAppNumbers) ? "Unlimited" : p.maxWhatsAppNumbers} WhatsApp number${p.maxWhatsAppNumbers === 1 ? "" : "s"}`,
+                      `${isUnlimited(p.maxMonthlyMessages) ? "Unlimited" : formatNumber(p.maxMonthlyMessages)} messages / month`,
+                      ...parseFeatures(p.features).map((k) => FEATURES[k]),
+                    ].map((line) => (
+                      <li key={line} className="flex gap-2">
+                        <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
+                        {line}
                       </li>
                     ))}
                   </ul>
@@ -200,59 +198,41 @@ export default async function Landing() {
           </section>
         ) : null}
 
-        <section id="contact" aria-labelledby="contact-title" className="mx-auto max-w-3xl px-4 py-12">
-          <div className="glass rounded-[var(--radius-card)] p-6 text-center sm:p-8">
-            <h2 id="contact-title" className="font-display text-3xl font-bold">
-              Talk to us
-            </h2>
-            <p className="mt-2 text-app-muted">Questions, a demo or setup help. We reply on WhatsApp and email.</p>
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <a href={`https://wa.me/${whatsappDigits}?text=${encodeURIComponent("Hi MECGURA, I would like to know more about the WhatsApp platform.")}`} className={buttonVariants({ size: "lg", className: "w-full" })}>
-                <MessageCircle aria-hidden="true" /> WhatsApp
-              </a>
-              <a href={`tel:+${whatsappDigits}`} className={buttonVariants({ variant: "secondary", size: "lg", className: "w-full" })}>
-                <Phone aria-hidden="true" /> {phoneLabel}
-              </a>
-              <a href={`mailto:${siteConfig.contact.email}`} className={buttonVariants({ variant: "secondary", size: "lg", className: "w-full" })}>
-                <Mail aria-hidden="true" /> {siteConfig.contact.email}
-              </a>
+        <section id="contact" aria-labelledby="contact-title" className="mx-auto max-w-4xl px-4 py-14">
+          <div className="clay-card p-8 text-center sm:p-12">
+            <h2 id="contact-title" className="font-display text-3xl font-bold sm:text-4xl">Let&apos;s talk</h2>
+            <p className="clay-muted mx-auto mt-3 max-w-lg">Questions, a demo or setup help. We reply on WhatsApp and email.</p>
+            <div className="mt-8 grid gap-4 sm:grid-cols-3">
+              <a href={wa("Hi MECGURA, I would like to know more about the platform.")} className="clay-btn w-full"><MessageCircle className="size-5" aria-hidden="true" /> WhatsApp</a>
+              <a href={`tel:+${whatsappDigits}`} className="clay-btn clay-btn-soft w-full"><Phone className="size-5" aria-hidden="true" /> {phoneLabel}</a>
+              <a href={`mailto:${siteConfig.contact.email}`} className="clay-btn clay-btn-soft w-full !px-3 text-small"><Mail className="size-5 shrink-0" aria-hidden="true" /> {siteConfig.contact.email}</a>
             </div>
           </div>
         </section>
 
-        <section aria-labelledby="faq" className="mx-auto max-w-3xl px-4 py-12">
-          <h2 id="faq" className="mb-6 text-center font-display text-3xl font-bold">
-            Questions
-          </h2>
-          <div className="space-y-3">
+        <section aria-labelledby="faq" className="mx-auto max-w-3xl px-4 py-14">
+          <h2 id="faq" className="text-center font-display text-3xl font-bold sm:text-4xl">Questions</h2>
+          <div className="mt-8 space-y-4">
             {FAQ.map((f) => (
-              <details key={f.q} className="rounded-2xl border border-app-border p-4">
-                <summary className="cursor-pointer font-semibold">{f.q}</summary>
-                <p className="mt-2 text-small text-app-muted">{f.a}</p>
+              <details key={f.q} className="clay-card group px-6 py-4">
+                <summary className="cursor-pointer list-none font-bold marker:hidden">{f.q}</summary>
+                <p className="clay-muted mt-2">{f.a}</p>
               </details>
             ))}
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-app-border">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-6 text-small text-app-muted">
-          <p>
-            © {new Date().getFullYear()} MECGURA · <a href={`mailto:${siteConfig.contact.email}`} className="hover:text-app-text">{siteConfig.contact.email}</a> · <a href={`tel:+${whatsappDigits}`} className="hover:text-app-text">{phoneLabel}</a>
+      <footer className="mx-auto max-w-6xl px-4 pb-10 pt-6">
+        <div className="clay-pressed flex flex-wrap items-center justify-between gap-4 px-6 py-5 text-small">
+          <p className="clay-muted">
+            © {new Date().getFullYear()} MECGURA · <a href={`mailto:${siteConfig.contact.email}`} className="hover:underline">{siteConfig.contact.email}</a> · <a href={`tel:+${whatsappDigits}`} className="hover:underline">{phoneLabel}</a>
           </p>
-          <nav aria-label="Legal" className="flex gap-5">
-            <Link href="/privacy" className="hover:text-app-text">
-              Privacy
-            </Link>
-            <Link href="/terms" className="hover:text-app-text">
-              Terms
-            </Link>
-            <Link href="/data-deletion" className="hover:text-app-text">
-              Data deletion
-            </Link>
-            <Link href="/login" className="hover:text-app-text">
-              Sign in
-            </Link>
+          <nav aria-label="Legal" className="flex flex-wrap gap-5 font-semibold">
+            <Link href="/privacy" className="hover:underline">Privacy</Link>
+            <Link href="/terms" className="hover:underline">Terms</Link>
+            <Link href="/data-deletion" className="hover:underline">Data deletion</Link>
+            <Link href="/login" className="hover:underline">Sign in</Link>
           </nav>
         </div>
       </footer>
