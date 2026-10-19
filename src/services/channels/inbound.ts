@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { publish } from "@/lib/realtime/broker";
 import { incrementUsage } from "@/lib/services/usage";
 import { audit } from "@/lib/audit";
+import { isServiceEnabled } from "@/services/whatsapp/guards";
 import { emitContactEvent, emitConversationCreated, emitMessageEvent } from "@/services/webhooks/events";
 import { emitAutomationEvent } from "@/services/automations/events";
 
@@ -41,6 +42,7 @@ async function contactFor(organizationId: string, kind: ChannelInbound["identity
 /** One inbound customer message on a non-WhatsApp inbox: finds/creates the contact + conversation, stores the message, notifies the team. Duplicate deliveries are ignored. */
 export async function receiveChannelMessage(account: { id: string; organizationId: string; kind: string; status: string }, input: ChannelInbound) {
   const organizationId = account.organizationId;
+  if (!(await isServiceEnabled(organizationId, "OMNICHANNEL"))) return null; // service switched off: drop silently
   // Message ids are only unique per mailbox, so the stored id carries the inbox id.
   const externalId = `${account.id}:${input.externalId}`;
   if (await db.message.findUnique({ where: { externalId }, select: { id: true } })) return null;

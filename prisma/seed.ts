@@ -69,12 +69,16 @@ async function seedPlans() {
 
 /** Every organization gets settings + service rows (idempotent). */
 async function backfillClientDefaults() {
-  const services = ["WHATSAPP_AUTOMATION", "CRM", "SOCIAL_MEDIA", "ATS", "HRMS", "AI_ASSISTANT"];
+  const services = ["WHATSAPP_AUTOMATION", "CRM", "SOCIAL_MEDIA", "ATS", "HRMS", "AI_ASSISTANT", "OMNICHANNEL", "AI_CALLING"];
+  // Modules added after a workspace was created are switched on once for workspaces that already run WhatsApp, so nobody
+  // loses a page they could open before; Super Admin can switch them off per client. Rows that exist are never touched.
+  const gated = new Set(["OMNICHANNEL", "AI_CALLING"]);
   const orgs = await db.organization.findMany({ select: { id: true } });
   for (const { id } of orgs) {
     await db.organizationSettings.upsert({ where: { organizationId: id }, update: {}, create: { organizationId: id } });
+    const whatsappOn = Boolean((await db.organizationService.findUnique({ where: { organizationId_service: { organizationId: id, service: "WHATSAPP_AUTOMATION" } } }))?.enabled);
     for (const service of services) {
-      await db.organizationService.upsert({ where: { organizationId_service: { organizationId: id, service } }, update: {}, create: { organizationId: id, service } });
+      await db.organizationService.upsert({ where: { organizationId_service: { organizationId: id, service } }, update: {}, create: { organizationId: id, service, enabled: gated.has(service) && whatsappOn } });
     }
   }
 }

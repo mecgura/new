@@ -9,6 +9,7 @@ import {
   ChevronsUpDown,
   CircleHelp,
   LayoutDashboard,
+  Lock,
   LogOut,
   Mail,
   Menu,
@@ -46,9 +47,11 @@ export function AppShell({
   user,
   organizations,
   activeOrganizationId,
+  enabledServices = [],
   children,
 }: {
   variant: "client" | "admin";
+  enabledServices?: string[];
   user: ShellUser;
   organizations: ShellOrg[];
   activeOrganizationId: string | null;
@@ -88,10 +91,10 @@ export function AppShell({
           Skip to content
         </a>
         <aside className="glass sticky top-0 hidden h-dvh w-64 shrink-0 rounded-none border-y-0 border-l-0 lg:block">
-          <Sidebar variant={variant} sections={sections} pathname={pathname} />
+          <Sidebar variant={variant} sections={sections} pathname={pathname} enabledServices={enabledServices} />
         </aside>
         <Drawer open={mobileOpen} onClose={() => setMobileOpen(false)} title="Main navigation">
-          <Sidebar variant={variant} sections={sections} pathname={pathname} onClose={() => setMobileOpen(false)} />
+          <Sidebar variant={variant} sections={sections} pathname={pathname} enabledServices={enabledServices} onClose={() => setMobileOpen(false)} />
         </Drawer>
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -117,9 +120,11 @@ function Sidebar({
   variant,
   sections,
   pathname,
+  enabledServices,
   onClose,
 }: {
   variant: "client" | "admin";
+  enabledServices: string[];
   sections: NavSection[];
   pathname: string;
   onClose?: () => void;
@@ -160,6 +165,21 @@ function Sidebar({
                         <span className="rounded-full border border-app-border px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-app-subtle">
                           Soon
                         </span>
+                      </span>
+                    </li>
+                  );
+                }
+                if (variant === "client" && item.service && !enabledServices.includes(item.service)) {
+                  return (
+                    <li key={item.label}>
+                      <span
+                        aria-disabled="true"
+                        title="Not enabled for your workspace. Ask MECGURA to turn it on."
+                        className="flex cursor-not-allowed items-center gap-3 rounded-[var(--radius-control)] px-3 py-2 text-body text-app-subtle"
+                      >
+                        <Icon className="size-[18px] shrink-0" aria-hidden="true" />
+                        <span className="flex-1">{item.label}</span>
+                        <Lock className="size-3.5 shrink-0" aria-label="Not enabled" />
                       </span>
                     </li>
                   );

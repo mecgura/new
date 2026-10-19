@@ -36,6 +36,8 @@ export type NavItem = {
   excludes?: string[];
   /** Extra path prefixes that also mark this item active. */
   also?: string[];
+  /** Shown locked (and the page refuses) unless the admin enabled this service for the workspace. */
+  service?: "OMNICHANNEL" | "AI_CALLING";
   /** Module ships in a later phase: rendered disabled with a "Soon" badge, never a fake page. */
   comingSoon?: boolean;
 };
@@ -54,10 +56,10 @@ export const CLIENT_NAV: NavSection[] = [
       { label: "Templates", icon: FileText, href: "/templates" },
       { label: "Automations", icon: Workflow, href: "/automations" },
       { label: "Lead Ads", icon: Target, href: "/lead-ads" },
-      { label: "Channels", icon: Mail, href: "/channels" },
+      { label: "Channels", icon: Mail, href: "/channels", service: "OMNICHANNEL" },
       { label: "Flows", icon: GitBranch, href: "/flows" },
       { label: "AI Agent", icon: Bot, href: "/ai" },
-      { label: "AI Calling", icon: Phone, href: "/voice" },
+      { label: "AI Calling", icon: Phone, href: "/voice", service: "AI_CALLING" },
       { label: "Analytics", icon: BarChart3, href: "/analytics" },
       { label: "Industry packs", icon: Sparkles, href: "/packs" },
     ],

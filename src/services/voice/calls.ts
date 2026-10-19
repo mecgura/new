@@ -3,6 +3,7 @@ import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import type { OrgAccess } from "@/lib/session";
 import { normalizePhone } from "@/services/inbox/contacts";
+import { assertServiceEnabled } from "@/services/whatsapp/guards";
 import { liveVoiceProvider, simulateCall, voiceStatus } from "@/providers/voice";
 
 type Row = Awaited<ReturnType<typeof db.voiceCall.findFirstOrThrow<{ include: { contact: { select: { id: true; name: true; phone: true } } } }>>>;
@@ -38,11 +39,13 @@ export function toCallDto(c: Row) {
 const include = { contact: { select: { id: true, name: true, phone: true } } } as const;
 
 export async function listCalls(organizationId: string) {
+  await assertServiceEnabled(organizationId, "AI_CALLING");
   const rows = await db.voiceCall.findMany({ where: { organizationId }, orderBy: { createdAt: "desc" }, take: 100, include });
   return { calls: rows.map(toCallDto), status: voiceStatus() };
 }
 
 export async function getCall(organizationId: string, id: string) {
+  await assertServiceEnabled(organizationId, "AI_CALLING");
   const c = await db.voiceCall.findFirst({ where: { id, organizationId }, include });
   if (!c) throw new ApiError("NOT_FOUND", "Call not found.");
   return toCallDto(c);
@@ -50,6 +53,7 @@ export async function getCall(organizationId: string, id: string) {
 
 export async function createCall(access: OrgAccess, input: { contactId: string; goal: string; script: string; language: string; consentNote: string }, req?: Request) {
   const orgId = access.organizationId;
+  await assertServiceEnabled(orgId, "AI_CALLING");
   const contact = await db.contact.findFirst({ where: { id: input.contactId, organizationId: orgId } });
   if (!contact) throw new ApiError("NOT_FOUND", "Contact not found.");
   if (contact.suppressed || contact.optInStatus === "opted_out") throw new ApiError("CONFLICT", "This contact opted out or is suppressed. They are not called.");

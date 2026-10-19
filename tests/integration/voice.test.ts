@@ -16,6 +16,7 @@ async function tenant() {
   await addMember(org.id, agent.id, "AGENT");
   const plan = await makePlan({ maxUsers: 20 });
   await db.subscription.create({ data: { organizationId: org.id, planId: plan.id, priceMonthly: plan.priceMonthly } });
+  await db.organizationService.create({ data: { organizationId: org.id, service: "AI_CALLING", enabled: true } });
   const contact = await db.contact.create({ data: { organizationId: org.id, phone: `+9198${String(Date.now()).slice(-8)}`, name: "Asha" } });
   return { org, owner, agent, contact };
 }
@@ -61,5 +62,13 @@ describe("AI calling (practice mode)", () => {
     actAs(other.owner);
     expect((await call.GET(req("/x"), P(other.org.id, { callId: id }))).status).toBe(404);
     expect(((await json(await calls.GET(req("/x"), P(other.org.id)))).body.calls as unknown[]).length).toBe(0);
+  });
+
+  it("is refused when the AI Calling service is off", async () => {
+    const t = await tenant();
+    await db.organizationService.update({ where: { organizationId_service: { organizationId: t.org.id, service: "AI_CALLING" } }, data: { enabled: false } });
+    actAs(t.owner);
+    expect((await calls.GET(req("/x"), P(t.org.id))).status).toBe(403);
+    expect((await calls.POST(post(body(t.contact.id)), P(t.org.id))).status).toBe(403);
   });
 });

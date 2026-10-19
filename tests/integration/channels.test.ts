@@ -28,6 +28,7 @@ async function tenant() {
   await addMember(org.id, agent.id, "AGENT");
   const plan = await makePlan({ maxUsers: 20 });
   await db.subscription.create({ data: { organizationId: org.id, planId: plan.id, priceMonthly: plan.priceMonthly } });
+  await db.organizationService.create({ data: { organizationId: org.id, service: "OMNICHANNEL", enabled: true } });
   return { org, owner, agent };
 }
 async function addEmail(t: Awaited<ReturnType<typeof tenant>>, address = `support${n++}@shop.test`) {
@@ -306,5 +307,20 @@ describe("channels: Messenger and Instagram", () => {
     actAs(t.owner);
     const res = await messages.POST(post({ type: "text", body: "late" }), P(t.org.id, { cid: conv.id }));
     expect(res.status).toBe(409);
+  });
+});
+
+describe("service gating", () => {
+  it("a workspace without the omnichannel service can't use channels, and public endpoints go quiet", async () => {
+    const t = await tenant();
+    const c = await addEmail(t);
+    const widget = (await json(await channels.POST(post({ kind: "webchat", name: "Chat" }), P(t.org.id)))).body.channel as { publicKey: string };
+    await db.organizationService.update({ where: { organizationId_service: { organizationId: t.org.id, service: "OMNICHANNEL" } }, data: { enabled: false } });
+    actAs(t.owner);
+    expect((await channels.GET(req("/x"), P(t.org.id))).status).toBe(403);
+    expect((await channels.POST(post({ kind: "email", name: "X", address: "x@y.test" }), P(t.org.id))).status).toBe(403);
+    expect((await hook(c.inboundPath.split("/").pop()!, { from: "a@b.test", text: "hi" })).status).toBe(404);
+    expect((await webchat.GET(req("/x"), { params: Promise.resolve({ key: widget.publicKey }) })).status).toBe(404);
+    expect(await db.message.count({ where: { organizationId: t.org.id } })).toBe(0);
   });
 });

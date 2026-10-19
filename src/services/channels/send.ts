@@ -4,6 +4,7 @@ import { ApiError } from "@/lib/api";
 import { publish } from "@/lib/realtime/broker";
 import type { OrgAccess } from "@/lib/session";
 import { assertBillingActive } from "@/services/billing/entitlements";
+import { assertServiceEnabled } from "@/services/whatsapp/guards";
 import { can, getVisibleConversation, toMessageDto } from "@/services/inbox/conversations";
 import { emitMessageEvent } from "@/services/webhooks/events";
 import { sendCustomerEmail } from "@/providers/email/resend";
@@ -23,6 +24,7 @@ const include = {
 /** Replies on non-WhatsApp inboxes. Plain text only for now; same visibility, suppression and billing rules as WhatsApp. */
 export async function sendChannelReply(access: OrgAccess, conversationId: string, input: SendInput, opts: { origin?: Record<string, unknown> } = {}) {
   if (!can(access, "inbox:reply")) throw new ApiError("FORBIDDEN");
+  await assertServiceEnabled(access.organizationId, "OMNICHANNEL");
   const conv = await getVisibleConversation(access, conversationId);
   if (!can(access, "inbox:view_all") && conv.assignedToUserId !== access.user.id) throw new ApiError("FORBIDDEN", "Take this chat before replying.");
   if (input.type !== "text") throw new ApiError("VALIDATION_ERROR", `Only text replies are supported on ${conv.channel} chats right now.`);

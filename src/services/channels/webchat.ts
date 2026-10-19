@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { receiveChannelMessage } from "@/services/channels/inbound";
+import { isServiceEnabled } from "@/services/whatsapp/guards";
 
 export const VISITOR_ID = /^[A-Za-z0-9_-]{24,64}$/;
 const KEY = /^[a-f0-9]{48}$/;
@@ -8,7 +9,7 @@ const KEY = /^[a-f0-9]{48}$/;
 export async function webchatAccount(key: string) {
   if (!KEY.test(key)) return null;
   const a = await db.channelAccount.findUnique({ where: { publicKey: key } });
-  return a && a.kind === "webchat" && a.status !== "disabled" ? a : null;
+  return a && a.kind === "webchat" && a.status !== "disabled" && (await isServiceEnabled(a.organizationId, "OMNICHANNEL")) ? a : null;
 }
 
 export function widgetConfig(a: { name: string; settings: string }) {

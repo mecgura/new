@@ -4,6 +4,7 @@ import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import type { OrgAccess } from "@/lib/session";
 import { isEmailConfigured } from "@/lib/mailer";
+import { assertServiceEnabled } from "@/services/whatsapp/guards";
 import { encryptSecret } from "@/lib/crypto";
 import { MetaApiError } from "@/providers/meta/graph";
 import { verifySocialAccount } from "@/providers/meta/social";
@@ -44,6 +45,7 @@ export function toChannelDto(a: Row, conversations = 0) {
 }
 
 export async function listChannels(organizationId: string) {
+  await assertServiceEnabled(organizationId, "OMNICHANNEL");
   const rows = await db.channelAccount.findMany({ where: { organizationId }, orderBy: { createdAt: "asc" }, include: { _count: { select: { conversations: true } } } });
   return {
     channels: rows.map((r) => toChannelDto(r, r._count.conversations)),
@@ -53,6 +55,7 @@ export async function listChannels(organizationId: string) {
 
 export async function createChannel(access: OrgAccess, input: { kind: ChannelKind; name: string; address: string; accessToken?: string }, req?: Request) {
   const orgId = access.organizationId;
+  await assertServiceEnabled(orgId, "OMNICHANNEL");
   if (input.kind === "email" && !input.address) throw new ApiError("VALIDATION_ERROR", "Enter the email address customers write to.", { details: { address: ["Required"] } });
   if (await db.channelAccount.count({ where: { organizationId: orgId } }) >= 20) throw new ApiError("CONFLICT", "You can connect up to 20 inboxes.");
   const social = input.kind === "messenger" || input.kind === "instagram";
@@ -74,6 +77,7 @@ export async function createChannel(access: OrgAccess, input: { kind: ChannelKin
 }
 
 export async function updateChannel(access: OrgAccess, id: string, input: { name?: string; status?: "demo" | "active" | "disabled"; settings?: Record<string, string> }) {
+  await assertServiceEnabled(access.organizationId, "OMNICHANNEL");
   const a = await db.channelAccount.findFirst({ where: { id, organizationId: access.organizationId } });
   if (!a) throw new ApiError("NOT_FOUND", "Inbox not found.");
   if (input.status === "active" && a.kind === "email" && !isEmailConfigured()) {

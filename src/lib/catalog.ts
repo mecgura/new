@@ -3,11 +3,16 @@
 export const SERVICES = [
   { key: "WHATSAPP_AUTOMATION", label: "WhatsApp Automation", description: "Inbox, templates, campaigns and flows" },
   { key: "CRM", label: "CRM", description: "Contacts, leads and pipelines" },
-  { key: "SOCIAL_MEDIA", label: "Social Media Management", description: "Content calendar and publishing" },
-  { key: "ATS", label: "ATS (Applicant Tracking)", description: "Job openings and candidates" },
-  { key: "HRMS", label: "HRMS", description: "Employees, attendance and leave" },
+  { key: "SOCIAL_MEDIA", label: "Social Media Management", description: "Coming soon: content calendar and publishing" },
+  { key: "ATS", label: "ATS (Applicant Tracking)", description: "Coming soon: job openings and candidates" },
+  { key: "HRMS", label: "HRMS", description: "Coming soon: employees, attendance and leave" },
   { key: "AI_ASSISTANT", label: "AI Assistant", description: "AI replies and lead qualification" },
+  { key: "OMNICHANNEL", label: "Omnichannel inbox", description: "Email, website chat, Messenger and Instagram in the shared inbox" },
+  { key: "AI_CALLING", label: "AI Calling", description: "AI phone calls with transcripts and summaries (practice mode until a voice provider is connected)" },
 ] as const;
+
+/** Services that switch a whole module on or off in the client's sidebar and APIs (the rest are labels or plan features). */
+export const GATED_SERVICES = ["OMNICHANNEL", "AI_CALLING"] as const;
 
 export type ServiceKey = (typeof SERVICES)[number]["key"];
 export const SERVICE_KEYS = SERVICES.map((s) => s.key) as [ServiceKey, ...ServiceKey[]];

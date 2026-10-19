@@ -14,6 +14,21 @@ export async function assertWhatsAppEnabled(organizationId: string) {
   }
 }
 
+export type GatedService = "OMNICHANNEL" | "AI_CALLING";
+const GATE_LABEL: Record<GatedService, string> = { OMNICHANNEL: "The omnichannel inbox (email, website chat, Messenger, Instagram)", AI_CALLING: "AI Calling" };
+
+export async function isServiceEnabled(organizationId: string, service: GatedService) {
+  const row = await db.organizationService.findUnique({ where: { organizationId_service: { organizationId, service } }, select: { enabled: true } });
+  return Boolean(row?.enabled);
+}
+
+/** A module that Super Admin switches on per client (Services). */
+export async function assertServiceEnabled(organizationId: string, service: GatedService) {
+  if (!(await isServiceEnabled(organizationId, service))) {
+    throw new ApiError("FORBIDDEN", `${GATE_LABEL[service]} isn't enabled for this workspace. Contact MECGURA to enable it.`);
+  }
+}
+
 /**
  * Plan slot check before a number becomes active. A number that's already
  * registered/connected to this org (re-connection) doesn't need a new slot.

@@ -5,6 +5,7 @@ import { clientIp, ApiError } from "@/lib/api";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { inboundEmailSchema } from "@/lib/validations";
 import { receiveChannelMessage } from "@/services/channels/inbound";
+import { isServiceEnabled } from "@/services/whatsapp/guards";
 
 export const dynamic = "force-dynamic";
 const MAX_BYTES = 200_000;
@@ -24,7 +25,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ key: string }>
   }
   if (Number(req.headers.get("content-length") ?? "0") > MAX_BYTES) return NextResponse.json({ error: "Payload too large" }, { status: 413 });
   const account = /^[a-f0-9]{48}$/.test(key) ? await db.channelAccount.findUnique({ where: { publicKey: key } }) : null;
-  if (!account || account.kind !== "email" || account.status === "disabled") return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!account || account.kind !== "email" || account.status === "disabled" || !(await isServiceEnabled(account.organizationId, "OMNICHANNEL"))) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const raw = await req.text();
   if (raw.length > MAX_BYTES) return NextResponse.json({ error: "Payload too large" }, { status: 413 });
   let json: unknown;
