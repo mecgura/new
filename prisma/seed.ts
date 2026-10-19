@@ -85,7 +85,7 @@ async function grandfatherAiAssistant() {
 
 /** Every organization gets settings + service rows (idempotent). */
 async function backfillClientDefaults() {
-  const services = ["WHATSAPP_AUTOMATION", "CRM", "SOCIAL_MEDIA", "ATS", "HRMS", "AI_ASSISTANT", "OMNICHANNEL", "AI_CALLING", "ADS_MANAGER"];
+  const services = ["WHATSAPP_AUTOMATION", "CRM", "SOCIAL_MEDIA", "ATS", "HRMS", "AI_ASSISTANT", "OMNICHANNEL", "AI_CALLING", "ADS_MANAGER", "SMS", "RCS"];
   // Modules added after a workspace was created are switched on once for workspaces that already run WhatsApp, so nobody
   // loses a page they could open before; Super Admin can switch them off per client. Rows that exist are never touched.
   const gated = new Set(["OMNICHANNEL", "AI_CALLING"]);

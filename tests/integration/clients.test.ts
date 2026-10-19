@@ -66,7 +66,7 @@ describe("create client", () => {
     expect(await bcrypt.compare("Passw0rd!", org.members[0].user.passwordHash)).toBe(true);
     expect(org.subscriptions).toEqual([expect.objectContaining({ planId: starter.id, status: "active", priceMonthly: 199900 })]);
     expect(org.settings).toMatchObject({ timezone: "Asia/Kolkata", currency: "INR" });
-    expect(org.services).toHaveLength(9);
+    expect(org.services).toHaveLength(11);
     expect(org.services.filter((s) => s.enabled).map((s) => s.service).sort()).toEqual(["CRM", "WHATSAPP_AUTOMATION"]);
     const actions = (await db.auditLog.findMany({ where: { organizationId: orgId } })).map((a) => a.action).sort();
     expect(actions).toEqual(["client.created", "plan.changed", "service.enabled", "service.enabled", "user.created"]);
@@ -174,13 +174,15 @@ describe("client lifecycle", () => {
   it("services enable/disable are persisted and audited individually", async () => {
     const { orgId } = await createClient({ services: [] });
     actAs(admin);
-    const res = await clientServices.PUT(req("/x", { method: "PUT", body: { services: { HRMS: true, ATS: true } } }), params({ id: orgId }));
+    const res = await clientServices.PUT(req("/x", { method: "PUT", body: { services: { CRM: true, ATS: false } } }), params({ id: orgId }));
     expect(res.status).toBe(200);
-    await clientServices.PUT(req("/x", { method: "PUT", body: { services: { HRMS: false, ATS: true } } }), params({ id: orgId }));
+    await clientServices.PUT(req("/x", { method: "PUT", body: { services: { CRM: false, OMNICHANNEL: true } } }), params({ id: orgId }));
     const enabled = await db.organizationService.findMany({ where: { organizationId: orgId, enabled: true } });
-    expect(enabled.map((s) => s.service)).toEqual(["ATS"]);
+    expect(enabled.map((s) => s.service)).toEqual(["OMNICHANNEL"]);
     expect(await db.auditLog.count({ where: { organizationId: orgId, action: "service.enabled" } })).toBe(2);
-    expect(await db.auditLog.count({ where: { organizationId: orgId, action: "service.disabled", targetId: "HRMS" } })).toBe(1);
+    expect(await db.auditLog.count({ where: { organizationId: orgId, action: "service.disabled", targetId: "CRM" } })).toBe(1);
+    // Services with nothing behind them yet (SMS, RCS, Social, ATS, HRMS) can't be switched on.
+    for (const key of ["SMS", "RCS", "HRMS"]) expect((await clientServices.PUT(req("/x", { method: "PUT", body: { services: { [key]: true } } }), params({ id: orgId }))).status).toBe(400);
     expect((await clientServices.PUT(req("/x", { method: "PUT", body: { services: { NOT_A_SERVICE: true } } }), params({ id: orgId }))).status).toBe(400);
   });
 

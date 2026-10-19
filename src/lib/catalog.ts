@@ -9,11 +9,16 @@ export const SERVICES = [
   { key: "AI_ASSISTANT", label: "AI Assistant", description: "AI Agent: automatic replies, lead qualification and appointment requests (also needs a plan that includes it)" },
   { key: "OMNICHANNEL", label: "Omnichannel inbox", description: "Email, website chat, Messenger and Instagram in the shared inbox" },
   { key: "ADS_MANAGER", label: "Ads Manager", description: "Create and run click-to-WhatsApp ads from MECGURA and see chats and cost per chat (needs Meta approval for other businesses' ad accounts)" },
+  { key: "SMS", label: "SMS", description: "Coming soon: SMS inbox and campaigns (needs DLT registration and an SMS provider)" },
+  { key: "RCS", label: "RCS", description: "Coming soon: rich messages on Android (needs an RCS provider and brand verification)" },
   { key: "AI_CALLING", label: "AI Calling", description: "AI phone calls with transcripts and summaries (practice mode until a voice provider is connected)" },
 ] as const;
 
 /** Services that switch a whole module on or off in the client's sidebar and APIs (the rest are labels or plan features). */
 export const GATED_SERVICES = ["OMNICHANNEL", "AI_CALLING", "AI_ASSISTANT", "ADS_MANAGER"] as const;
+
+/** Listed so the package can be planned, but nothing sits behind it yet: shown disabled and never saved as on. */
+export const isComingSoon = (s: { description: string }) => s.description.startsWith("Coming soon");
 
 export type ServiceKey = (typeof SERVICES)[number]["key"];
 export const SERVICE_KEYS = SERVICES.map((s) => s.key) as [ServiceKey, ...ServiceKey[]];

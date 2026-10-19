@@ -7,7 +7,7 @@ import { audit } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
 import { slugify } from "@/lib/server";
 import { isSuperAdmin } from "@/lib/authz";
-import { SERVICE_KEYS, type ServiceKey, ACTIVE_NUMBER_STATUSES } from "@/lib/catalog";
+import { SERVICES, SERVICE_KEYS, isComingSoon, type ServiceKey, ACTIVE_NUMBER_STATUSES } from "@/lib/catalog";
 import { hashPassword } from "@/lib/services/accounts";
 
 type Tx = Parameters<Parameters<typeof db.$transaction>[0]>[0];
@@ -68,6 +68,7 @@ export async function createClient(actorUserId: string, input: CreateClientInput
   const slug = await uniqueSlug(input.name);
   const passwordHash = existing ? null : await hashPassword(input.ownerPassword);
   const services = input.services ?? [];
+  assertAvailable(services);
 
   const result = await db.$transaction(async (tx) => {
     const organization = await tx.organization.create({
@@ -149,7 +150,14 @@ export async function assignPlan(actorUserId: string, organizationId: string, pl
   return sub;
 }
 
+/** Services that have nothing behind them yet can't be switched on. */
+function assertAvailable(keys: ServiceKey[]) {
+  const soon = SERVICES.filter((s) => keys.includes(s.key) && isComingSoon(s));
+  if (soon.length) throw new ApiError("VALIDATION_ERROR", `${soon.map((s) => s.label).join(", ")} ${soon.length === 1 ? "isn't" : "aren't"} available yet.`);
+}
+
 export async function setServices(actorUserId: string, organizationId: string, changes: Partial<Record<ServiceKey, boolean>>, req?: Request) {
+  assertAvailable((Object.entries(changes) as [ServiceKey, boolean][]).filter(([, on]) => on).map(([k]) => k));
   const org = await db.organization.findUnique({ where: { id: organizationId }, select: { id: true } });
   if (!org) throw new ApiError("NOT_FOUND", "Client not found.");
   await ensureClientDefaults(organizationId);

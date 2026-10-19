@@ -33,7 +33,7 @@ import {
 } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
 import { ORG_ROLES, ORG_ROLE_LABELS, isOrgRole, type OrgRole } from "@/lib/authz";
-import { SERVICES, WHATSAPP_STATUS_LABELS, formatINR, type ServiceKey } from "@/lib/catalog";
+import { SERVICES, WHATSAPP_STATUS_LABELS, formatINR, isComingSoon, type ServiceKey } from "@/lib/catalog";
 import { describeAction } from "@/lib/audit-actions";
 import { AddMemberModal } from "@/components/app/settings/team-manager";
 
@@ -300,9 +300,9 @@ export function ServicesTab({ d, onChanged }: { d: ClientDetail; onChanged: () =
         <fieldset className="grid gap-4 sm:grid-cols-2">
           <legend className="sr-only">Enabled services</legend>
           {SERVICES.map((s) => (
-            <div key={s.key} className="flex items-start justify-between gap-3 rounded-[var(--radius-control)] border border-app-border p-3">
-              <Checkbox label={s.label} description={s.description} checked={state[s.key]} onChange={(e) => setState((x) => ({ ...x, [s.key]: e.target.checked }))} />
-              <Badge tone={initial[s.key] ? "success" : "neutral"}>{initial[s.key] ? "Enabled" : "Off"}</Badge>
+            <div key={s.key} className={`flex items-start justify-between gap-3 rounded-[var(--radius-control)] border border-app-border p-3 ${isComingSoon(s) ? "opacity-60" : ""}`}>
+              <Checkbox label={s.label} description={s.description} checked={state[s.key]} disabled={isComingSoon(s)} onChange={(e) => setState((x) => ({ ...x, [s.key]: e.target.checked }))} />
+              <Badge tone={isComingSoon(s) ? "neutral" : initial[s.key] ? "success" : "neutral"}>{isComingSoon(s) ? "Soon" : initial[s.key] ? "Enabled" : "Off"}</Badge>
             </div>
           ))}
         </fieldset>

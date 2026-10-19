@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Wand2 } from "lucide-react";
 import { Alert, Button, Card, CardBody, CardHeader, Checkbox, Field, Input, LoadingState, PageHeader, Select, useToast } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
-import { SERVICES, formatINR, type ServiceKey } from "@/lib/catalog";
+import { SERVICES, formatINR, isComingSoon, type ServiceKey } from "@/lib/catalog";
 import { generateClientPassword } from "@/components/admin/client-dialogs";
 
 type Plan = { id: string; name: string; priceMonthly: number; isActive: boolean; maxUsers: number; maxWhatsAppNumbers: number; maxMonthlyMessages: number };
@@ -119,12 +119,19 @@ export default function NewClientPage() {
             </CardBody>
           </Card>
           <Card>
-            <CardHeader title="Enable services" description="Modules this client can use. Change any time from the client page." />
+            <CardHeader title="Enable services" description="Build this client's package: tick only what they pay for. Change any time from the client page." />
             <CardBody>
               <fieldset className="grid gap-3 sm:grid-cols-2">
                 <legend className="sr-only">Services</legend>
-                {SERVICES.map((s) => (
+                {SERVICES.filter((s) => !isComingSoon(s)).map((s) => (
                   <Checkbox key={s.key} label={s.label} description={s.description} checked={services.includes(s.key)} onChange={() => toggleService(s.key)} />
+                ))}
+              </fieldset>
+              <p className="mb-2 mt-5 text-small font-semibold text-app-muted">Coming soon</p>
+              <fieldset className="grid gap-3 opacity-70 sm:grid-cols-2" disabled>
+                <legend className="sr-only">Services that are not available yet</legend>
+                {SERVICES.filter(isComingSoon).map((s) => (
+                  <Checkbox key={s.key} label={s.label} description={s.description.replace(/^Coming soon:\s*/, "")} checked={false} onChange={() => undefined} />
                 ))}
               </fieldset>
             </CardBody>
