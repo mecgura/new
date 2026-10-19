@@ -367,6 +367,23 @@ describe("contacts & CRM", () => {
     expect(await db.auditLog.count({ where: { organizationId: tt.orgId, action: { in: ["contacts.imported", "contacts.exported"] } } })).toBe(2);
   });
 
+  it("imports a .vcf phone-contacts file; no consent is assumed", async () => {
+    const tt = await makeTenant();
+    actAs(tt.owner);
+    const p1 = `96${String(Date.now()).slice(-8)}`;
+    const vcf = `BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Vcf Person\r\nTEL;TYPE=CELL:${p1}\r\nEMAIL:vcf@x.com\r\nEND:VCARD\r\nBEGIN:VCARD\r\nFN:Broken\r\nTEL:12\r\nEND:VCARD\r\n`;
+    const fd = new FormData();
+    fd.set("file", new File([vcf], "contacts.vcf", { type: "text/vcard" }));
+    const res = await json(await importRoute.POST(new Request("http://localhost:3000/x", { method: "POST", headers: { host: "localhost:3000" }, body: fd }), P(tt.orgId)));
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ created: 1, skipped: 1 });
+    const c = await db.contact.findUniqueOrThrow({ where: { organizationId_phone: { organizationId: tt.orgId, phone: `+91${p1}` } } });
+    expect(c).toMatchObject({ name: "Vcf Person", email: "vcf@x.com", source: "import", optInStatus: "unknown" });
+    const bad = new FormData();
+    bad.set("file", new File(["x"], "contacts.pdf", { type: "application/pdf" }));
+    expect((await importRoute.POST(new Request("http://localhost:3000/x", { method: "POST", headers: { host: "localhost:3000" }, body: bad }), P(tt.orgId))).status).toBe(400);
+  });
+
   it("plan's monthly new-contact limit is enforced", async () => {
     const tt = await makeTenant({ maxContacts: 2 });
     actAs(tt.owner);

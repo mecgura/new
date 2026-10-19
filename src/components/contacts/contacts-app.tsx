@@ -114,7 +114,7 @@ export function ContactsApp({ orgId, perms }: { orgId: string; perms: InboxPerms
           <>
             {perms["contacts:import"] ? (
               <Button variant="secondary" onClick={() => setImportOpen(true)}>
-                <Upload aria-hidden="true" /> Import CSV
+                <Upload aria-hidden="true" /> Import CSV / VCF
               </Button>
             ) : null}
             {perms["contacts:export"] ? (
@@ -313,7 +313,7 @@ function ImportModal({ open, onClose, orgId, onDone }: { open: boolean; onClose:
     onClose();
   }
   return (
-    <Modal open={open} onClose={close} title="Import contacts from CSV" description="Columns: name, phone (required), email, tags (separate with ;), lead_status, lifecycle, source, opt_in (yes/no). Existing phone numbers are updated.">
+    <Modal open={open} onClose={close} title="Import contacts from CSV or VCF" description="A phone contacts file (.vcf) works too: names, numbers and emails are read from it. CSV columns: name, phone (required), email, tags (separate with ;), lead_status, lifecycle, source, opt_in (yes/no). Existing phone numbers are updated.">
       {result ? (
         <div className="space-y-3">
           <Alert tone="success" title="Import finished">
@@ -329,8 +329,8 @@ function ImportModal({ open, onClose, orgId, onDone }: { open: boolean; onClose:
       ) : (
         <form onSubmit={submit} className="space-y-4">
           {error ? <Alert tone="danger">{error}</Alert> : null}
-          <Field id="csv-file" label="CSV file (max 2 MB, 5,000 rows)">
-            <Input type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="py-1.5" />
+          <Field id="csv-file" label="CSV or VCF file (max 2 MB, 5,000 contacts)">
+            <Input type="file" accept=".csv,.vcf,text/csv,text/vcard,text/x-vcard" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="py-1.5" />
           </Field>
           <p className="text-caption text-app-subtle">Only import people who agreed to hear from you on WhatsApp. Mark consent with the opt_in column.</p>
           <div className="flex justify-end gap-2">

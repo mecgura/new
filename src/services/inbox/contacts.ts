@@ -381,9 +381,41 @@ const HEADER_ALIASES: Record<string, string> = {
 
 export const MAX_IMPORT_ROWS = 5000;
 
-export async function importContactsCsv(ctx: Ctx, text: string) {
-  const rows = parseCsv(text);
-  if (rows.length < 2) throw new ApiError("VALIDATION_ERROR", "The CSV needs a header row and at least one contact.");
+/**
+ * Reads a vCard (.vcf) file, as exported by Android/iPhone/Google Contacts, into the same rows an imported CSV has
+ * (name, phone, email). A card with several phone numbers becomes one row per number. vCards carry no consent, so
+ * nobody is marked as opted in.
+ */
+export function parseVcf(text: string): string[][] {
+  const unfolded = text.replace(/^﻿/, "").replace(/\r\n|\r/g, "\n").replace(/\n[ \t]/g, "");
+  const unescape = (v: string) => v.replace(/\\n/gi, " ").replace(/\\([,;\\])/g, "$1").trim();
+  const rows: string[][] = [["name", "phone", "email"]];
+  for (const block of unfolded.split(/BEGIN:VCARD/i).slice(1)) {
+    const card = block.split(/END:VCARD/i)[0];
+    let name = "";
+    let nameParts = "";
+    const phones: string[] = [];
+    let email = "";
+    for (const line of card.split("\n")) {
+      const idx = line.indexOf(":");
+      if (idx < 1) continue;
+      const key = line.slice(0, idx).split(";")[0].replace(/^[\w-]+\./, "").toUpperCase(); // drops Apple's "item1." prefix
+      const value = line.slice(idx + 1);
+      if (key === "FN") name = unescape(value);
+      else if (key === "N" && !nameParts) nameParts = value.split(";").slice(0, 5).map(unescape).filter(Boolean).reverse().join(" ").trim();
+      else if (key === "TEL") phones.push(unescape(value).replace(/^tel:/i, ""));
+      else if (key === "EMAIL" && !email) email = unescape(value);
+    }
+    const display = name || nameParts;
+    for (const phone of phones) if (phone) rows.push([display, phone, email]);
+  }
+  return rows;
+}
+
+export async function importContactsCsv(ctx: Ctx, text: string, format: "csv" | "vcf" = "csv") {
+  const rows = format === "vcf" ? parseVcf(text) : parseCsv(text);
+  const label = format === "vcf" ? "VCF" : "CSV";
+  if (rows.length < 2) throw new ApiError("VALIDATION_ERROR", format === "vcf" ? "No contacts with a phone number were found in this file." : "The CSV needs a header row and at least one contact.");
   if (rows.length - 1 > MAX_IMPORT_ROWS) throw new ApiError("VALIDATION_ERROR", `Import up to ${MAX_IMPORT_ROWS} contacts at a time.`);
   const header = rows[0].map((h) => HEADER_ALIASES[h.trim().toLowerCase().replace(/[\s-]+/g, "_")] ?? "");
   if (!header.includes("phone")) throw new ApiError("VALIDATION_ERROR", "The CSV must have a “phone” column.");
@@ -430,7 +462,7 @@ export async function importContactsCsv(ctx: Ctx, text: string) {
         const current = await db.contactTag.findMany({ where: { contactId: existing.id }, include: { tag: true } });
         await setContactTags(silentCtx, existing.id, [...current.map((t) => t.tag.name), ...tags], { silent: true });
       }
-      if (optIn && optIn !== existing.optInStatus) await recordConsent(silentCtx, existing.id, { status: optIn, source: "import", evidence: `CSV line ${line}` }, { silent: true });
+      if (optIn && optIn !== existing.optInStatus) await recordConsent(silentCtx, existing.id, { status: optIn, source: "import", evidence: `${label} line ${line}` }, { silent: true });
       result.updated++;
       await emitContactEvent("contact.updated", ctx.organizationId, existing.id, ["import"]);
     } else {
@@ -439,7 +471,7 @@ export async function importContactsCsv(ctx: Ctx, text: string) {
       });
       await incrementUsage(ctx.organizationId, "contacts_created");
       if (tags.length) await setContactTags(silentCtx, c.id, tags, { silent: true });
-      if (optIn) await recordConsent(silentCtx, c.id, { status: optIn, source: "import", evidence: `CSV line ${line}` }, { silent: true });
+      if (optIn) await recordConsent(silentCtx, c.id, { status: optIn, source: "import", evidence: `${label} line ${line}` }, { silent: true });
       result.created++;
       await emitContactEvent("contact.created", ctx.organizationId, c.id);
     }

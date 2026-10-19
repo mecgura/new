@@ -7,7 +7,7 @@ type Ctx = { params: Promise<{ orgId: string }> };
 
 const MAX_BYTES = 2 * 1024 * 1024;
 
-/** CSV import (multipart "file"). Columns: name, phone, email, tags (a;b), lead_status, lifecycle, source, opt_in. */
+/** CSV or vCard (.vcf) import (multipart "file"). CSV Columns: name, phone, email, tags (a;b), lead_status, lifecycle, source, opt_in. */
 export const POST = handle<Ctx>(async (req, { params }) => {
   const { access } = await orgRoute(req, params, "contacts:import");
   enforceRateLimit(`import:${access.user.id}`, 10, 60 * 60_000);
@@ -18,7 +18,8 @@ export const POST = handle<Ctx>(async (req, { params }) => {
   const file = form.get("file");
   if (!(file instanceof File) || file.size === 0) throw new ApiError("VALIDATION_ERROR", "Choose a CSV file.", { details: { file: ["Required"] } });
   if (file.size > MAX_BYTES) throw new ApiError("VALIDATION_ERROR", "CSV files can be up to 2 MB.");
-  if (!/\.csv$/i.test(file.name) && !/csv|text\/plain|excel/.test(file.type)) throw new ApiError("VALIDATION_ERROR", "Upload a .csv file.");
-  const result = await importContactsCsv({ organizationId: access.organizationId, actorUserId: access.user.id, req }, await file.text());
+  const isVcf = /\.(vcf|vcard)$/i.test(file.name) || /vcard/.test(file.type);
+  if (!isVcf && !/\.csv$/i.test(file.name) && !/csv|text\/plain|excel/.test(file.type)) throw new ApiError("VALIDATION_ERROR", "Upload a .csv or .vcf file.");
+  const result = await importContactsCsv({ organizationId: access.organizationId, actorUserId: access.user.id, req }, await file.text(), isVcf ? "vcf" : "csv");
   return ok(result);
 });
