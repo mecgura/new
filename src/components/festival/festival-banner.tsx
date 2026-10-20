@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Gift, MessageCircle, X } from "lucide-react";
 import { FestivalEffect, type EffectKind } from "@/components/festival/festival-effect";
 
@@ -125,9 +126,9 @@ export function FestivalGreeting({ festival, orgName, userId }: { festival: Publ
                 <button type="button" onClick={() => setOpen(false)} className="inline-flex min-h-11 items-center rounded-full bg-white px-6 font-bold text-[#3b0a45] hover:bg-white/90">
                   Thank you!
                 </button>
-                <a href="/campaigns/festivals" className="inline-flex min-h-11 items-center rounded-full bg-white/15 px-5 font-semibold ring-1 ring-white/30 hover:bg-white/25">
+                <Link href="/campaigns/festivals" onClick={() => setOpen(false)} className="inline-flex min-h-11 items-center rounded-full bg-white/15 px-5 font-semibold ring-1 ring-white/30 hover:bg-white/25">
                   Send wishes to your customers
-                </a>
+                </Link>
               </div>
             </div>
           </div>

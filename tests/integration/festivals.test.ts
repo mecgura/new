@@ -3,6 +3,7 @@ import { actAs, json, makeUser, req } from "../helpers";
 import * as route from "@/app/api/admin/festivals/route";
 import * as photoRoute from "@/app/api/admin/festivals/photo/route";
 import * as publicPhoto from "@/app/api/festival-photo/[id]/route";
+import { setSetting } from "@/lib/settings";
 import { activeFestival, DEFAULT_FESTIVALS, getFestivals, upcomingFestivals, type Festival } from "@/services/site/festivals";
 
 let admin: Awaited<ReturnType<typeof makeUser>>;
@@ -29,6 +30,7 @@ describe("festival calendar", () => {
   });
 
   it("ships a starting list and only lets the Super Admin change it", async () => {
+    await setSetting("festivals", ""); // other test files share the database
     expect((await getFestivals()).festivals.length).toBe(DEFAULT_FESTIVALS.festivals.length);
     actAs(other);
     expect((await route.GET(req("/api/admin/festivals"))).status).toBe(403);
