@@ -195,7 +195,7 @@ export function Composer({
   );
 }
 
-function TemplateModal({ open, onClose, url, orgId, accountId, onSent }: { open: boolean; onClose: () => void; url: string; orgId: string; accountId: string; onSent: (m: Message) => void }) {
+export function TemplateModal({ open, onClose, url, orgId, accountId, onSent }: { open: boolean; onClose: () => void; url: string; orgId: string; accountId: string; onSent: (m: Message) => void }) {
   const [list, setList] = React.useState<TemplateView[] | null>(null);
   const [loadError, setLoadError] = React.useState("");
   const [id, setId] = React.useState("");

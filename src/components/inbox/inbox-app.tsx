@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Bot, CheckCircle2, FlaskConical, Info, Lock, Maximize2, MessageCirclePlus, Minimize2, Phone, RotateCcw, UserPlus, Wifi, WifiOff } from "lucide-react";
+import { ArrowLeft, Bot, CheckCircle2, FileText, FolderPlus, FlaskConical, Info, Lock, Maximize2, MessageCirclePlus, Minimize2, Phone, RotateCcw, UserPlus, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Alert,
@@ -31,7 +31,7 @@ import type { InboxPerms } from "@/lib/inbox-context";
 import { ConversationList, type ListFilters } from "@/components/inbox/conversation-list";
 import { MessageBubble } from "@/components/inbox/message-bubble";
 import { AiControl } from "@/components/inbox/ai-control";
-import { Composer } from "@/components/inbox/composer";
+import { Composer, TemplateModal } from "@/components/inbox/composer";
 import { CustomerPanel } from "@/components/inbox/customer-panel";
 import { useRealtime, type LiveEvent } from "@/components/inbox/use-realtime";
 import { prettyId, type Account, type Conversation, type Message, type TeamMember } from "@/components/inbox/types";
@@ -85,6 +85,7 @@ export function InboxApp(props: Props) {
   const [panelKey, setPanelKey] = React.useState(0);
   const [infoOpen, setInfoOpen] = React.useState(false);
   const [demoOpen, setDemoOpen] = React.useState(false);
+  const [templateOpen, setTemplateOpen] = React.useState(false);
   // WhatsApp-style layout: app menu hidden and the customer panel closed unless the user opens them.
   const [focus, setFocus] = React.useState(true);
   const [panelOpen, setPanelOpen] = React.useState(false);
@@ -346,6 +347,12 @@ export function InboxApp(props: Props) {
                 </p>
               </div>
               <CallButton conv={conv} calling={props.calling ?? { phone: false, ai: false }} />
+              {conv.channel === "whatsapp" && perms["inbox:reply"] ? (
+                <IconButton label="Send template" onClick={() => setTemplateOpen(true)} disabled={mustClaim}>
+                  <FileText aria-hidden="true" />
+                </IconButton>
+              ) : null}
+              {perms["contacts:write"] ? <GroupButton orgId={orgId} contactId={conv.contact.id} onChanged={() => setPanelKey((k) => k + 1)} /> : null}
               <Dropdown
                 label="Assign conversation"
                 trigger={
@@ -431,6 +438,19 @@ export function InboxApp(props: Props) {
               <div ref={bottomRef} />
             </div>
             {conv.isDemo && conv.channel === "whatsapp" ? <DemoReplyBar onSend={demoReply} /> : null}
+            {conv.channel === "whatsapp" ? (
+              <TemplateModal
+                open={templateOpen}
+                onClose={() => setTemplateOpen(false)}
+                url={`/api/organizations/${orgId}/inbox/conversations/${conv.id}/messages`}
+                orgId={orgId}
+                accountId={conv.account.id}
+                onSent={(m) => {
+                  setTemplateOpen(false);
+                  setMessages((xs) => (xs?.some((x) => x.id === m.id) ? xs : [...(xs ?? []), m]));
+                }}
+              />
+            ) : null}
             <Composer
               orgId={orgId}
               conversation={conv}
@@ -567,6 +587,64 @@ function CallButton({ conv, calling }: { conv: Conversation; calling: { phone: b
               AI call
             </DropdownItem>
           ) : null}
+        </>
+      )}
+    </Dropdown>
+  );
+}
+
+/** Adds this customer to a contact group (or takes them out), right from the chat. */
+function GroupButton({ orgId, contactId, onChanged }: { orgId: string; contactId: string; onChanged: () => void }) {
+  const toast = useToast();
+  const [groups, setGroups] = React.useState<{ id: string; name: string }[]>([]);
+  const [mine, setMine] = React.useState<Set<string>>(new Set());
+  const [name, setName] = React.useState("");
+  const load = React.useCallback(() => {
+    void apiFetch<{ tags: { id: string; name: string }[] }>(`/api/organizations/${orgId}/tags`).then((r) => r.ok && setGroups(r.data.tags));
+    void apiFetch<{ contact: { tags: { id: string }[] } }>(`/api/organizations/${orgId}/contacts/${contactId}`).then((r) => r.ok && setMine(new Set(r.data.contact.tags.map((t) => t.id))));
+  }, [orgId, contactId]);
+  React.useEffect(() => {
+    load();
+  }, [load]);
+  async function change(group: string, action: "add" | "remove") {
+    const r = await apiFetch(`/api/organizations/${orgId}/contacts/groups`, { method: "POST", body: { ids: [contactId], group, action } });
+    if (!r.ok) return toast(r.error, "error");
+    toast(action === "add" ? `Added to “${group}”` : `Removed from “${group}”`);
+    setName("");
+    load();
+    onChanged();
+  }
+  return (
+    <Dropdown
+      label="Add to group"
+      trigger={
+        <span className="flex size-9 items-center justify-center rounded-[var(--radius-control)] border border-app-border text-app-text" title="Add to group">
+          <FolderPlus className="size-4" aria-hidden="true" />
+        </span>
+      }
+    >
+      {(close) => (
+        <>
+          <DropdownLabel>Groups</DropdownLabel>
+          {groups.slice(0, 12).map((g) => (
+            <DropdownItem key={g.id} onClick={() => { close(); void change(g.name, mine.has(g.id) ? "remove" : "add"); }} icon={<span className={cn("size-2 rounded-full", mine.has(g.id) ? "bg-app-success" : "bg-app-subtle")} aria-hidden="true" />}>
+              <span className="flex-1 truncate">{g.name}</span>
+              <span className="text-caption text-app-subtle">{mine.has(g.id) ? "Remove" : "Add"}</span>
+            </DropdownItem>
+          ))}
+          <DropdownSeparator />
+          <form
+            className="flex gap-1 p-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!name.trim()) return;
+              close();
+              void change(name.trim(), "add");
+            }}
+          >
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="New group…" maxLength={40} className="h-8 text-small" aria-label="New group name" onKeyDown={(e) => e.stopPropagation()} />
+            <Button type="submit" size="sm" disabled={!name.trim()}>Add</Button>
+          </form>
         </>
       )}
     </Dropdown>
