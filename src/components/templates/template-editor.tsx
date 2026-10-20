@@ -41,6 +41,7 @@ import {
   type TemplateDef,
 } from "@/lib/templates";
 import { dayFmt } from "@/components/inbox/types";
+import { messageCost, rupees, usePricing } from "@/lib/pricing-client";
 import { WaPreview } from "@/components/templates/wa-preview";
 import { QUALITY, STATUS_TONE, wabaLabel, type TemplateAccount, type TemplateView } from "@/components/templates/types";
 
@@ -68,6 +69,7 @@ const Counter = ({ value, max }: { value: string; max: number }) => (
 );
 
 export function TemplateEditor({ orgId, accounts, template, canManage }: { orgId: string; accounts: TemplateAccount[]; template?: TemplateView; canManage: boolean }) {
+  const pricing = usePricing(orgId);
   const router = useRouter();
   const toast = useToast();
   const [t, setT] = React.useState<TemplateView | undefined>(template);
@@ -270,9 +272,16 @@ export function TemplateEditor({ orgId, accounts, template, canManage }: { orgId
                         <input type="radio" name="tpl-category" value={c} checked={def.category === c} onChange={() => set("category", c as TemplateCategory)} className="sr-only" />
                         <span className="block text-small font-semibold text-app-text">{CATEGORY_LABELS[c]}</span>
                         <span className="mt-1 block text-caption text-app-muted">{CATEGORY_HINTS[c]}</span>
+                        {pricing ? (
+                          <span className="mt-2 block text-caption font-semibold text-app-text">
+                            ≈ {rupees(messageCost(pricing, c)?.total ?? 0)} per message
+                            <span className="block font-normal text-app-subtle">Meta {rupees(pricing.meta[c.toLowerCase()] ?? 0)}{pricing.fees[c.toLowerCase()] ? ` + MECGURA ${rupees(pricing.fees[c.toLowerCase()])}` : ""}</span>
+                          </span>
+                        ) : null}
                       </label>
                     ))}
                   </div>
+                  <p className="mt-2 text-caption text-app-subtle">Utility is much cheaper, but only for updates the customer expects (order, booking, payment, reminder). If the message has an offer or promotion, Meta changes it to Marketing and charges the marketing rate. Meta prices are estimates; Meta bills them to your WhatsApp account.</p>
                 </div>
               </CardBody>
             </Card>

@@ -844,3 +844,26 @@ export const adCreateSchema = z
   .strict();
 
 export const adStatusSchema = z.object({ action: z.enum(["activate", "pause", "archive"]), confirmBudget: z.boolean().optional() }).strict();
+
+const groupFields = {
+  group: z.string().trim().min(1, "Group name is required").max(40),
+  action: z.enum(["add", "remove"]),
+};
+export const contactGroupSchema = z.union([
+  z.object({ ids: z.array(idSchema).min(1).max(500), ...groupFields }).strict(),
+  z
+    .object({
+      filter: z
+        .object({
+          tab: z.enum(["all", "customers", "leads", "opted_in", "opted_out", "suppressed"]).default("all"),
+          q: z.string().trim().max(100).default(""),
+          tagId: z.string().max(64).default(""),
+          leadStatus: z.enum(["", "new", "contacted", "qualified", "proposal", "won", "lost"]).default(""),
+          ownerUserId: z.string().max(64).default(""),
+        })
+        .strict(),
+      expectedCount: z.number().int().min(1).max(10_000),
+      ...groupFields,
+    })
+    .strict(),
+]);

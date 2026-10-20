@@ -30,6 +30,7 @@ import {
   useToast,
 } from "@/components/ds";
 import { cn } from "@/lib/utils";
+import { messageCost, rupees, usePricing, type Pricing } from "@/lib/pricing-client";
 import { apiFetch } from "@/lib/client-api";
 import { formatNumber } from "@/lib/catalog";
 import { CATEGORY_LABELS, type SlotValues } from "@/lib/templates";
@@ -56,6 +57,7 @@ const EMPTY_FILTERS: AudienceFilters = { tagIds: [], tagMode: "any", excludeTagI
 type Api = <T>(path: string, init?: { method?: string; body?: unknown }) => ReturnType<typeof apiFetch<T>>;
 
 export function CampaignWizard({ orgId, campaign, accounts }: { orgId: string; campaign: CampaignView; accounts: Account[] }) {
+  const pricing = usePricing(orgId);
   const router = useRouter();
   const toast = useToast();
   const [c, setC] = React.useState(campaign);
@@ -141,7 +143,7 @@ export function CampaignWizard({ orgId, campaign, accounts }: { orgId: string; c
           {step === 4 ? <VariablesStep c={c} api={api} onBack={() => setStep(3)} onSave={(variables) => save({ variables }, 5)} /> : null}
           {step === 5 ? <ScheduleStep c={c} onBack={() => setStep(4)} onSave={(scheduledAt) => save({ scheduledAt }, 6)} /> : null}
           {step === 6 ? <ReviewStep c={c} api={api} onBack={() => setStep(5)} onReviewed={(review) => setC((x) => ({ ...x, review, reviewedAt: review.generatedAt }))} onNext={() => setStep(7)} /> : null}
-          {step === 7 ? <SendStep c={c} api={api} onBack={() => setStep(6)} onLaunched={() => router.refresh()} /> : null}
+          {step === 7 ? <SendStep c={c} api={api} pricing={pricing} onBack={() => setStep(6)} onLaunched={() => router.refresh()} /> : null}
         </div>
       </div>
       <ConfirmationDialog open={delOpen} onClose={() => setDelOpen(false)} onConfirm={remove} title="Delete this draft?" description="The campaign draft will be removed. Nothing has been sent." confirmLabel="Delete draft" />
@@ -292,7 +294,7 @@ function AudienceStep({ c, api, onBack, onSave }: { c: CampaignView; api: Api; o
     if (s.ok) setSegments(s.data.segments);
   }
 
-  const tagOpts = tags.map((t) => ({ value: t.id, label: t.name }));
+  const tagOpts = tags.map((t) => { const n = (t as { contacts?: number }).contacts; return { value: t.id, label: n === undefined ? t.name : `${t.name} (${n})` }; });
   const ready = mode !== "segment" || Boolean(segmentId);
 
   return (
@@ -310,14 +312,14 @@ function AudienceStep({ c, api, onBack, onSave }: { c: CampaignView; api: Api; o
 
           {mode === "filters" ? (
             <div className="space-y-4">
-              <Chips label="Has tags" options={tagOpts} value={filters.tagIds} onChange={(v) => setFilters((f) => ({ ...f, tagIds: v }))} />
+              <Chips label="Groups" options={tagOpts} value={filters.tagIds} onChange={(v) => setFilters((f) => ({ ...f, tagIds: v }))} />
               {filters.tagIds.length > 1 ? (
-                <Select aria-label="Tag matching" value={filters.tagMode} onChange={(e) => setFilters((f) => ({ ...f, tagMode: e.target.value as "any" | "all" }))} className="sm:w-64">
-                  <option value="any">Any of these tags</option>
-                  <option value="all">All of these tags</option>
+                <Select aria-label="Group matching" value={filters.tagMode} onChange={(e) => setFilters((f) => ({ ...f, tagMode: e.target.value as "any" | "all" }))} className="sm:w-64">
+                  <option value="any">In any of these groups</option>
+                  <option value="all">In all of these groups</option>
                 </Select>
               ) : null}
-              <Chips label="Exclude tags" options={tagOpts} value={filters.excludeTagIds} onChange={(v) => setFilters((f) => ({ ...f, excludeTagIds: v }))} />
+              <Chips label="Leave out groups" options={tagOpts} value={filters.excludeTagIds} onChange={(v) => setFilters((f) => ({ ...f, excludeTagIds: v }))} />
               <Chips
                 label="Lead status"
                 options={(["new", "contacted", "qualified", "proposal", "won", "lost"] as const).map((v) => ({ value: v, label: v[0].toUpperCase() + v.slice(1) }))}
@@ -754,7 +756,7 @@ function ReviewStep({ c, api, onBack, onReviewed, onNext }: { c: CampaignView; a
 // 7. Send
 // ---------------------------------------------------------------------------
 
-function SendStep({ c, api, onBack, onLaunched }: { c: CampaignView; api: Api; onBack: () => void; onLaunched: () => void }) {
+function SendStep({ c, api, pricing, onBack, onLaunched }: { c: CampaignView; api: Api; pricing: Pricing | null; onBack: () => void; onLaunched: () => void }) {
   const toast = useToast();
   const [confirm, setConfirm] = React.useState(false);
   const [busy, run] = useBusy();
@@ -773,6 +775,18 @@ function SendStep({ c, api, onBack, onLaunched }: { c: CampaignView; api: Api; o
     ["Recipients", c.review ? `${formatNumber(c.review.eligible)} eligible of ${formatNumber(c.review.total)} (${formatNumber(c.review.removed)} removed)` : "Run the review first"],
     ["When", c.scheduledAt ? `${istFmt.format(new Date(c.scheduledAt))} IST` : "Immediately"],
   ];
+  const cost = c.template && c.review ? messageCost(pricing, c.template.category, c.review.eligible) : null;
+  if (cost) {
+    rows.push([
+      "Estimated cost",
+      <span key="cost">
+        <span className="font-semibold">{rupees(cost.total)}</span> for {formatNumber(c.review?.eligible ?? 0)} messages
+        <span className="block text-caption text-app-muted">
+          Meta {c.template?.category.toLowerCase()} {rupees(cost.meta)} (billed by Meta to your WhatsApp account){cost.fee ? ` + MECGURA ${rupees(cost.fee)} from your wallet` : ""}. Messages that fail are not charged.
+        </span>
+      </span>,
+    ]);
+  }
   return (
     <Card>
       <CardHeader title="7. Send" description="Final check. The audience is re-verified at launch, and consent again for each contact at send time." />

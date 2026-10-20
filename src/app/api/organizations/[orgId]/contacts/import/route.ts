@@ -20,6 +20,7 @@ export const POST = handle<Ctx>(async (req, { params }) => {
   if (file.size > MAX_BYTES) throw new ApiError("VALIDATION_ERROR", "CSV files can be up to 2 MB.");
   const isVcf = /\.(vcf|vcard)$/i.test(file.name) || /vcard/.test(file.type);
   if (!isVcf && !/\.csv$/i.test(file.name) && !/csv|text\/plain|excel/.test(file.type)) throw new ApiError("VALIDATION_ERROR", "Upload a .csv or .vcf file.");
-  const result = await importContactsCsv({ organizationId: access.organizationId, actorUserId: access.user.id, req }, await file.text(), isVcf ? "vcf" : "csv");
+  const group = String(form.get("group") ?? "").trim().slice(0, 40);
+  const result = await importContactsCsv({ organizationId: access.organizationId, actorUserId: access.user.id, req }, await file.text(), isVcf ? "vcf" : "csv", group);
   return ok(result);
 });

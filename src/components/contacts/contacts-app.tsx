@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, Trash2, Upload, UserPlus, Users } from "lucide-react";
+import { Download, FolderPlus, Trash2, Upload, UserPlus, Users } from "lucide-react";
 import {
   Alert,
   Badge,
@@ -86,6 +86,8 @@ export function ContactsApp({ orgId, perms }: { orgId: string; perms: InboxPerms
   const [allMatching, setAllMatching] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
+  const [groupOpen, setGroupOpen] = React.useState(false);
+  const canSelect = perms["contacts:delete"] || perms["contacts:write"];
   const toast = useToast();
   const qs = new URLSearchParams({ tab, q, tagId, leadStatus, page: String(page), pageSize: "25" }).toString();
 
@@ -172,8 +174,8 @@ export function ContactsApp({ orgId, perms }: { orgId: string; perms: InboxPerms
         <Tabs label="Contact segments" items={TABS.map((t) => ({ id: t.id, label: `${t.label} ${data?.counts[t.id] ?? ""}`.trim() }))} value={tab} onValueChange={resetPage(setTab)} className="px-2" />
         <FilterBar>
           <SearchBar label="Search contacts" placeholder="Search name, phone or email…" value={q} onChange={(e) => resetPage(setQ)(e.target.value)} className="sm:w-72" />
-          <Select aria-label="Filter by tag" value={tagId} onChange={(e) => resetPage(setTagId)(e.target.value)} className="sm:w-44">
-            <option value="">All tags</option>
+          <Select aria-label="Filter by group" value={tagId} onChange={(e) => resetPage(setTagId)(e.target.value)} className="sm:w-44">
+            <option value="">All groups</option>
             {tags.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
@@ -193,7 +195,7 @@ export function ContactsApp({ orgId, perms }: { orgId: string; perms: InboxPerms
           <EmptyState icon={Users} title={q || tagId || leadStatus ? "No contacts match" : "No contacts here yet"} description="Contacts are created automatically when customers message you, or add / import them." />
         ) : (
           <>
-            {perms["contacts:delete"] && selectedCount > 0 ? (
+            {canSelect && selectedCount > 0 ? (
               <div className="flex flex-wrap items-center gap-3 border-b border-app-border bg-app-primary-soft px-4 py-2.5 text-small">
                 <span className="font-medium text-app-text">{selectedCount} selected</span>
                 {!allMatching && pageAllSelected && data.total > pageIds.length ? (
@@ -201,9 +203,16 @@ export function ContactsApp({ orgId, perms }: { orgId: string; perms: InboxPerms
                     Select all {data.total} contacts in this list
                   </button>
                 ) : null}
-                <Button size="sm" variant="danger" onClick={() => setConfirmDelete(true)}>
-                  <Trash2 aria-hidden="true" /> Delete
-                </Button>
+                {perms["contacts:write"] ? (
+                  <Button size="sm" variant="secondary" onClick={() => setGroupOpen(true)}>
+                    <FolderPlus aria-hidden="true" /> Add to group
+                  </Button>
+                ) : null}
+                {perms["contacts:delete"] ? (
+                  <Button size="sm" variant="danger" onClick={() => setConfirmDelete(true)}>
+                    <Trash2 aria-hidden="true" /> Delete
+                  </Button>
+                ) : null}
                 <button type="button" className="text-app-muted underline" onClick={() => { setSelected(new Set()); setAllMatching(false); }}>
                   Clear
                 </button>
@@ -212,14 +221,14 @@ export function ContactsApp({ orgId, perms }: { orgId: string; perms: InboxPerms
             <Table caption="Contacts" aria-busy={loading} className="min-w-[1000px]">
               <THead>
                 <tr>
-                  {perms["contacts:delete"] ? (
+                  {canSelect ? (
                     <TH className="w-10">
                       <input type="checkbox" aria-label="Select all contacts on this page" checked={pageAllSelected} onChange={togglePage} className="size-4 accent-emerald-600" />
                     </TH>
                   ) : null}
                   <TH>Name</TH>
                   <TH>Phone</TH>
-                  <TH>Tags</TH>
+                  <TH>Groups</TH>
                   <TH>Lead status</TH>
                   <TH>Source</TH>
                   <TH>Agent</TH>
@@ -230,7 +239,7 @@ export function ContactsApp({ orgId, perms }: { orgId: string; perms: InboxPerms
               <TBody>
                 {data.items.map((c) => (
                   <TR key={c.id}>
-                    {perms["contacts:delete"] ? (
+                    {canSelect ? (
                       <TD>
                         <input type="checkbox" aria-label={`Select ${c.name || c.phone}`} checked={allMatching || selected.has(c.id)} onChange={() => toggleOne(c.id)} className="size-4 accent-emerald-600" />
                       </TD>
@@ -285,7 +294,22 @@ export function ContactsApp({ orgId, perms }: { orgId: string; perms: InboxPerms
         description="The contacts, their conversations, notes and consent history are permanently deleted. This cannot be undone."
         confirmLabel="Delete permanently"
       />
-      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} orgId={orgId} onDone={load} />
+      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} orgId={orgId} onDone={load} groups={tags} />
+      <GroupModal
+        open={groupOpen}
+        onClose={() => setGroupOpen(false)}
+        orgId={orgId}
+        groups={tags}
+        count={selectedCount}
+        target={allMatching ? { filter: { tab, q, tagId, leadStatus }, expectedCount: data?.total ?? 0 } : { ids: [...selected] }}
+        onDone={() => {
+          setGroupOpen(false);
+          setSelected(new Set());
+          setAllMatching(false);
+          void apiFetch<{ tags: Tag[] }>(`/api/organizations/${orgId}/tags`).then((r) => r.ok && setTags(r.data.tags));
+          void load();
+        }}
+      />
     </>
   );
 }
@@ -355,8 +379,9 @@ function AddContactModal({ open, onClose, orgId, team, onCreated }: { open: bool
   );
 }
 
-function ImportModal({ open, onClose, orgId, onDone }: { open: boolean; onClose: () => void; orgId: string; onDone: () => void }) {
+function ImportModal({ open, onClose, orgId, onDone, groups }: { open: boolean; onClose: () => void; orgId: string; onDone: () => void; groups: Tag[] }) {
   const [file, setFile] = React.useState<File | null>(null);
+  const [group, setGroup] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState("");
   const [result, setResult] = React.useState<{ created: number; updated: number; skipped: number; errors: { line: number; error: string }[] } | null>(null);
@@ -376,6 +401,7 @@ function ImportModal({ open, onClose, orgId, onDone }: { open: boolean; onClose:
       return setError(`This file is still ${(upload.size / 1048576).toFixed(1)} MB after removing photos. Split it into smaller files (the limit is 2 MB and 5,000 contacts).`);
     }
     fd.set("file", upload);
+    if (group.trim()) fd.set("group", group.trim());
     try {
       const res = await fetch(`/api/organizations/${orgId}/contacts/import`, { method: "POST", body: fd });
       const data = (await res.json().catch(() => ({}))) as { error?: string; created: number; updated: number; skipped: number; errors: { line: number; error: string }[] };
@@ -414,6 +440,12 @@ function ImportModal({ open, onClose, orgId, onDone }: { open: boolean; onClose:
           <Field id="csv-file" label="CSV or VCF file (max 2 MB after photos are removed, 5,000 contacts)">
             <Input type="file" accept=".csv,.vcf,text/csv,text/vcard,text/x-vcard" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="py-1.5" />
           </Field>
+          <Field id="imp-group" label="Add everyone in this file to a group (optional)">
+            <Input list="imp-group-list" value={group} onChange={(e) => setGroup(e.target.value)} maxLength={40} placeholder="e.g. Diwali 2026 customers" />
+          </Field>
+          <datalist id="imp-group-list">
+            {groups.map((g) => <option key={g.id} value={g.name} />)}
+          </datalist>
           <p className="text-caption text-app-subtle">Only import people who agreed to hear from you on WhatsApp. Mark consent with the opt_in column.</p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={close}>Cancel</Button>
@@ -421,6 +453,56 @@ function ImportModal({ open, onClose, orgId, onDone }: { open: boolean; onClose:
           </div>
         </form>
       )}
+    </Modal>
+  );
+}
+
+function GroupModal({ open, onClose, orgId, groups, count, target, onDone }: { open: boolean; onClose: () => void; orgId: string; groups: Tag[]; count: number; target: Record<string, unknown>; onDone: () => void }) {
+  const toast = useToast();
+  const [name, setName] = React.useState("");
+  const [action, setAction] = React.useState<"add" | "remove">("add");
+  const [busy, setBusy] = React.useState(false);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setBusy(true);
+    const r = await apiFetch<{ changed: number }>(`/api/organizations/${orgId}/contacts/groups`, { method: "POST", body: { ...target, group: name.trim(), action } });
+    setBusy(false);
+    if (!r.ok) return toast(r.error, "error");
+    toast(action === "add" ? `${r.data.changed} added to “${name.trim()}”` : `${r.data.changed} removed from “${name.trim()}”`);
+    setName("");
+    onDone();
+  }
+  return (
+    <Modal open={open} onClose={onClose} title={`Group ${count} contact${count === 1 ? "" : "s"}`} description="Groups help you send a campaign to just these people. Pick a group or type a new name.">
+      <form onSubmit={submit} className="space-y-4">
+        <div className="flex gap-2" role="radiogroup" aria-label="Add or remove">
+          {(["add", "remove"] as const).map((a) => (
+            <button key={a} type="button" role="radio" aria-checked={action === a} onClick={() => setAction(a)} className={`rounded-full border px-4 py-1.5 text-small font-semibold ${action === a ? "border-app-primary bg-app-primary-soft text-app-text" : "border-app-border text-app-muted"}`}>
+              {a === "add" ? "Add to group" : "Remove from group"}
+            </button>
+          ))}
+        </div>
+        <Field id="grp-name" label="Group name">
+          <Input list="grp-list" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} placeholder="e.g. Diwali buyers, VIP, Ludhiana" autoFocus />
+        </Field>
+        <datalist id="grp-list">
+          {groups.map((g) => <option key={g.id} value={g.name} />)}
+        </datalist>
+        {groups.length ? (
+          <div className="flex flex-wrap gap-2">
+            {groups.slice(0, 12).map((g) => (
+              <button key={g.id} type="button" onClick={() => setName(g.name)} className="rounded-full border border-app-border px-3 py-1 text-caption text-app-muted hover:border-app-primary hover:text-app-text">
+                {g.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" loading={busy} disabled={!name.trim()}>{action === "add" ? "Add to group" : "Remove"}</Button>
+        </div>
+      </form>
     </Modal>
   );
 }

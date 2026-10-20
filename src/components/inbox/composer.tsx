@@ -8,6 +8,7 @@ import { Alert, Button, Field, IconButton, Input, Modal, Select, useToast } from
 import { apiFetch } from "@/lib/client-api";
 import type { Conversation, Message } from "@/components/inbox/types";
 import type { TemplateView } from "@/components/templates/types";
+import { messageCost, rupees, usePricing } from "@/lib/pricing-client";
 import { WaPreview } from "@/components/templates/wa-preview";
 
 const ACCEPT = "image/jpeg,image/png,video/mp4,video/3gpp,audio/aac,audio/mp4,audio/mpeg,audio/amr,audio/ogg,application/pdf,text/plain,.doc,.docx,.xls,.xlsx,.ppt,.pptx";
@@ -219,6 +220,8 @@ function TemplateModal({ open, onClose, url, orgId, accountId, onSent }: { open:
   }, [open, orgId, accountId]);
 
   const t = list?.find((x) => x.id === id);
+  const pricing = usePricing(orgId);
+  const cost = t ? messageCost(pricing, t.category) : null;
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!t) return;
@@ -257,6 +260,11 @@ function TemplateModal({ open, onClose, url, orgId, accountId, onSent }: { open:
               </Field>
             ))}
             {t && !t.slots.length ? <p className="text-small text-app-muted">This template has no variables.</p> : null}
+            {cost ? (
+              <p className="rounded-lg border border-app-border px-3 py-2 text-small text-app-muted">
+                Cost: about <span className="font-semibold text-app-text">{rupees(cost.total)}</span> ({t?.category.toLowerCase()}: Meta {rupees(cost.meta)}{cost.fee ? ` + MECGURA ${rupees(cost.fee)}` : ""}). Normal replies inside the 24-hour window are free from Meta.
+              </p>
+            ) : null}
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={onClose}>Cancel</Button>
               <Button type="submit" loading={saving} disabled={!t}>Send template</Button>

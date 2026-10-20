@@ -438,7 +438,7 @@ export function parseVcf(text: string): string[][] {
   return rows;
 }
 
-export async function importContactsCsv(ctx: Ctx, text: string, format: "csv" | "vcf" = "csv") {
+export async function importContactsCsv(ctx: Ctx, text: string, format: "csv" | "vcf" = "csv", group = "") {
   const rows = format === "vcf" ? parseVcf(text) : parseCsv(text);
   const label = format === "vcf" ? "VCF" : "CSV";
   if (rows.length < 2) throw new ApiError("VALIDATION_ERROR", format === "vcf" ? "No contacts with a phone number were found in this file." : "The CSV needs a header row and at least one contact.");
@@ -477,6 +477,7 @@ export async function importContactsCsv(ctx: Ctx, text: string, format: "csv" | 
     const optIn = /^(yes|y|true|1|opted_in|opt-in)$/i.test(data.optIn ?? "") ? "opted_in" : /^(no|n|false|0|opted_out|opt-out)$/i.test(data.optIn ?? "") ? "opted_out" : undefined;
     const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email ?? "") ? data.email.toLowerCase() : "";
     const tags = (data.tags ?? "").split(/[;|]/).map((t) => t.trim()).filter(Boolean);
+    if (group.trim()) tags.push(group.trim().slice(0, 40));
     const existing = await db.contact.findUnique({ where: { organizationId_phone: { organizationId: ctx.organizationId, phone } } });
     const silentCtx = { ...ctx, req: undefined };
     if (existing) {
@@ -519,4 +520,37 @@ export async function exportContactsCsv(ctx: Ctx, f: ContactFilters): Promise<{ 
   }
   await audit({ action: "contacts.exported", actorUserId: ctx.actorUserId, organizationId: ctx.organizationId, targetType: "contact", metadata: { count: rows.length, tab: f.tab }, req: ctx.req });
   return { csv: `${lines.join("\r\n")}\r\n`, count: rows.length };
+}
+
+/**
+ * Adds contacts to a group (a tag) or takes them out of it: either the ids given, or everything matching the
+ * filters (with the count the user saw). A new group name creates the group.
+ */
+export async function groupContacts(ctx: Ctx, input: ({ ids: string[] } | { filter: ContactFilters; expectedCount: number }) & { group: string; action: "add" | "remove" }) {
+  const name = input.group.trim();
+  let ids: string[];
+  if ("ids" in input) {
+    ids = (await db.contact.findMany({ where: { organizationId: ctx.organizationId, id: { in: input.ids } }, select: { id: true } })).map((c) => c.id);
+  } else {
+    const where = filterWhere(ctx.organizationId, input.filter);
+    const count = await db.contact.count({ where });
+    if (count !== input.expectedCount) throw new ApiError("CONFLICT", `The list changed (${count} contacts match now, not ${input.expectedCount}). Reload and try again.`);
+    if (count > MAX_BULK_DELETE) throw new ApiError("VALIDATION_ERROR", `Group up to ${MAX_BULK_DELETE} contacts at a time. Narrow the filter first.`);
+    ids = (await db.contact.findMany({ where, select: { id: true }, take: MAX_BULK_DELETE })).map((c) => c.id);
+  }
+  if (input.action === "remove") {
+    const tag = await db.tag.findUnique({ where: { organizationId_name: { organizationId: ctx.organizationId, name } } });
+    if (!tag) return { changed: 0, group: null };
+    const r = await db.contactTag.deleteMany({ where: { tagId: tag.id, contactId: { in: ids } } });
+    await audit({ action: "contact.updated", actorUserId: ctx.actorUserId, organizationId: ctx.organizationId, targetType: "tag", targetId: tag.id, metadata: { group: name, removed: r.count }, req: ctx.req });
+    return { changed: r.count, group: { id: tag.id, name: tag.name } };
+  }
+  const tag = await db.tag.upsert({ where: { organizationId_name: { organizationId: ctx.organizationId, name } }, update: {}, create: { organizationId: ctx.organizationId, name } });
+  const already = new Set((await db.contactTag.findMany({ where: { tagId: tag.id, contactId: { in: ids } }, select: { contactId: true } })).map((r) => r.contactId));
+  const fresh = ids.filter((id) => !already.has(id));
+  for (let i = 0; i < fresh.length; i += 500) {
+    await db.contactTag.createMany({ data: fresh.slice(i, i + 500).map((contactId) => ({ contactId, tagId: tag.id })) });
+  }
+  await audit({ action: "contact.updated", actorUserId: ctx.actorUserId, organizationId: ctx.organizationId, targetType: "tag", targetId: tag.id, metadata: { group: name, added: fresh.length }, req: ctx.req });
+  return { changed: fresh.length, group: { id: tag.id, name: tag.name } };
 }
