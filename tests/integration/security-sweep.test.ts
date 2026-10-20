@@ -324,6 +324,7 @@ describe("5. public and secret-protected surfaces", () => {
         "/api/automations/hooks/[aid]",
         "/api/cron/campaigns",
         "/api/cron/weekly-report",
+        "/api/festival-photo/[id]",
         "/api/health",
         "/api/site-chat",
         "/api/webchat/[key]",

@@ -9,6 +9,9 @@ import { formatINR, formatNumber } from "@/lib/catalog";
 import { FEATURES, isUnlimited, parseFeatures } from "@/lib/plans";
 import { Logo } from "@/components/layout/logo";
 import { getHomeContent } from "@/services/site/home-content";
+import { activeFestival, festivalEnd, getFestivals, istToday } from "@/services/site/festivals";
+import { FestivalSiteBanner } from "@/components/festival/festival-banner";
+import { FestivalCalendar } from "@/components/festival/festival-calendar";
 import { FloatingChat } from "@/components/home/floating-chat";
 import { ScrollReveal } from "@/components/home/scroll-reveal";
 
@@ -54,12 +57,16 @@ async function loadPlans() {
 }
 
 const whatsappDigits = siteConfig.contact.whatsapp;
+const endsFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 /** 917837722567 → +91 78377 22567 (Indian mobile grouping; other lengths are shown as typed). */
 const phoneLabel = /^91\d{10}$/.test(whatsappDigits) ? `+91 ${whatsappDigits.slice(2, 7)} ${whatsappDigits.slice(7)}` : `+${whatsappDigits}`;
 const wa = (text: string) => `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(text)}`;
 
 export default async function Landing() {
-  const [plans, session, content] = await Promise.all([loadPlans(), auth().catch(() => null), getHomeContent()]);
+  const [plans, session, content, festivals] = await Promise.all([loadPlans(), auth().catch(() => null), getHomeContent(), getFestivals()]);
+  const today = istToday();
+  const festival = activeFestival(festivals, "site", today);
+  const calendar = festivals.enabled ? festivals.festivals.filter((x) => x.showOnSite).map((x) => ({ id: x.id, name: x.name, emoji: x.emoji, start: x.start, days: x.days })) : [];
   const signedIn = Boolean(session?.user);
   const appHref = signedIn ? "/dashboard" : "/login";
   return (
@@ -79,6 +86,12 @@ export default async function Landing() {
       </header>
 
       <main id="main-content">
+        {festival ? (
+          <FestivalSiteBanner
+            whatsapp={whatsappDigits}
+            festival={{ ...festival, photoUrl: festival.hasPhoto ? `/api/festival-photo/${festival.id}` : null, endsLabel: endsFmt.format(new Date(`${festivalEnd(festival)}T00:00:00Z`)) }}
+          />
+        ) : null}
         <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 pb-16 pt-10 lg:grid-cols-2 lg:pt-16">
           <div>
             <p className="wa-pill"><BadgeCheck className="size-3.5" aria-hidden="true" /> Official WhatsApp Business Platform</p>
@@ -181,6 +194,16 @@ export default async function Landing() {
             ))}
           </ol>
         </section>
+
+        {calendar.length ? (
+          <section id="festivals" aria-labelledby="festivals-title" className="mx-auto max-w-6xl px-4 py-14">
+            <h2 id="festivals-title" data-reveal className="text-center font-display text-3xl font-bold sm:text-4xl">Festival calendar</h2>
+            <p data-reveal className="wa-muted mx-auto mt-3 max-w-xl text-center">Plan your festival campaigns early. We help you send greetings and offers to your customers on WhatsApp.</p>
+            <div data-reveal className="mt-10">
+              <FestivalCalendar festivals={calendar} today={today} />
+            </div>
+          </section>
+        ) : null}
 
         {content.team.length ? (
           <section aria-labelledby="team-title" className="mx-auto max-w-6xl px-4 py-14">

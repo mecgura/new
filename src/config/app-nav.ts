@@ -24,6 +24,7 @@ import {
   Gauge,
   Webhook,
   Globe,
+  PartyPopper,
   type LucideIcon,
 } from "lucide-react";
 
@@ -96,6 +97,7 @@ export const ADMIN_NAV: NavSection[] = [
       { label: "Analytics", icon: BarChart3, href: "/admin/analytics" },
       { label: "Logs & Audit", icon: ScrollText, href: "/admin/audit-logs" },
       { label: "Website", icon: Globe, href: "/admin/site" },
+      { label: "Festivals", icon: PartyPopper, href: "/admin/festivals" },
       { label: "Settings", icon: Settings, href: "/admin/settings" },
     ],
   },
