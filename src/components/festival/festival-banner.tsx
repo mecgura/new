@@ -121,9 +121,14 @@ export function FestivalGreeting({ festival, orgName, userId }: { festival: Publ
                 </p>
               ) : null}
               <p className="mt-4 text-sm text-white/80">Warm wishes from the MECGURA team.</p>
-              <button type="button" onClick={() => setOpen(false)} className="mt-5 inline-flex min-h-11 items-center rounded-full bg-white px-6 font-bold text-[#3b0a45] hover:bg-white/90">
-                Thank you!
-              </button>
+              <div className="mt-5 flex flex-wrap justify-center gap-3">
+                <button type="button" onClick={() => setOpen(false)} className="inline-flex min-h-11 items-center rounded-full bg-white px-6 font-bold text-[#3b0a45] hover:bg-white/90">
+                  Thank you!
+                </button>
+                <a href="/campaigns/festivals" className="inline-flex min-h-11 items-center rounded-full bg-white/15 px-5 font-semibold ring-1 ring-white/30 hover:bg-white/25">
+                  Send wishes to your customers
+                </a>
+              </div>
             </div>
           </div>
         </div>

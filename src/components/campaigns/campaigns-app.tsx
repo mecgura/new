@@ -3,11 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Filter, Megaphone, Plus, Trash2 } from "lucide-react";
+import { CalendarHeart, Filter, Megaphone, Plus, Trash2 } from "lucide-react";
 import {
   Alert,
   Badge,
   Button,
+  buttonVariants,
   Card,
   CardHeader,
   ConfirmationDialog,
@@ -80,11 +81,16 @@ export function CampaignsApp({ orgId, canManage, accounts, activeAccountId = "" 
         title="Campaigns"
         description="Send approved templates to opted-in contacts — with a compliance review before every send."
         actions={
-          canManage && accounts.length ? (
-            <Button onClick={() => setNewOpen(true)}>
-              <Plus aria-hidden="true" /> New campaign
-            </Button>
-          ) : null
+          <>
+            <Link href="/campaigns/festivals" className={buttonVariants({ variant: "secondary" })}>
+              <CalendarHeart aria-hidden="true" /> Festival campaigns
+            </Link>
+            {canManage && accounts.length ? (
+              <Button onClick={() => setNewOpen(true)}>
+                <Plus aria-hidden="true" /> New campaign
+              </Button>
+            ) : null}
+          </>
         }
       />
       {!accounts.length ? (
