@@ -361,3 +361,11 @@ dialog.ds-dialog::backdrop {
   .wa-js [data-reveal] { opacity: 1; transform: none; transition: none; }
   .wa-btn { transition: none; }
 }
+
+/* Inbox focus mode: hides the app sidebar so the inbox fills the screen like WhatsApp. */
+html[data-inbox-focus="1"] .app-sidebar { display: none !important; }
+.inbox-wallpaper {
+  background-color: rgba(11, 20, 26, 0.55);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 18px 18px;
+}

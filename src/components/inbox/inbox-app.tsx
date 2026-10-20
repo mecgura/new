@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, CheckCircle2, FlaskConical, Info, MessageCirclePlus, RotateCcw, UserPlus, Wifi, WifiOff } from "lucide-react";
+import { ArrowLeft, Bot, CheckCircle2, FlaskConical, Info, Lock, Maximize2, MessageCirclePlus, Minimize2, Phone, RotateCcw, UserPlus, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Alert,
@@ -36,7 +36,25 @@ import { CustomerPanel } from "@/components/inbox/customer-panel";
 import { useRealtime, type LiveEvent } from "@/components/inbox/use-realtime";
 import { prettyId, type Account, type Conversation, type Message, type TeamMember } from "@/components/inbox/types";
 
-type Props = { orgId: string; me: { id: string; name: string; role: string; agentStatus: string }; perms: InboxPerms; accounts: Account[]; activeAccountId?: string };
+type Props = { orgId: string; me: { id: string; name: string; role: string; agentStatus: string }; perms: InboxPerms; accounts: Account[]; activeAccountId?: string; calling?: { phone: boolean; ai: boolean } };
+
+const FOCUS_KEY = "mgc_inbox_focus";
+const PANEL_KEY = "mgc_inbox_panel";
+const readPref = (k: string, fallback: boolean) => {
+  try {
+    const v = window.localStorage.getItem(k);
+    return v === null ? fallback : v === "1";
+  } catch {
+    return fallback;
+  }
+};
+const writePref = (k: string, v: boolean) => {
+  try {
+    window.localStorage.setItem(k, v ? "1" : "0");
+  } catch {
+    /* private mode */
+  }
+};
 
 const PRESENCE: Record<string, { label: string; dot: string }> = {
   online: { label: "Online", dot: "bg-app-success" },
@@ -67,6 +85,29 @@ export function InboxApp(props: Props) {
   const [panelKey, setPanelKey] = React.useState(0);
   const [infoOpen, setInfoOpen] = React.useState(false);
   const [demoOpen, setDemoOpen] = React.useState(false);
+  // WhatsApp-style layout: app menu hidden and the customer panel closed unless the user opens them.
+  const [focus, setFocus] = React.useState(true);
+  const [panelOpen, setPanelOpen] = React.useState(false);
+  React.useEffect(() => {
+    const t = window.setTimeout(() => {
+      setFocus(readPref(FOCUS_KEY, true));
+      setPanelOpen(readPref(PANEL_KEY, false));
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, []);
+  React.useEffect(() => {
+    const el = document.documentElement;
+    if (focus) el.dataset.inboxFocus = "1";
+    else delete el.dataset.inboxFocus;
+    return () => {
+      delete el.dataset.inboxFocus;
+    };
+  }, [focus]);
+  const toggleFocus = () => setFocus((v) => (writePref(FOCUS_KEY, !v), !v));
+  const toggleInfo = () => {
+    if (window.matchMedia("(min-width: 1280px)").matches) setPanelOpen((v) => (writePref(PANEL_KEY, !v), !v));
+    else setInfoOpen(true);
+  };
   const bottomRef = React.useRef<HTMLDivElement>(null);
   const demoAccounts = props.accounts.filter((a) => a.isDemo);
 
@@ -210,7 +251,12 @@ export function InboxApp(props: Props) {
       {/* LEFT — conversations */}
       <aside className={cn("w-full shrink-0 border-r border-app-border bg-app-surface md:w-80 lg:w-[22rem]", showList ? "flex flex-col" : "hidden md:flex md:flex-col")} aria-label="Conversation list">
         <div className="flex items-center justify-between gap-2 border-b border-app-border px-3 py-2.5">
-          <h1 className="text-h3 text-app-text">Inbox</h1>
+          <div className="flex items-center gap-1">
+            <IconButton label={focus ? "Show the menu" : "Full-screen inbox"} className="hidden lg:inline-flex" onClick={toggleFocus}>
+              {focus ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
+            </IconButton>
+            <h1 className="text-h3 text-app-text">Inbox</h1>
+          </div>
           <div className="flex items-center gap-1">
             <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption", connected ? "text-green-300" : "text-amber-300")} title={connected ? "Live updates on" : "Reconnecting…"}>
               {connected ? <Wifi className="size-3.5" aria-hidden="true" /> : <WifiOff className="size-3.5" aria-hidden="true" />}
@@ -299,6 +345,7 @@ export function InboxApp(props: Props) {
                   {conv.isDemo ? " · Demo" : ""}
                 </p>
               </div>
+              <CallButton conv={conv} calling={props.calling ?? { phone: false, ai: false }} />
               <Dropdown
                 label="Assign conversation"
                 trigger={
@@ -345,12 +392,12 @@ export function InboxApp(props: Props) {
                   <RotateCcw aria-hidden="true" />
                 </IconButton>
               )}
-              <IconButton label="Customer information" className="xl:hidden" onClick={() => setInfoOpen(true)}>
+              <IconButton label="Customer information" onClick={toggleInfo}>
                 <Info aria-hidden="true" />
               </IconButton>
             </header>
             {conv.status === "closed" ? <Alert tone="info" className="m-3 mb-0">This chat is closed. A new customer message reopens it.</Alert> : null}
-            <div className="app-scroll min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6" aria-live="polite" aria-relevant="additions">
+            <div className="inbox-wallpaper app-scroll min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6" aria-live="polite" aria-relevant="additions">
               {hasMore ? (
                 <div className="mb-3 flex justify-center">
                   <Button size="sm" variant="ghost" onClick={loadOlder}>Load earlier messages</Button>
@@ -401,7 +448,7 @@ export function InboxApp(props: Props) {
       {/* RIGHT — customer */}
       {conv && selectedId && !threadError ? (
         <>
-          <aside className="hidden w-80 shrink-0 border-l border-app-border bg-app-surface xl:block" aria-label="Customer information">
+          <aside className={cn("hidden w-80 shrink-0 border-l border-app-border bg-app-surface", panelOpen && "xl:block")} aria-label="Customer information">
             <CustomerPanel orgId={orgId} contactId={conv.contact.id} currentConversationId={conv.id} team={team} canWrite={perms["contacts:write"]} refreshKey={panelKey} />
           </aside>
           <Drawer open={infoOpen} onClose={() => setInfoOpen(false)} title="Customer information" side="right">
@@ -487,5 +534,41 @@ function DemoCustomerModal({ open, onClose, orgId, accounts, onCreated }: { open
         </div>
       </form>
     </Modal>
+  );
+}
+
+/** Call the customer: from your phone (plan feature) or with the AI caller (AI Calling service). */
+function CallButton({ conv, calling }: { conv: Conversation; calling: { phone: boolean; ai: boolean } }) {
+  const router = useRouter();
+  const dialable = /^\+\d{8,15}$/.test(conv.contact.phone);
+  return (
+    <Dropdown
+      label="Call customer"
+      trigger={
+        <span className="flex size-9 items-center justify-center rounded-[var(--radius-control)] border border-app-border text-app-text" title="Call">
+          <Phone className="size-4" aria-hidden="true" />
+        </span>
+      }
+    >
+      {(close) => (
+        <>
+          <DropdownLabel>Call {dialable ? prettyId(conv.contact.phone) : "this customer"}</DropdownLabel>
+          {!dialable ? (
+            <DropdownItem onClick={close} icon={<Lock className="size-4" aria-hidden="true" />}>No phone number on this contact</DropdownItem>
+          ) : calling.phone ? (
+            <DropdownItem onClick={() => { close(); window.location.href = `tel:${conv.contact.phone}`; }} icon={<Phone className="size-4" aria-hidden="true" />}>
+              Call from your phone
+            </DropdownItem>
+          ) : (
+            <DropdownItem onClick={close} icon={<Lock className="size-4" aria-hidden="true" />}>Calling isn&apos;t in your plan. Upgrade to call from here.</DropdownItem>
+          )}
+          {dialable && calling.ai ? (
+            <DropdownItem onClick={() => { close(); router.push(`/voice?phone=${encodeURIComponent(conv.contact.phone)}`); }} icon={<Bot className="size-4" aria-hidden="true" />}>
+              AI call
+            </DropdownItem>
+          ) : null}
+        </>
+      )}
+    </Dropdown>
   );
 }

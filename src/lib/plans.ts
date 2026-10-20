@@ -21,6 +21,7 @@ export const FEATURES = {
   api: "API access",
   webhooks: "Webhooks",
   analytics: "Analytics",
+  calling: "Calling from the inbox",
 } as const;
 export type FeatureKey = keyof typeof FEATURES;
 export const FEATURE_KEYS = Object.keys(FEATURES) as [FeatureKey, ...FeatureKey[]];

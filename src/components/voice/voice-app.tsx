@@ -13,13 +13,13 @@ type Contact = { id: string; name: string; phone: string };
 const OUTCOME: Record<string, string> = { interested: "Interested", callback: "Call back", not_interested: "Not interested", no_answer: "No answer" };
 const TONE: Record<string, "success" | "warning" | "danger" | "neutral"> = { completed: "success", in_progress: "neutral", queued: "neutral", no_answer: "warning", failed: "danger" };
 
-export function VoiceApp({ orgId, canManage }: { orgId: string; canManage: boolean }) {
+export function VoiceApp({ orgId, canManage, initialPhone = "" }: { orgId: string; canManage: boolean; initialPhone?: string }) {
   const base = `/api/organizations/${orgId}`;
   const [calls, setCalls] = React.useState<Call[] | null>(null);
   const [live, setLive] = React.useState(false);
   const [note, setNote] = React.useState("");
   const [error, setError] = React.useState("");
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = React.useState(Boolean(initialPhone) && canManage);
   const [expanded, setExpanded] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
@@ -91,12 +91,12 @@ export function VoiceApp({ orgId, canManage }: { orgId: string; canManage: boole
           ))}
         </div>
       )}
-      <NewCallModal open={open} onClose={() => setOpen(false)} base={base} onDone={() => { setOpen(false); void load(); }} />
+      <NewCallModal initialPhone={initialPhone} open={open} onClose={() => setOpen(false)} base={base} onDone={() => { setOpen(false); void load(); }} />
     </>
   );
 }
 
-function NewCallModal({ open, onClose, base, onDone }: { open: boolean; onClose: () => void; base: string; onDone: () => void }) {
+function NewCallModal({ open, onClose, base, onDone, initialPhone = "" }: { open: boolean; onClose: () => void; base: string; onDone: () => void; initialPhone?: string }) {
   const toast = useToast();
   const [contacts, setContacts] = React.useState<Contact[]>([]);
   const [f, setF] = React.useState({ contactId: "", goal: "", script: "", language: "en", consentNote: "" });
@@ -104,8 +104,15 @@ function NewCallModal({ open, onClose, base, onDone }: { open: boolean; onClose:
   const [err, setErr] = React.useState<Record<string, string[]>>({});
   React.useEffect(() => {
     if (!open) return;
-    void apiFetch<{ items: Contact[] }>(`${base}/contacts?pageSize=100`).then((r) => r.ok && setContacts(r.data.items.filter((c) => /^\+?\d{8,15}$/.test(c.phone))));
-  }, [open, base]);
+    const q = initialPhone ? `&q=${encodeURIComponent(initialPhone)}` : "";
+    void apiFetch<{ items: Contact[] }>(`${base}/contacts?pageSize=100${q}`).then((r) => {
+      if (!r.ok) return;
+      const list = r.data.items.filter((c) => /^\+?\d{8,15}$/.test(c.phone));
+      setContacts(list);
+      const match = list.find((c) => c.phone === initialPhone);
+      if (match) setF((x) => (x.contactId ? x : { ...x, contactId: match.id }));
+    });
+  }, [open, base, initialPhone]);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);

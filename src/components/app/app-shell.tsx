@@ -90,7 +90,7 @@ export function AppShell({
         >
           Skip to content
         </a>
-        <aside className="glass sticky top-0 hidden h-dvh w-64 shrink-0 rounded-none border-y-0 border-l-0 lg:block">
+        <aside className="app-sidebar glass sticky top-0 hidden h-dvh w-64 shrink-0 rounded-none border-y-0 border-l-0 lg:block">
           <Sidebar variant={variant} sections={sections} pathname={pathname} enabledServices={enabledServices} />
         </aside>
         <Drawer open={mobileOpen} onClose={() => setMobileOpen(false)} title="Main navigation">
