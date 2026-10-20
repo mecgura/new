@@ -7,7 +7,9 @@ import { audit } from "@/lib/audit";
 import { safeEqual, sha256 } from "@/lib/crypto";
 import { publish } from "@/lib/realtime/broker";
 import type { OrgAccess } from "@/lib/session";
-import { demoWorkflow, defaultData, validateGraph, type Graph, type TriggerData } from "@/lib/automations";
+import { defaultData, validateGraph, type Graph, type TriggerData } from "@/lib/automations";
+import { AUTOMATION_LIBRARY, libraryTemplate } from "@/lib/automation-library";
+import { assertServiceEnabled, isServiceEnabled } from "@/services/whatsapp/guards";
 import { templateSlots } from "@/lib/templates";
 import { graphSchema } from "@/lib/validations";
 import { toDef } from "@/services/templates/templates";
@@ -128,10 +130,13 @@ async function assertAccount(organizationId: string, id: string | null | undefin
   return a.id;
 }
 
-export async function createAutomation(access: OrgAccess, input: { name: string; description: string; whatsappAccountId?: string | null; start: "blank" | "demo_welcome" }, req?: Request) {
+export async function createAutomation(access: OrgAccess, input: { name: string; description: string; whatsappAccountId?: string | null; start: string }, req?: Request) {
   await assertFeature(access.organizationId, "automations");
+  const template = input.start === "blank" ? null : libraryTemplate(input.start);
+  if (input.start !== "blank" && !template) throw new ApiError("VALIDATION_ERROR", "Unknown starting point.", { details: { start: ["Unknown"] } });
+  if (template?.premium) await assertServiceEnabled(access.organizationId, "AUTOMATION_PACK");
   const accountId = await assertAccount(access.organizationId, input.whatsappAccountId);
-  const graph = input.start === "demo_welcome" ? demoWorkflow() : BLANK;
+  const graph = template ? template.graph() : BLANK;
   const a = await db.automation.create({
     data: { organizationId: access.organizationId, name: input.name, description: input.description, whatsappAccountId: accountId, graph: JSON.stringify(graph), createdById: access.user.id },
   });
@@ -430,4 +435,10 @@ export async function triggerFromWebhook(automationId: string, secret: string, i
   }
   const ex = await startExecution(a, { contactId: contact.id, triggerData: { type: "webhook", data: input.data, text: "" } });
   return { accepted: Boolean(ex), executionId: ex?.id ?? null, reason: ex ? undefined : "A run for this contact is already in progress (or the contact can't re-enter)." };
+}
+
+/** The ready-made automations, with which ones this workspace can use. */
+export async function automationLibrary(organizationId: string) {
+  const pack = await isServiceEnabled(organizationId, "AUTOMATION_PACK");
+  return AUTOMATION_LIBRARY.map((t) => ({ id: t.id, name: t.name, description: t.description, steps: t.steps, premium: t.premium, locked: t.premium && !pack, nodes: t.graph().nodes.length }));
 }

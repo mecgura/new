@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BarChart3, Copy, ListChecks, MoreHorizontal, Pause, Pencil, Play, Plus, Trash2, Workflow } from "lucide-react";
+import { BarChart3, Copy, ListChecks, Lock, MoreHorizontal, Pause, Pencil, Play, Plus, Trash2, Workflow } from "lucide-react";
 import {
   Alert,
   Badge,
@@ -21,7 +21,6 @@ import {
   LoadingState,
   Modal,
   PageHeader,
-  Radio,
   SearchBar,
   Select,
   Table,
@@ -238,9 +237,17 @@ export function AutomationsApp({ orgId, canManage, accounts, activeAccountId = "
   );
 }
 
+type LibraryItem = { id: string; name: string; description: string; steps: string[]; premium: boolean; locked: boolean; nodes: number };
+
 function NewAutomationModal({ open, onClose, base, accounts, activeAccountId }: { open: boolean; onClose: () => void; base: string; accounts: Account[]; activeAccountId: string }) {
   const router = useRouter();
-  const [f, setF] = React.useState({ name: "", description: "", whatsappAccountId: (accounts.find((a) => a.id === activeAccountId) ?? accounts[0])?.id ?? "", start: "demo_welcome" as "demo_welcome" | "blank" });
+  const [f, setF] = React.useState({ name: "", description: "", whatsappAccountId: (accounts.find((a) => a.id === activeAccountId) ?? accounts[0])?.id ?? "", start: "demo_welcome" });
+  const [library, setLibrary] = React.useState<LibraryItem[] | null>(null);
+  React.useEffect(() => {
+    if (!open || library) return;
+    void apiFetch<{ templates: LibraryItem[] }>(`${base}/library`).then((r) => r.ok && setLibrary(r.data.templates));
+  }, [open, base, library]);
+  const pickTemplate = (t: LibraryItem) => setF((x) => ({ ...x, start: t.id, name: x.name || t.name }));
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   async function submit(e: React.FormEvent) {
@@ -269,10 +276,35 @@ function NewAutomationModal({ open, onClose, base, accounts, activeAccountId }: 
             ))}
           </Select>
         </Field>
-        <fieldset className="grid gap-2 sm:grid-cols-2">
-          <legend className="mb-1.5 text-small font-medium text-app-text">Start from</legend>
-          <Radio name="na-start" label="Welcome & route to sales" description="New contact → welcome → pause → ask requirement → condition → assign sales" checked={f.start === "demo_welcome"} onChange={() => setF((x) => ({ ...x, start: "demo_welcome" }))} />
-          <Radio name="na-start" label="Blank canvas" description="Just a trigger — build your own" checked={f.start === "blank"} onChange={() => setF((x) => ({ ...x, start: "blank" }))} />
+        <fieldset className="space-y-2">
+          <legend className="mb-1.5 text-small font-medium text-app-text">Start from a ready-made automation</legend>
+          {!library ? <p className="text-small text-app-muted">Loading…</p> : null}
+          <div className="grid gap-2 sm:grid-cols-2">
+            {library?.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="radio"
+                aria-checked={f.start === t.id}
+                disabled={t.locked}
+                onClick={() => pickTemplate(t)}
+                className={`rounded-[var(--radius-control)] border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${f.start === t.id ? "border-app-primary bg-app-primary-soft" : "border-app-border hover:bg-app-hover"}`}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="text-small font-semibold text-app-text">{t.name}</span>
+                  {t.locked ? <Badge tone="warning"><Lock className="size-3" aria-hidden="true" /> Add-on</Badge> : t.premium ? <Badge tone="success">{t.nodes} steps</Badge> : <Badge>Free</Badge>}
+                </span>
+                <span className="mt-1 block text-caption text-app-muted">{t.description}</span>
+                <span className="mt-2 block text-caption text-app-subtle">{t.steps.join(" → ")}</span>
+              </button>
+            ))}
+            <button type="button" role="radio" aria-checked={f.start === "blank"} onClick={() => setF((x) => ({ ...x, start: "blank" }))} className={`rounded-[var(--radius-control)] border p-3 text-left transition-colors ${f.start === "blank" ? "border-app-primary bg-app-primary-soft" : "border-app-border hover:bg-app-hover"}`}>
+              <span className="text-small font-semibold text-app-text">Blank canvas</span>
+              <span className="mt-1 block text-caption text-app-muted">Just a trigger. Build your own.</span>
+            </button>
+          </div>
+          {library?.some((t) => t.locked) ? <p className="text-caption text-app-subtle">Locked ones are part of the “Ready-made automations” add-on. Contact MECGURA to enable it.</p> : null}
+          <p className="text-caption text-app-subtle">Everything opens in the builder: change any message, button or step before you publish.</p>
         </fieldset>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>

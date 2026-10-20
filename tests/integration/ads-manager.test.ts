@@ -7,6 +7,7 @@ import * as image from "@/app/api/organizations/[orgId]/ads-manager/image/route"
 import * as campaigns from "@/app/api/organizations/[orgId]/ads-manager/campaigns/route";
 import * as status from "@/app/api/organizations/[orgId]/ads-manager/campaigns/[adId]/status/route";
 import * as sync from "@/app/api/organizations/[orgId]/ads-manager/campaigns/[adId]/sync/route";
+import * as locations from "@/app/api/organizations/[orgId]/ads-manager/locations/route";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -45,6 +46,7 @@ function graph(calls: Call[], opts: { failAt?: string } = {}) {
     const reply = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
     if (opts.failAt && path.endsWith(opts.failAt) && method === "POST") return reply({ error: { message: "Invalid parameter", code: 100 } }, 400);
     if (method === "GET" && /^act_\d+$/.test(path)) return reply({ id: path, name: "Shop Ads", currency: "INR", account_status: 1 });
+    if (method === "GET" && path === "search") return reply({ data: [{ key: "1035921", name: "Ludhiana", type: "city", region: "Punjab" }, { key: "1748", name: "Punjab", type: "region" }, { key: "IN", name: "India", type: "country" }] });
     if (method === "GET" && /insights$/.test(path)) return reply({ data: [{ spend: "123.45", impressions: "5000", clicks: "210" }] });
     if (method === "GET") return reply({ id: path, name: "Shop Page" });
     if (path.endsWith("/adimages")) return reply({ images: { "a.png": { hash: "abc123hash" } } });
@@ -171,5 +173,46 @@ describe("Ads Manager", () => {
     actAs(other.owner);
     expect((await status.POST(post({ action: "pause" }), P(other.org.id, { adId: ad.id }))).status).toBe(404);
     expect(((await json(await overview.GET(req("/x"), P(other.org.id)))).body.campaigns as unknown[]).length).toBe(0);
+  });
+});
+
+describe("location targeting", () => {
+  it("finds states and cities on Meta and targets only them", async () => {
+    const t = await tenant();
+    const calls: Call[] = [];
+    graph(calls);
+    await connect(t);
+    const found = await json(await locations.GET(req("/x?q=ludh"), P(t.org.id)));
+    expect(found.status).toBe(200);
+    expect(found.body.locations).toEqual([
+      { key: "1035921", name: "Ludhiana", type: "city", region: "Punjab" },
+      { key: "1748", name: "Punjab", type: "region", region: "" },
+    ]);
+    expect((await locations.GET(req("/x?q=l"), P(t.org.id))).status).toBe(400);
+
+    const r = await json(await campaigns.POST(post(adBody(t, { locations: [{ key: "1035921", name: "Ludhiana", type: "city", radiusKm: 40 }, { key: "1748", name: "Punjab", type: "region" }] })), P(t.org.id)));
+    expect(r.status).toBe(201);
+    const adset = calls.find((c) => c.path.endsWith("/adsets"))!;
+    expect((adset.body!.targeting as { geo_locations: unknown }).geo_locations).toEqual({ regions: [{ key: "1748" }], cities: [{ key: "1035921", radius: 40, distance_unit: "kilometer" }] });
+    expect((r.body.ad as { locations: unknown[] }).locations).toHaveLength(2);
+  });
+
+  it("defaults to all of India and rejects bad places", async () => {
+    const t = await tenant();
+    const calls: Call[] = [];
+    graph(calls);
+    await connect(t);
+    await campaigns.POST(post(adBody(t)), P(t.org.id));
+    expect((calls.find((c) => c.path.endsWith("/adsets"))!.body!.targeting as { geo_locations: unknown }).geo_locations).toEqual({ countries: ["IN"] });
+    expect((await campaigns.POST(post(adBody(t, { locations: [{ key: "1", name: "X", type: "city", radiusKm: 500 }] })), P(t.org.id))).status).toBe(400);
+    expect((await campaigns.POST(post(adBody(t, { locations: [{ key: "bad key!", name: "X", type: "region" }] })), P(t.org.id))).status).toBe(400);
+  });
+
+  it("agents can't search places", async () => {
+    const t = await tenant();
+    graph([]);
+    await connect(t);
+    actAs(t.agent);
+    expect((await locations.GET(req("/x?q=punjab"), P(t.org.id))).status).toBe(403);
   });
 });

@@ -25,6 +25,28 @@ export async function uploadAdImage(adAccountId: string, token: string, base64: 
 
 type Id = { id: string };
 
+/** A place to show the ad: a state/region, or a city with a radius around it (Meta allows 17–80 km). */
+export type AdLocation = { key: string; name: string; type: "region" | "city"; radiusKm?: number };
+
+/** Meta's location keys for Indian states and cities matching `q`. */
+export async function searchLocations(token: string, q: string): Promise<(AdLocation & { region: string })[]> {
+  const r = await graph<{ data?: { key: string; name: string; type: string; region?: string }[] }>("search", {
+    token,
+    query: { type: "adgeolocation", q, location_types: JSON.stringify(["region", "city"]), country_code: "IN", limit: "12" },
+  });
+  return (r.data ?? [])
+    .filter((x) => x.type === "region" || x.type === "city")
+    .map((x) => ({ key: String(x.key), name: x.name, type: x.type as "region" | "city", region: x.region ?? "" }));
+}
+
+/** Meta targeting for the chosen places; no places means all of India. */
+export function geoTargeting(locations: AdLocation[]) {
+  if (!locations.length) return { countries: ["IN"] };
+  const regions = locations.filter((l) => l.type === "region").map((l) => ({ key: l.key }));
+  const cities = locations.filter((l) => l.type === "city").map((l) => ({ key: l.key, radius: Math.min(80, Math.max(17, l.radiusKm ?? 25)), distance_unit: "kilometer" }));
+  return { ...(regions.length ? { regions } : {}), ...(cities.length ? { cities } : {}) };
+}
+
 export type CtwaInput = {
   name: string;
   pageId: string;
@@ -38,6 +60,7 @@ export type CtwaInput = {
   gender: "all" | "male" | "female";
   startAt: Date;
   endAt: Date | null;
+  locations: AdLocation[];
 };
 
 /** Campaign → ad set → creative → ad, all PAUSED. Returns every id created so a partial failure can be cleaned up. */
@@ -64,7 +87,7 @@ export async function createCtwaAd(adAccountId: string, token: string, input: Ct
       destination_type: "WHATSAPP",
       promoted_object: { page_id: input.pageId, whatsapp_phone_number: input.whatsappNumberE164 },
       targeting: {
-        geo_locations: { countries: ["IN"] },
+        geo_locations: geoTargeting(input.locations),
         age_min: input.ageMin,
         age_max: input.ageMax,
         ...(input.gender === "male" ? { genders: [1] } : input.gender === "female" ? { genders: [2] } : {}),

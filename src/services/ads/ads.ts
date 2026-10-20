@@ -4,7 +4,7 @@ import { audit } from "@/lib/audit";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import type { OrgAccess } from "@/lib/session";
 import { MetaApiError } from "@/providers/meta/graph";
-import { createCtwaAd, getAdAccount, getAdInsights, getPage, setStatus, uploadAdImage, type CtwaInput } from "@/providers/meta/ads";
+import { createCtwaAd, getAdAccount, getAdInsights, getPage, searchLocations, setStatus, uploadAdImage, type AdLocation, type CtwaInput } from "@/providers/meta/ads";
 import { assertServiceEnabled } from "@/services/whatsapp/guards";
 
 export const MIN_DAILY_BUDGET = 10_000; // ₹100
@@ -20,6 +20,15 @@ async function token(organizationId: string) {
 
 type CampaignRow = Awaited<ReturnType<typeof db.adCampaign.findFirstOrThrow>>;
 
+function parseLocations(raw: string): AdLocation[] {
+  try {
+    const v: unknown = JSON.parse(raw);
+    return Array.isArray(v) ? (v as AdLocation[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 function toDto(c: CampaignRow, chats: number) {
   return {
     id: c.id,
@@ -32,6 +41,7 @@ function toDto(c: CampaignRow, chats: number) {
     ageMin: c.ageMin,
     ageMax: c.ageMax,
     gender: c.gender,
+    locations: parseLocations(c.locations),
     startAt: c.startAt,
     endAt: c.endAt,
     metaAdId: c.metaAdId,
@@ -96,7 +106,7 @@ export async function uploadImage(access: OrgAccess, base64: string) {
   }
 }
 
-export type CreateAdInput = { name: string; whatsappAccountId: string; dailyBudgetRupees: number; message: string; headline: string; imageHash: string; ageMin: number; ageMax: number; gender: "all" | "male" | "female"; startAt: Date | null; endAt: Date | null };
+export type CreateAdInput = { name: string; whatsappAccountId: string; dailyBudgetRupees: number; message: string; headline: string; imageHash: string; ageMin: number; ageMax: number; gender: "all" | "male" | "female"; startAt: Date | null; endAt: Date | null; locations: AdLocation[] };
 
 /** Creates the ad on Meta, always PAUSED. If any step fails, what was already created is archived and the error is kept on the record. */
 export async function createAd(access: OrgAccess, input: CreateAdInput, req?: Request) {
@@ -111,10 +121,10 @@ export async function createAd(access: OrgAccess, input: CreateAdInput, req?: Re
   const startAt = input.startAt && input.startAt.getTime() > Date.now() ? input.startAt : new Date(Date.now() + 10 * 60_000);
 
   const row = await db.adCampaign.create({
-    data: { organizationId: orgId, name: input.name, dailyBudget: budget, whatsappAccountId: wa.id, message: input.message, headline: input.headline, imageHash: input.imageHash, ageMin: input.ageMin, ageMax: input.ageMax, gender: input.gender, startAt, endAt: input.endAt, createdByUserId: access.user.id },
+    data: { organizationId: orgId, name: input.name, dailyBudget: budget, whatsappAccountId: wa.id, message: input.message, headline: input.headline, imageHash: input.imageHash, ageMin: input.ageMin, ageMax: input.ageMax, gender: input.gender, locations: JSON.stringify(input.locations), startAt, endAt: input.endAt, createdByUserId: access.user.id },
   });
   const made: Partial<{ campaign: string; adset: string; creative: string; ad: string }> = {};
-  const meta: CtwaInput = { name: input.name, pageId: c.pageId, whatsappNumberE164: wa.phoneNumber, dailyBudgetPaise: budget, message: input.message, headline: input.headline, imageHash: input.imageHash, ageMin: input.ageMin, ageMax: input.ageMax, gender: input.gender, startAt, endAt: input.endAt };
+  const meta: CtwaInput = { name: input.name, pageId: c.pageId, whatsappNumberE164: wa.phoneNumber, dailyBudgetPaise: budget, message: input.message, headline: input.headline, imageHash: input.imageHash, ageMin: input.ageMin, ageMax: input.ageMax, gender: input.gender, startAt, endAt: input.endAt, locations: input.locations };
   try {
     const ids = await createCtwaAd(c.adAccountId, t, meta, (partial) => Object.assign(made, partial));
     await db.adCampaign.update({ where: { id: row.id }, data: { status: "paused", metaCampaignId: ids.campaign ?? "", metaAdSetId: ids.adset ?? "", metaCreativeId: ids.creative ?? "", metaAdId: ids.ad ?? "", lastError: "" } });
@@ -162,4 +172,15 @@ export async function syncInsights(access: OrgAccess, id: string) {
     throw new ApiError("CONFLICT", metaError(e, "Could not read results from Meta."));
   }
   return (await getOverview(orgId)).campaigns.find((x) => x.id === id)!;
+}
+
+/** Indian states and cities matching what the user typed, for ad targeting. */
+export async function findLocations(access: OrgAccess, q: string) {
+  await assertServiceEnabled(access.organizationId, "ADS_MANAGER");
+  const { token: t } = await token(access.organizationId);
+  try {
+    return await searchLocations(t, q);
+  } catch (e) {
+    throw new ApiError("CONFLICT", metaError(e, "Could not search places on Meta."));
+  }
 }

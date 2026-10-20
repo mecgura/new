@@ -220,6 +220,7 @@ function CreateModal({ open, onClose, base, numbers, onDone }: { open: boolean; 
   const [uploading, setUploading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState<Record<string, string[]>>({});
+  const [places, setPlaces] = React.useState<Place[]>([]);
   const set = (k: keyof typeof empty) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF((x) => ({ ...x, [k]: e.target.value }));
 
   async function pick(file: File | null) {
@@ -241,7 +242,7 @@ function CreateModal({ open, onClose, base, numbers, onDone }: { open: boolean; 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    const body = { name: f.name, whatsappAccountId: f.whatsappAccountId || numbers[0]?.id, dailyBudgetRupees: Number(f.dailyBudgetRupees), message: f.message, headline: f.headline, imageHash: hash, ageMin: Number(f.ageMin), ageMax: Number(f.ageMax), gender: f.gender };
+    const body = { name: f.name, whatsappAccountId: f.whatsappAccountId || numbers[0]?.id, dailyBudgetRupees: Number(f.dailyBudgetRupees), message: f.message, headline: f.headline, imageHash: hash, ageMin: Number(f.ageMin), ageMax: Number(f.ageMax), gender: f.gender, locations: places.map(({ key, name, type, radiusKm }) => ({ key, name, type, ...(type === "city" ? { radiusKm: radiusKm ?? 25 } : {}) })) };
     const r = await apiFetch(`${base}/campaigns`, { method: "POST", body });
     setSaving(false);
     if (!r.ok) {
@@ -251,6 +252,7 @@ function CreateModal({ open, onClose, base, numbers, onDone }: { open: boolean; 
     toast("Ad created (paused)");
     setF(empty);
     setHash("");
+    setPlaces([]);
     setErr({});
     onDone();
   }
@@ -294,12 +296,96 @@ function CreateModal({ open, onClose, base, numbers, onDone }: { open: boolean; 
             </Select>
           </Field>
         </div>
-        <p className="text-caption text-app-subtle">Shown across India. The daily budget is charged by Meta, between ₹100 and ₹10,000.</p>
+        <PlacePicker base={base} value={places} onChange={setPlaces} error={err.locations?.[0]} />
+        <p className="text-caption text-app-subtle">The daily budget is charged by Meta, between ₹100 and ₹10,000.</p>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={saving} disabled={!hash || !numbers.length}>Create ad</Button>
         </div>
       </form>
     </Modal>
+  );
+}
+
+type Place = { key: string; name: string; type: "region" | "city"; region?: string; radiusKm?: number };
+const RADII = [17, 25, 40, 60, 80];
+
+/** Where the ad shows: all of India, or chosen states and cities (with a radius around each city). */
+function PlacePicker({ base, value, onChange, error }: { base: string; value: Place[]; onChange: (v: Place[]) => void; error?: string }) {
+  const [mode, setMode] = React.useState<"india" | "places">(value.length ? "places" : "india");
+  const [q, setQ] = React.useState("");
+  const [results, setResults] = React.useState<Place[]>([]);
+  const [searching, setSearching] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
+
+  React.useEffect(() => {
+    if (mode !== "places" || q.trim().length < 2) return;
+    const t = window.setTimeout(() => {
+      setSearching(true);
+      void apiFetch<{ locations: Place[] }>(`${base}/locations?${new URLSearchParams({ q: q.trim() })}`).then((r) => {
+        setSearching(false);
+        if (!r.ok) return setMsg(r.error);
+        setMsg(r.data.locations.length ? "" : "No match. Try another spelling.");
+        setResults(r.data.locations);
+      });
+    }, 350);
+    return () => window.clearTimeout(t);
+  }, [q, mode, base]);
+
+  const add = (p: Place) => {
+    if (!value.some((v) => v.key === p.key)) onChange([...value, p.type === "city" ? { ...p, radiusKm: 25 } : p]);
+    setQ("");
+    setResults([]);
+  };
+
+  return (
+    <fieldset className="space-y-2 rounded-[var(--radius-control)] border border-app-border p-3">
+      <legend className="px-1 text-small font-medium text-app-text">Where to show the ad</legend>
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Where to show the ad">
+        {([["india", "All of India"], ["places", "Choose states or cities"]] as const).map(([m, label]) => (
+          <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => { setMode(m); if (m === "india") onChange([]); }} className={`rounded-full border px-3 py-1 text-small font-semibold ${mode === m ? "border-app-primary bg-app-primary-soft text-app-text" : "border-app-border text-app-muted"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {mode === "places" ? (
+        <>
+          <Input value={q} onChange={(e) => { setQ(e.target.value); if (e.target.value.trim().length < 2) setResults([]); }} placeholder="Type a state or city, e.g. Punjab, Ludhiana, Shimla" aria-label="Search state or city" />
+          {searching ? <p className="text-caption text-app-subtle">Searching…</p> : msg ? <p className="text-caption text-app-subtle">{msg}</p> : null}
+          {results.length ? (
+            <ul className="max-h-44 overflow-y-auto rounded-[var(--radius-control)] border border-app-border">
+              {results.map((r) => (
+                <li key={r.key}>
+                  <button type="button" onClick={() => add(r)} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-small hover:bg-app-hover">
+                    <span className="text-app-text">{r.name}{r.region && r.type === "city" ? `, ${r.region}` : ""}</span>
+                    <span className="text-caption text-app-subtle">{r.type === "city" ? "City" : "State"}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {value.length ? (
+            <ul className="flex flex-wrap gap-2">
+              {value.map((p) => (
+                <li key={p.key} className="flex items-center gap-2 rounded-full border border-app-border bg-app-hover py-1 pl-3 pr-1 text-small text-app-text">
+                  {p.name}
+                  {p.type === "city" ? (
+                    <select aria-label={`Radius around ${p.name}`} value={p.radiusKm ?? 25} onChange={(e) => onChange(value.map((v) => (v.key === p.key ? { ...v, radiusKm: Number(e.target.value) } : v)))} className="rounded-full border border-app-border bg-app-bg px-2 py-0.5 text-caption">
+                      {RADII.map((r) => <option key={r} value={r}>+{r} km</option>)}
+                    </select>
+                  ) : <span className="text-caption text-app-subtle">whole state</span>}
+                  <button type="button" aria-label={`Remove ${p.name}`} onClick={() => onChange(value.filter((v) => v.key !== p.key))} className="rounded-full px-2 text-app-muted hover:text-app-text">×</button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-caption text-app-subtle">Nothing chosen yet: the ad would show across India.</p>
+          )}
+        </>
+      ) : (
+        <p className="text-caption text-app-subtle">The ad shows anywhere in India.</p>
+      )}
+      {error ? <p className="text-caption text-red-300">{error}</p> : null}
+    </fieldset>
   );
 }

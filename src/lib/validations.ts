@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LIBRARY_IDS } from "@/lib/automation-library";
 import { SERVICE_KEYS } from "@/lib/catalog";
 import { DEFAULT_AUTH_OPTIONS, HEADER_TYPES, TEMPLATE_CATEGORIES } from "@/lib/templates";
 
@@ -556,7 +557,7 @@ export const automationCreateSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
   description: z.string().trim().max(500).optional().default(""),
   whatsappAccountId: idSchema.nullable().optional(),
-  start: z.enum(["blank", "demo_welcome"]).default("blank"),
+  start: z.enum(["blank", ...LIBRARY_IDS]).default("blank"),
 });
 
 export const automationUpdateSchema = z
@@ -840,6 +841,19 @@ export const adCreateSchema = z
     gender: z.enum(["all", "male", "female"]).default("all"),
     startAt: z.coerce.date().nullable().default(null),
     endAt: z.coerce.date().nullable().default(null),
+    locations: z
+      .array(
+        z
+          .object({
+            key: z.string().trim().regex(/^[A-Za-z0-9:_-]{1,40}$/),
+            name: z.string().trim().min(1).max(120),
+            type: z.enum(["region", "city"]),
+            radiusKm: z.number().int().min(17).max(80).optional(),
+          })
+          .strict()
+      )
+      .max(25, "Choose up to 25 places")
+      .default([]),
   })
   .strict();
 

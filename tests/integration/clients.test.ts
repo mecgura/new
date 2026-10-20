@@ -66,7 +66,7 @@ describe("create client", () => {
     expect(await bcrypt.compare("Passw0rd!", org.members[0].user.passwordHash)).toBe(true);
     expect(org.subscriptions).toEqual([expect.objectContaining({ planId: starter.id, status: "active", priceMonthly: 199900 })]);
     expect(org.settings).toMatchObject({ timezone: "Asia/Kolkata", currency: "INR" });
-    expect(org.services).toHaveLength(11);
+    expect(org.services).toHaveLength(12);
     expect(org.services.filter((s) => s.enabled).map((s) => s.service).sort()).toEqual(["CRM", "WHATSAPP_AUTOMATION"]);
     const actions = (await db.auditLog.findMany({ where: { organizationId: orgId } })).map((a) => a.action).sort();
     expect(actions).toEqual(["client.created", "plan.changed", "service.enabled", "service.enabled", "user.created"]);
