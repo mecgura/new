@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Bot, CheckCircle2, FileText, FolderPlus, FlaskConical, Info, Lock, Maximize2, MessageCirclePlus, Minimize2, Phone, RotateCcw, UserPlus, Wifi, WifiOff } from "lucide-react";
+import { ArrowLeft, Bot, CheckCircle2, FileText, FolderPlus, FlaskConical, Info, Lock, Maximize2, MessageCirclePlus, Minimize2, Phone, PhoneCall, RotateCcw, UserPlus, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Alert,
@@ -32,11 +32,12 @@ import { ConversationList, type ListFilters } from "@/components/inbox/conversat
 import { MessageBubble } from "@/components/inbox/message-bubble";
 import { AiControl } from "@/components/inbox/ai-control";
 import { Composer, TemplateModal } from "@/components/inbox/composer";
+import { START_CALL_EVENT, type StartCallDetail } from "@/components/calls/call-dock";
 import { CustomerPanel } from "@/components/inbox/customer-panel";
 import { useRealtime, type LiveEvent } from "@/components/inbox/use-realtime";
 import { prettyId, type Account, type Conversation, type Message, type TeamMember } from "@/components/inbox/types";
 
-type Props = { orgId: string; me: { id: string; name: string; role: string; agentStatus: string }; perms: InboxPerms; accounts: Account[]; activeAccountId?: string; calling?: { phone: boolean; ai: boolean } };
+type Props = { orgId: string; me: { id: string; name: string; role: string; agentStatus: string }; perms: InboxPerms; accounts: Account[]; activeAccountId?: string; calling?: { phone: boolean; ai: boolean; waAccountIds?: string[] } };
 
 const FOCUS_KEY = "mgc_inbox_focus";
 const PANEL_KEY = "mgc_inbox_panel";
@@ -346,7 +347,7 @@ export function InboxApp(props: Props) {
                   {conv.isDemo ? " · Demo" : ""}
                 </p>
               </div>
-              <CallButton conv={conv} calling={props.calling ?? { phone: false, ai: false }} />
+              <CallButton orgId={orgId} conv={conv} calling={props.calling ?? { phone: false, ai: false }} />
               {conv.channel === "whatsapp" && perms["inbox:reply"] ? (
                 <IconButton label="Send template" onClick={() => setTemplateOpen(true)} disabled={mustClaim}>
                   <FileText aria-hidden="true" />
@@ -558,9 +559,15 @@ function DemoCustomerModal({ open, onClose, orgId, accounts, onCreated }: { open
 }
 
 /** Call the customer: from your phone (plan feature) or with the AI caller (AI Calling service). */
-function CallButton({ conv, calling }: { conv: Conversation; calling: { phone: boolean; ai: boolean } }) {
+function CallButton({ orgId, conv, calling }: { orgId: string; conv: Conversation; calling: { phone: boolean; ai: boolean; waAccountIds?: string[] } }) {
   const router = useRouter();
+  const toast = useToast();
   const dialable = /^\+\d{8,15}$/.test(conv.contact.phone);
+  const waCalling = calling.phone && conv.channel === "whatsapp" && Boolean(calling.waAccountIds?.includes(conv.account.id));
+  async function askPermission() {
+    const r = await apiFetch(`/api/organizations/${orgId}/calls/permission`, { method: "POST", body: { conversationId: conv.id } });
+    toast(r.ok ? "Call permission request sent on WhatsApp" : r.error, r.ok ? "success" : "error");
+  }
   return (
     <Dropdown
       label="Call customer"
@@ -573,6 +580,17 @@ function CallButton({ conv, calling }: { conv: Conversation; calling: { phone: b
       {(close) => (
         <>
           <DropdownLabel>Call {dialable ? prettyId(conv.contact.phone) : "this customer"}</DropdownLabel>
+          {waCalling ? (
+            <>
+              <DropdownItem onClick={() => { close(); window.dispatchEvent(new CustomEvent<StartCallDetail>(START_CALL_EVENT, { detail: { conversationId: conv.id, name: conv.contact.name || prettyId(conv.contact.phone) } })); }} icon={<PhoneCall className="size-4" aria-hidden="true" />}>
+                WhatsApp call (in browser)
+              </DropdownItem>
+              <DropdownItem onClick={() => { close(); void askPermission(); }} icon={<MessageCirclePlus className="size-4" aria-hidden="true" />}>
+                Ask permission to call
+              </DropdownItem>
+              <DropdownSeparator />
+            </>
+          ) : null}
           {!dialable ? (
             <DropdownItem onClick={close} icon={<Lock className="size-4" aria-hidden="true" />}>No phone number on this contact</DropdownItem>
           ) : calling.phone ? (
