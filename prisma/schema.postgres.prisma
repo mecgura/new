@@ -275,6 +275,10 @@ model OrganizationSettings {
   // JSON-encoded weekly hours (SQLite + PostgreSQL compatible)
   businessHours     String   @default("{}")
   weeklyReportAt    DateTime? // last weekly summary sent
+  // Who pays Meta for WhatsApp messages: "client_pays" (client's own card on their WABA) or "prepaid_wallet"
+  // (MECGURA pays Meta and charges the client's wallet Meta's rate plus a markup).
+  metaBillingMode    String   @default("client_pays")
+  prepaidMarkupPaise Int      @default(20)
   updatedAt         DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
