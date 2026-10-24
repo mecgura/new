@@ -1,4 +1,5 @@
 import {
+  FileSignature,
   Bot,
   BarChart3,
   Building2,
@@ -95,6 +96,7 @@ export const ADMIN_NAV: NavSection[] = [
       { label: "WhatsApp Accounts", icon: MessageCircle, href: "/admin/whatsapp" },
       { label: "Billing & Plans", icon: CreditCard, href: "/admin/billing" },
       { label: "Meta balance", icon: Landmark, href: "/admin/meta-balance" },
+      { label: "Agreements", icon: FileSignature, href: "/admin/agreements" },
       { label: "Usage", icon: Gauge, href: "/admin/usage" },
       { label: "Analytics", icon: BarChart3, href: "/admin/analytics" },
       { label: "Logs & Audit", icon: ScrollText, href: "/admin/audit-logs" },

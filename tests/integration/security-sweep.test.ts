@@ -318,6 +318,10 @@ describe("5. public and secret-protected surfaces", () => {
     const names = PUBLIC_ROUTES.map((r) => r.path).sort();
     expect(names).toEqual(
       [
+        "/api/agreement/[token]",
+        "/api/agreement/[token]/documents",
+        "/api/agreement/[token]/documents/[docId]",
+        "/api/agreement/[token]/sign",
         "/api/auth/[...nextauth]",
         "/api/auth/forgot-password",
         "/api/auth/reset-password",

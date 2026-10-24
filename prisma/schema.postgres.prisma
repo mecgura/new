@@ -72,6 +72,8 @@ model Organization {
   adConnection            AdConnection?
   adCampaigns             AdCampaign[]
   waCalls                 WaCall[]
+  agreements              ClientAgreement[]
+  clientDocuments         ClientDocument[]
   usageCounters           UsageCounter[]
   wabas                   WhatsAppBusinessAccount[]
   phoneNumbers            PhoneNumber[]
@@ -1518,4 +1520,74 @@ model WaCall {
 
   @@index([organizationId, status])
   @@index([organizationId, startedAt])
+}
+
+// Service agreement MECGURA sends a client at onboarding. The client checks their details, uploads business proof
+// and accepts it online (typed name + consent, with time, IP and a hash of what they accepted).
+model ClientAgreement {
+  id             String    @id @default(cuid())
+  organizationId String
+  number         String    @unique // MGC-AGR-2026-0001
+  version        Int       @default(1)
+  status         String    @default("draft") // draft | sent | signed | superseded | void
+  token          String    @unique // secret for the client's link
+  businessName   String
+  businessType   String    @default("")
+  contactName    String    @default("")
+  designation    String    @default("")
+  phone          String    @default("")
+  email          String    @default("")
+  address        String    @default("")
+  city           String    @default("")
+  state          String    @default("")
+  pincode        String    @default("")
+  gstin          String    @default("")
+  pan            String    @default("")
+  planName       String    @default("")
+  pricePaise     Int       @default(0) // monthly
+  setupFeePaise  Int       @default(0)
+  services       String    @default("[]") // JSON array of labels
+  billingMode    String    @default("client_pays")
+  startDate      String    @default("") // YYYY-MM-DD
+  termMonths     Int       @default(12)
+  extraTerms     String    @default("")
+  sentAt         DateTime?
+  sendLog        String    @default("{}") // JSON: last WhatsApp / email outcome
+  viewedAt       DateTime?
+  signedAt       DateTime?
+  signerName     String    @default("")
+  signerIp       String    @default("")
+  signerAgent    String    @default("")
+  signedHash     String    @default("")
+  signedText     String    @default("") // full text accepted, frozen at signing
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documents    ClientDocument[]
+
+  @@index([organizationId, createdAt])
+}
+
+// Business proof the client (or MECGURA) uploaded: GST certificate, Udyam, PAN, shop licence...
+model ClientDocument {
+  id             String   @id @default(cuid())
+  organizationId String
+  agreementId    String?
+  kind           String // gst | udyam | pan | shop_licence | incorporation | id_proof | other
+  fileName       String
+  mimeType       String
+  sizeBytes      Int
+  data           Bytes
+  status         String   @default("pending") // pending | verified | rejected
+  note           String   @default("")
+  uploadedBy     String   @default("client") // client | admin
+  createdAt      DateTime @default(now())
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agreement    ClientAgreement? @relation(fields: [agreementId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([agreementId])
 }

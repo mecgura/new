@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireSuperAdmin } from "@/lib/session";
 import { clientListQuerySchema, createClientSchema } from "@/lib/validations";
 import { createClient } from "@/lib/services/clients";
+import { onboardWithAgreement } from "@/services/agreements/agreements";
 import { monthPrefix } from "@/lib/services/usage";
 
 /** Client (tenant) list for the Super Admin table. */
@@ -63,5 +64,6 @@ export const POST = handle(async (req) => {
   const admin = await requireSuperAdmin(req);
   const input = await readJson(req, createClientSchema);
   const { organization, createdUser } = await createClient(admin.id, input, req);
-  return ok({ organization, createdOwnerAccount: createdUser }, { status: 201 });
+  const agreement = input.sendAgreement ? await onboardWithAgreement(organization.id, admin.id, req) : null;
+  return ok({ organization, createdOwnerAccount: createdUser, agreement }, { status: 201 });
 });

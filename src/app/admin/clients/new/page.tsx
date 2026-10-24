@@ -28,6 +28,7 @@ export default function NewClientPage() {
     metaBillingMode: "client_pays" as "client_pays" | "prepaid_wallet",
     markupRupees: "0.20",
   });
+  const [sendAgreement, setSendAgreement] = React.useState(true);
   const [services, setServices] = React.useState<ServiceKey[]>(["WHATSAPP_AUTOMATION"]);
   const [showPassword, setShowPassword] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
@@ -49,11 +50,22 @@ export default function NewClientPage() {
     e.preventDefault();
     setSaving(true);
     setErrors({});
-    const r = await apiFetch<{ organization: { id: string; name: string } }>("/api/admin/organizations", { method: "POST", body: { ...form, markupRupees: Number(form.markupRupees || 0), services } });
+    const r = await apiFetch<{ organization: { id: string; name: string }; agreement: { whatsapp?: { sent: boolean; message: string }; email?: { sent: boolean; message: string } } | null }>("/api/admin/organizations", {
+      method: "POST",
+      body: { ...form, markupRupees: Number(form.markupRupees || 0), services, sendAgreement },
+    });
     setSaving(false);
     if (!r.ok) {
       const d = Object.fromEntries(Object.entries(r.details ?? {}).map(([k, v]) => [k, v?.[0] ?? ""]));
       setErrors({ ...d, form: r.details ? "Please fix the highlighted fields." : r.error });
+      return;
+    }
+    const ag = r.data.agreement;
+    if (sendAgreement && ag) {
+      const wa = ag.whatsapp?.sent ? "WhatsApp ✓" : "WhatsApp not sent";
+      const em = ag.email?.sent ? "email ✓" : "email not sent";
+      toast(`${r.data.organization.name} created. Agreement: ${wa}, ${em}.`, ag.whatsapp?.sent && ag.email?.sent ? "success" : "error");
+      router.push(`/admin/clients/${r.data.organization.id}?tab=agreement`);
       return;
     }
     toast(`${r.data.organization.name} created`);
@@ -194,6 +206,16 @@ export default function NewClientPage() {
                   <Input inputMode="decimal" value={form.markupRupees} onChange={(e) => setForm((f) => ({ ...f, markupRupees: e.target.value.replace(/[^\d.]/g, "") }))} className="w-32" />
                 </Field>
               ) : null}
+            </CardBody>
+          </Card>
+          <Card>
+            <CardBody>
+              <Checkbox
+                checked={sendAgreement}
+                onChange={(e) => setSendAgreement(e.target.checked)}
+                label="Send service agreement"
+                description="Creates the agreement and sends the link on WhatsApp + email, so the client can check details, upload business proof and sign."
+              />
             </CardBody>
           </Card>
           <div className="flex gap-2">

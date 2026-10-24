@@ -18,6 +18,7 @@ import {
   type ClientDetail,
 } from "@/components/admin/client-detail-tabs";
 import { AdminWallet } from "@/components/wallet/admin-wallet";
+import { AgreementTab } from "@/components/admin/agreement-tab";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -28,6 +29,7 @@ const TABS = [
   { id: "usage", label: "Usage" },
   { id: "billing", label: "Billing" },
   { id: "wallet", label: "Wallet" },
+  { id: "agreement", label: "Agreement" },
   { id: "activity", label: "Activity" },
 ];
 
@@ -126,6 +128,9 @@ function ClientDetailInner() {
       </TabPanel>
       <TabPanel id="wallet" active={tab === "wallet"}>
         {tab === "wallet" ? <AdminWallet organizationId={o.id} /> : null}
+      </TabPanel>
+      <TabPanel id="agreement" active={tab === "agreement"}>
+        {tab === "agreement" ? <AgreementTab organizationId={o.id} onChanged={load} /> : null}
       </TabPanel>
       <TabPanel id="activity" active={tab === "activity"}>
         <ActivityTab organizationId={o.id} />

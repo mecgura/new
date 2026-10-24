@@ -20,3 +20,18 @@ export async function apiFetch<T>(url: string, init: { method?: string; body?: u
     return { ok: false, status: 0, error: "Network error — check your connection and try again." };
   }
 }
+
+/** Multipart upload with the same result shape as apiFetch. */
+export async function apiUpload<T>(url: string, form: FormData): Promise<ApiSuccess<T> | ApiFailure> {
+  try {
+    const res = await fetch(url, { method: "POST", body: form, cache: "no-store" });
+    const json: unknown = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const j = json as { error?: string; details?: Record<string, string[]> };
+      return { ok: false, status: res.status, error: j.error ?? "Upload failed. Please try again.", details: j.details };
+    }
+    return { ok: true, data: json as T };
+  } catch {
+    return { ok: false, status: 0, error: "Network error — check your connection and try again." };
+  }
+}
