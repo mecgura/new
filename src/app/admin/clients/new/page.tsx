@@ -5,7 +5,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Wand2 } from "lucide-react";
-import { Alert, Button, Card, CardBody, CardHeader, Checkbox, Field, Input, LoadingState, PageHeader, Select, useToast } from "@/components/ds";
+import { Alert, Button, Card, CardBody, CardHeader, Checkbox, Field, Input, LoadingState, PageHeader, Radio, Select, useToast } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
 import { SERVICES, formatINR, isComingSoon, type ServiceKey } from "@/lib/catalog";
 import { generateClientPassword } from "@/components/admin/client-dialogs";
@@ -25,6 +25,8 @@ export default function NewClientPage() {
     ownerPassword: "",
     planId: "",
     status: "active" as "active" | "suspended",
+    metaBillingMode: "client_pays" as "client_pays" | "prepaid_wallet",
+    markupRupees: "0.20",
   });
   const [services, setServices] = React.useState<ServiceKey[]>(["WHATSAPP_AUTOMATION"]);
   const [showPassword, setShowPassword] = React.useState(false);
@@ -47,7 +49,7 @@ export default function NewClientPage() {
     e.preventDefault();
     setSaving(true);
     setErrors({});
-    const r = await apiFetch<{ organization: { id: string; name: string } }>("/api/admin/organizations", { method: "POST", body: { ...form, services } });
+    const r = await apiFetch<{ organization: { id: string; name: string } }>("/api/admin/organizations", { method: "POST", body: { ...form, markupRupees: Number(form.markupRupees || 0), services } });
     setSaving(false);
     if (!r.ok) {
       const d = Object.fromEntries(Object.entries(r.details ?? {}).map(([k, v]) => [k, v?.[0] ?? ""]));
@@ -168,6 +170,30 @@ export default function NewClientPage() {
                   <option value="suspended">Suspended</option>
                 </Select>
               </Field>
+            </CardBody>
+          </Card>
+          <Card>
+            <CardHeader title="Meta billing type" description="Who pays Meta for this client's WhatsApp messages. Change any time from the client's Wallet tab." />
+            <CardBody className="space-y-3">
+              <Radio
+                name="metaBillingMode"
+                checked={form.metaBillingMode === "client_pays"}
+                onChange={() => setForm((f) => ({ ...f, metaBillingMode: "client_pays" }))}
+                label="Client pays Meta"
+                description="Client adds their own card in Meta Billing. No risk for you."
+              />
+              <Radio
+                name="metaBillingMode"
+                checked={form.metaBillingMode === "prepaid_wallet"}
+                onChange={() => setForm((f) => ({ ...f, metaBillingMode: "prepaid_wallet" }))}
+                label="Prepaid wallet"
+                description="Your card on their WhatsApp account; client recharges the MECGURA wallet at Meta rate + your markup."
+              />
+              {form.metaBillingMode === "prepaid_wallet" ? (
+                <Field id="markupRupees" label="Your markup per message (₹)" error={errors.markupRupees} hint="Set a low-balance alert in the Wallet tab after creating.">
+                  <Input inputMode="decimal" value={form.markupRupees} onChange={(e) => setForm((f) => ({ ...f, markupRupees: e.target.value.replace(/[^\d.]/g, "") }))} className="w-32" />
+                </Field>
+              ) : null}
             </CardBody>
           </Card>
           <div className="flex gap-2">

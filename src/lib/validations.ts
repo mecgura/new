@@ -155,6 +155,9 @@ export const createClientSchema = z.object({
   planId: idSchema,
   status: z.enum(["active", "suspended"]).default("active"),
   services: z.array(serviceKeySchema).max(SERVICE_KEYS.length).default([]),
+  /** Who pays Meta: the client's own card, or MECGURA's prepaid wallet at Meta rate + markup. */
+  metaBillingMode: z.enum(["client_pays", "prepaid_wallet"]).default("client_pays"),
+  markupRupees: z.coerce.number().min(0, "Enter 0 or more").max(100, "Too high").optional(),
 });
 
 export const clientUpdateSchema = z

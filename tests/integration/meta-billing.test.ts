@@ -2,6 +2,9 @@ import { afterAll, describe, expect, it } from "vitest";
 import { actAs, json, makeOrg, makeUser, params, req } from "../helpers";
 import * as billingRoute from "@/app/api/admin/organizations/[id]/meta-billing/route";
 import * as ratesRoute from "@/app/api/admin/meta-rates/route";
+import * as clientsRoute from "@/app/api/admin/organizations/route";
+import { makePlan } from "../helpers";
+import { getMetaBilling } from "@/services/billing/meta-billing";
 import { getPriceCard } from "@/services/wallet-pricing";
 import { DEFAULT_META_RATES, saveMetaRates } from "@/services/meta-rates";
 
@@ -41,5 +44,22 @@ describe("meta billing type", () => {
     expect((await put(org.id, { mode: "prepaid_wallet", markupRupees: -1 })).status).toBe(400);
     actAs(user);
     expect((await put(org.id, { mode: "prepaid_wallet" })).status).toBe(403);
+  });
+
+  it("can be chosen when creating a client", async () => {
+    const admin = await makeUser({ role: "SUPER_ADMIN" });
+    const plan = await makePlan({ maxUsers: 3, maxWhatsAppNumbers: 1 });
+    actAs(admin);
+    await saveMetaRates({ marketing: 80, utility: 12, authentication: 12 });
+    const r = await json(
+      await clientsRoute.POST(
+        req("/x", { method: "POST", body: { name: "Prepaid Shop", ownerName: "Ravi Kumar", ownerEmail: `prepaid${Date.now()}@example.com`, ownerPassword: "Str0ngPassw0rd!", planId: plan.id, metaBillingMode: "prepaid_wallet", markupRupees: 0.3 } }),
+        params({})
+      )
+    );
+    expect(r.status).toBe(201);
+    const orgId = (r.body.organization as { id: string }).id;
+    expect(await getMetaBilling(orgId)).toEqual({ mode: "prepaid_wallet", markupPaise: 30 });
+    expect((await getPriceCard(orgId)).overrides.marketing).toBe(110);
   });
 });

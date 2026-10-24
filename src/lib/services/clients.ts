@@ -49,6 +49,8 @@ export type CreateClientInput = {
   planId?: string;
   status?: "active" | "suspended";
   services?: ServiceKey[];
+  metaBillingMode?: "client_pays" | "prepaid_wallet";
+  markupRupees?: number;
 };
 
 /**
@@ -94,6 +96,10 @@ export async function createClient(actorUserId: string, input: CreateClientInput
   }
   if (plan) await audit({ action: "plan.changed", actorUserId, organizationId: orgId, targetType: "plan", targetId: plan.id, metadata: { from: null, to: plan.slug }, req });
   for (const s of services) await audit({ action: "service.enabled", actorUserId, organizationId: orgId, targetType: "service", targetId: s, req });
+  if (input.metaBillingMode === "prepaid_wallet" || input.markupRupees !== undefined) {
+    const { setMetaBilling } = await import("@/services/billing/meta-billing");
+    await setMetaBilling(orgId, { mode: input.metaBillingMode ?? "client_pays", markupRupees: input.markupRupees }, actorUserId, req);
+  }
   await notify({ userId: ownerId, organizationId: orgId, type: "success", title: `Welcome to MECGURA, ${organization.name}`, body: "Your workspace is ready. Complete your profile and invite your team.", link: "/dashboard" });
   return { organization, ownerId, createdUser };
 }
