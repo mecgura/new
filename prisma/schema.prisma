@@ -71,6 +71,7 @@ model Organization {
   voiceCalls              VoiceCall[]
   adConnection            AdConnection?
   adCampaigns             AdCampaign[]
+  waCalls                 WaCall[]
   usageCounters           UsageCounter[]
   wabas                   WhatsAppBusinessAccount[]
   phoneNumbers            PhoneNumber[]
@@ -298,6 +299,7 @@ model WhatsAppAccount {
   connectionId   String?
   connectedAt    DateTime?
   disconnectedAt DateTime?
+  callingEnabled Boolean   @default(false) // WhatsApp Business Calling switched on for this number
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -1484,4 +1486,32 @@ model AdCampaign {
 
   @@index([organizationId, createdAt])
   @@index([metaAdId])
+}
+
+// A WhatsApp voice call (Business Calling API). Audio flows browser <-> Meta over WebRTC; only signalling is stored.
+model WaCall {
+  id                String    @id @default(cuid())
+  organizationId    String
+  whatsappAccountId String
+  contactId         String?
+  metaCallId        String    @unique
+  direction         String // inbound | outbound
+  status            String    @default("ringing") // ringing | connecting | active | ended | missed | rejected | failed
+  peerPhone         String
+  peerName          String    @default("")
+  offerSdp          String    @default("")
+  answerSdp         String    @default("")
+  answeredByUserId  String?
+  startedByUserId   String?
+  startedAt         DateTime  @default(now())
+  answeredAt        DateTime?
+  endedAt           DateTime?
+  durationSec       Int       @default(0)
+  error             String    @default("")
+  updatedAt         DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([organizationId, startedAt])
 }

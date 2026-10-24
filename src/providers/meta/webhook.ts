@@ -18,6 +18,7 @@ export type NormalizedEvent =
   | { kind: "template_quality"; wabaId: string; metaTemplateId: string; score: string }
   | { kind: "template_category"; wabaId: string; metaTemplateId: string; category: string }
   | { kind: "account"; wabaId: string; event: string; detail: string }
+  | { kind: "call"; wabaId: string; phoneNumberId: string; callId: string; event: string; status: string; from: string; to: string; profileName: string; sdpType: string; sdp: string; durationSec: number }
   | { kind: "other"; wabaId: string; field: string };
 
 /** Flattens Meta's entry/changes envelope into typed events (unknown fields are kept as "other"). */
@@ -37,9 +38,36 @@ export function normalizeEvents(payload: MetaWebhookPayload): NormalizedEvent[] 
           out.push({ kind: "message", wabaId, phoneNumberId, id: String(m.id ?? ""), from, type: String(m.type ?? ""), timestamp: String(m.timestamp ?? ""), profileName, raw: m });
         }
         for (const s of (v.statuses as Record<string, unknown>[] | undefined) ?? []) {
+          if (String(s.type ?? "") === "call") {
+            out.push(callStatusEvent(wabaId, phoneNumberId, s));
+            continue;
+          }
           const errors = (s.errors as { title?: string; message?: string }[] | undefined) ?? [];
           out.push({ kind: "status", wabaId, phoneNumberId, id: String(s.id ?? ""), status: String(s.status ?? ""), recipient: String(s.recipient_id ?? ""), timestamp: String(s.timestamp ?? ""), error: errors[0]?.message ?? errors[0]?.title ?? "" });
         }
+      } else if (change.field === "calls") {
+        const meta = (v.metadata ?? {}) as { phone_number_id?: string };
+        const phoneNumberId = String(meta.phone_number_id ?? "");
+        const profiles = (v.contacts as { wa_id?: string; profile?: { name?: string } }[] | undefined) ?? [];
+        for (const c of (v.calls as Record<string, unknown>[] | undefined) ?? []) {
+          const session = (c.session ?? {}) as { sdp_type?: string; sdp?: string };
+          const from = String(c.from ?? "");
+          out.push({
+            kind: "call",
+            wabaId,
+            phoneNumberId,
+            callId: String(c.id ?? ""),
+            event: String(c.event ?? ""),
+            status: String(c.status ?? ""),
+            from,
+            to: String(c.to ?? ""),
+            profileName: profiles.find((p) => p.wa_id === from)?.profile?.name ?? "",
+            sdpType: String(session.sdp_type ?? ""),
+            sdp: String(session.sdp ?? "").slice(0, 20_000),
+            durationSec: Number(c.duration ?? 0) || 0,
+          });
+        }
+        for (const s of (v.statuses as Record<string, unknown>[] | undefined) ?? []) out.push(callStatusEvent(wabaId, phoneNumberId, s));
       } else if (change.field === "phone_number_quality_update") {
         out.push({ kind: "quality", wabaId, displayPhoneNumber: String(v.display_phone_number ?? ""), event: String(v.event ?? ""), currentLimit: String(v.current_limit ?? "") });
       } else if (change.field === "message_template_status_update") {
@@ -70,4 +98,9 @@ export function normalizeEvents(payload: MetaWebhookPayload): NormalizedEvent[] 
     }
   }
   return out;
+}
+
+/** A business-initiated call moving on (RINGING / ACCEPTED / REJECTED). */
+function callStatusEvent(wabaId: string, phoneNumberId: string, s: Record<string, unknown>): NormalizedEvent {
+  return { kind: "call", wabaId, phoneNumberId, callId: String(s.id ?? ""), event: "status", status: String(s.status ?? "").toUpperCase(), from: "", to: String(s.recipient_id ?? ""), profileName: "", sdpType: "", sdp: "", durationSec: 0 };
 }

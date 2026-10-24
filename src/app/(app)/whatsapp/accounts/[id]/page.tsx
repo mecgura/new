@@ -9,7 +9,8 @@ import { idSchema } from "@/lib/validations";
 import { Alert, Badge, Card, CardBody, CardHeader, PageHeader } from "@/components/ds";
 import { NoWorkspace, OwnerOnly, ServiceDisabled } from "@/components/whatsapp/states";
 import { QualityBadge, StatusBadge } from "@/components/whatsapp/status-badge";
-import { AccountSettingsForm, ConnectionCheck, DeleteButton, DisconnectButton, ReplaceTokenForm } from "@/components/whatsapp/account-actions";
+import { AccountSettingsForm, CallingToggle, ConnectionCheck, DeleteButton, DisconnectButton, ReplaceTokenForm } from "@/components/whatsapp/account-actions";
+import { db } from "@/lib/db";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "WhatsApp number" };
@@ -45,6 +46,7 @@ export default async function WhatsAppAccountPage({ params, searchParams }: { pa
   }
   const webhook = ctx.canManage && tab === "webhook" ? await getWebhookInfo(ctx.orgId, account.id) : null;
   const live = account.status === "connected" || account.status === "demo";
+  const callingEnabled = (await db.whatsAppAccount.findUnique({ where: { id: account.id }, select: { callingEnabled: true } }))?.callingEnabled ?? false;
 
   return (
     <>
@@ -119,6 +121,11 @@ export default async function WhatsAppAccountPage({ params, searchParams }: { pa
           {ctx.canManage && !account.isDemo && account.connection && live ? (
             <div className="lg:col-span-2">
               <ConnectionCheck orgId={ctx.orgId} accountId={account.id} />
+            </div>
+          ) : null}
+          {ctx.canManage && !account.isDemo && account.status === "connected" ? (
+            <div className="lg:col-span-2">
+              <CallingToggle orgId={ctx.orgId} accountId={account.id} enabled={callingEnabled} />
             </div>
           ) : null}
         </div>

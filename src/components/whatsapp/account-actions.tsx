@@ -224,3 +224,34 @@ export function ReplaceTokenForm({ orgId, accountId }: { orgId: string; accountI
     </Card>
   );
 }
+
+/** Turns WhatsApp Business Calling on or off for this number (customers then see a call button in the chat). */
+export function CallingToggle({ orgId, accountId, enabled }: { orgId: string; accountId: string; enabled: boolean }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [on, setOn] = React.useState(enabled);
+  const [saving, setSaving] = React.useState(false);
+  async function apply(next: boolean) {
+    setSaving(true);
+    const r = await apiFetch<{ callingEnabled: boolean }>(`/api/organizations/${orgId}/whatsapp/accounts/${accountId}/calling`, { method: "PUT", body: { enabled: next } });
+    setSaving(false);
+    if (!r.ok) return toast(r.error, "error");
+    setOn(r.data.callingEnabled);
+    toast(r.data.callingEnabled ? "WhatsApp calling is on for this number" : "WhatsApp calling is off");
+    router.refresh();
+  }
+  return (
+    <Card>
+      <CardHeader title="WhatsApp calling" description="Customers can call this number from WhatsApp and your team answers in the browser. You can also call customers who allowed it." />
+      <CardBody className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button loading={saving} variant={on ? "secondary" : "primary"} onClick={() => apply(!on)}>{on ? "Turn calling off" : "Turn calling on"}</Button>
+          <span className="text-small text-app-muted">{on ? "On: calls ring in MECGURA for your team." : "Off"}</span>
+        </div>
+        <p className="text-caption text-app-subtle">
+          Needs the plan&apos;s calling feature, and the <strong>calls</strong> webhook field ticked in your Meta app (WhatsApp → Configuration). Calls customers make are free; calls you make are charged per minute by Meta.
+        </p>
+      </CardBody>
+    </Card>
+  );
+}

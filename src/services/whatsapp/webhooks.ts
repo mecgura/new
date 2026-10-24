@@ -76,7 +76,7 @@ export async function ingestWebhook(raw: Buffer, signatureHeader: string | null)
   for (const [i, ev] of events.entries()) {
     const owner = orgByWaba.get(ev.wabaId);
     const dedupeKey =
-      ev.kind === "message" ? `meta:msg:${ev.id}` : ev.kind === "status" ? `meta:status:${ev.id}:${ev.status}` : `meta:${ev.kind}:${sha256(raw.toString("utf8"))}:${i}`;
+      ev.kind === "message" ? `meta:msg:${ev.id}` : ev.kind === "status" ? `meta:status:${ev.id}:${ev.status}` : ev.kind === "call" ? `meta:call:${ev.callId}:${ev.event}:${ev.status}:${ev.sdpType}` : `meta:${ev.kind}:${sha256(raw.toString("utf8"))}:${i}`;
     let stored;
     try {
       stored = await db.webhookEvent.create({
@@ -84,7 +84,7 @@ export async function ingestWebhook(raw: Buffer, signatureHeader: string | null)
           organizationId: owner?.orgId ?? null,
           wabaId: ev.wabaId,
           field: FIELD_OF[ev.kind] ?? (ev.kind === "other" ? ev.field : ev.kind),
-          eventType: ev.kind === "status" ? `status.${ev.status}` : ev.kind,
+          eventType: ev.kind === "status" ? `status.${ev.status}` : ev.kind === "call" ? `call.${ev.event}` : ev.kind,
           dedupeKey,
           payload: JSON.stringify(ev),
           status: owner ? "received" : "ignored",
@@ -120,6 +120,7 @@ const FIELD_OF: Partial<Record<NormalizedEvent["kind"], string>> = {
   template_quality: "message_template_quality_update",
   template_category: "template_category_update",
   account: "account_update",
+  call: "calls",
 };
 
 async function processEvent(organizationId: string, wabaRecordId: string, ev: NormalizedEvent): Promise<"processed" | "ignored"> {
@@ -161,6 +162,10 @@ async function processEvent(organizationId: string, wabaRecordId: string, ev: No
       await db.whatsAppBusinessAccount.update({ where: { id: wabaRecordId }, data: { lastAccountEvent: ev.event, accountStatus: ev.detail || ev.event, lastAccountEventAt: new Date() } });
       await audit({ action: "whatsapp.account_event", organizationId, targetType: "waba", targetId: wabaRecordId, metadata: { event: ev.event, detail: ev.detail } });
       return "processed";
+    }
+    case "call": {
+      const { handleCallEvent } = await import("@/services/calls/whatsapp-calls");
+      return handleCallEvent(organizationId, ev);
     }
     default:
       return "ignored";
