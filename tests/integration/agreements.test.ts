@@ -11,7 +11,7 @@ import * as pub from "@/app/api/agreement/[token]/route";
 import * as pubDocs from "@/app/api/agreement/[token]/documents/route";
 import * as pubSign from "@/app/api/agreement/[token]/sign/route";
 import * as clientsRoute from "@/app/api/admin/organizations/route";
-import { TEMPLATE_BODY, TEMPLATE_NAME, saveProvider } from "@/services/agreements/agreements";
+import { TEMPLATE_BODY, TEMPLATE_NAME, agreementProgress, saveProvider, workspaceAgreement } from "@/services/agreements/agreements";
 import { sha256 } from "@/services/agreements/terms";
 import { resetRateLimits } from "@/lib/rate-limit";
 
@@ -175,5 +175,20 @@ describe("client agreements", () => {
     const orgId = (r.body.organization as { id: string }).id;
     const a = await db.clientAgreement.findFirstOrThrow({ where: { organizationId: orgId } });
     expect(a).toMatchObject({ status: "sent", contactName: "Simran Kaur", phone: "+919812345678" });
+  });
+
+  it("the client owner can complete it from their own workspace without any link", async () => {
+    resetRateLimits();
+    const { org, owner } = await client();
+    expect(await agreementProgress(org.id)).toEqual({ signed: false, hasProof: false });
+    const w = await workspaceAgreement(org.id, owner.id);
+    expect(w.agreement.status).toBe("sent");
+    // Opening again returns the same agreement.
+    expect((await workspaceAgreement(org.id, owner.id)).token).toBe(w.token);
+    actAs(null);
+    await pubDocs.POST(uploadReq("pan", PDF, "application/pdf", "pan.pdf"), params({ token: w.token }));
+    expect(await agreementProgress(org.id)).toEqual({ signed: false, hasProof: true });
+    expect((await pubSign.POST(req("/x", { method: "POST", body: { signerName: "Ravi Kumar", accept: true } }), params({ token: w.token }))).status).toBe(200);
+    expect(await agreementProgress(org.id)).toEqual({ signed: true, hasProof: true });
   });
 });

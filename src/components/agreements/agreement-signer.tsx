@@ -51,7 +51,7 @@ const kb = (n: number) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB
 const DOC_TONE: Record<string, "success" | "danger" | "neutral"> = { verified: "success", rejected: "danger", pending: "neutral" };
 
 /** The client-facing agreement: 1. check details, 2. upload business proof, 3. read and accept. */
-export function AgreementSigner({ token, initial }: { token: string; initial: PublicView }) {
+export function AgreementSigner({ token, initial, embedded = false }: { token: string; initial: PublicView; embedded?: boolean }) {
   const toast = useToast();
   const base = `/api/agreement/${token}`;
   const [a, setA] = React.useState(initial);
@@ -149,7 +149,7 @@ export function AgreementSigner({ token, initial }: { token: string; initial: Pu
 
   return (
     <div className="space-y-6">
-      <div className="print:hidden">
+      <div className={embedded ? "hidden" : "print:hidden"}>
         <h1 className="font-display text-2xl font-bold text-app-text sm:text-3xl">Welcome to MECGURA, {a.details.contactName.split(" ")[0] || "there"}!</h1>
         <p className="mt-2 text-body text-app-muted">Three quick steps to start your services: check your details, upload one business proof, and accept the agreement. It takes about 3 minutes.</p>
       </div>

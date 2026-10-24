@@ -22,6 +22,7 @@ import { AgreementTab } from "@/components/admin/agreement-tab";
 
 const TABS = [
   { id: "overview", label: "Overview" },
+  { id: "agreement", label: "Agreement & KYC" },
   { id: "users", label: "Users" },
   { id: "services", label: "Services" },
   { id: "whatsapp", label: "WhatsApp" },
@@ -29,7 +30,6 @@ const TABS = [
   { id: "usage", label: "Usage" },
   { id: "billing", label: "Billing" },
   { id: "wallet", label: "Wallet" },
-  { id: "agreement", label: "Agreement" },
   { id: "activity", label: "Activity" },
 ];
 

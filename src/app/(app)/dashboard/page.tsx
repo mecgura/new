@@ -25,6 +25,7 @@ import { SERVICE_LABELS, ACTIVE_NUMBER_STATUSES } from "@/lib/catalog";
 import { ActivityChart, type DayCount } from "@/components/app/activity-chart";
 import { NumberSwitcher } from "@/components/app/number-switcher";
 import { readActiveNumber } from "@/lib/active-number";
+import { agreementProgress } from "@/services/agreements/agreements";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -141,7 +142,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     db.campaign.count({ where: orgScope }),
     db.automation.count({ where: orgScope }),
   ]);
+  const isOwner = roleHasPermission(active.role, "org:update");
+  const kyc = isOwner ? await agreementProgress(active.organizationId) : null;
   const checklist = [
+    ...(kyc ? [{ done: kyc.hasProof, label: "Upload your business proof (GST / Udyam / PAN)", href: "/onboarding" }, { done: kyc.signed, label: "Accept your MECGURA service agreement", href: "/onboarding" }] : []),
     { done: Boolean(user.name && user.name.trim().length >= 2), label: "Complete your profile", href: "/settings" },
     { done: memberCount > 1, label: "Invite your team", href: "/team" },
     { done: numbers > 0, label: "Connect your WhatsApp Business number", href: "/whatsapp/connect" },
@@ -174,6 +178,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           ) : null
         }
       />
+
+      {kyc && !kyc.signed ? (
+        <Alert tone="warning" title="Complete your Agreement & KYC" className="mb-6">
+          Check your business details, upload one business proof (GST, Udyam or business PAN) and accept your service agreement.{" "}
+          <Link href="/onboarding" className="font-semibold underline">
+            Open Agreement &amp; KYC
+          </Link>
+        </Alert>
+      ) : null}
 
       {numbers === 0 ? (
         <Alert tone="info" title="Connect a WhatsApp number" className="mb-6">

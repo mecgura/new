@@ -632,3 +632,27 @@ export async function deleteDocument(docId: string, actorUserId: string, req?: R
   return d.agreementId ? getAgreement(d.agreementId) : null;
 }
 
+
+/**
+ * The agreement a client owner sees inside their own workspace (Agreement & KYC page). Logged in, so no link is
+ * needed: if MECGURA hasn't created or sent one yet, it is created from the client's record and opened for signing.
+ */
+export async function workspaceAgreement(organizationId: string, actorUserId: string, req?: Request) {
+  let a = await db.clientAgreement.findFirst({ where: { organizationId, status: { in: ["draft", "sent", "signed"] } }, orderBy: { createdAt: "desc" } });
+  if (!a) a = await createAgreement(organizationId, actorUserId, req);
+  if (a.status === "draft") {
+    a = await db.clientAgreement.update({ where: { id: a.id }, data: { status: "sent", sentAt: new Date() } });
+    await audit({ action: "agreement.sent", actorUserId, organizationId, targetType: "agreement", targetId: a.id, metadata: { number: a.number, via: "client_workspace" }, req });
+  }
+  return { token: a.token, agreement: await publicAgreement(a.token) };
+}
+
+/** Whether the workspace still has to sign its agreement or upload business proof (for the dashboard checklist). */
+export async function agreementProgress(organizationId: string) {
+  const a = await db.clientAgreement.findFirst({
+    where: { organizationId, status: { in: ["draft", "sent", "signed"] } },
+    orderBy: { createdAt: "desc" },
+    select: { status: true, _count: { select: { documents: { where: { status: { not: "rejected" } } } } } },
+  });
+  return { signed: a?.status === "signed", hasProof: (a?._count.documents ?? 0) > 0 };
+}

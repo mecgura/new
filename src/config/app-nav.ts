@@ -76,6 +76,7 @@ export const CLIENT_NAV: NavSection[] = [
       { label: "Team", icon: UsersRound, href: "/team" },
       { label: "API", icon: KeyRound, href: "/api" },
       { label: "Webhooks", icon: Webhook, href: "/webhooks" },
+      { label: "Agreement & KYC", icon: FileSignature, href: "/onboarding" },
       { label: "Billing", icon: CreditCard, href: "/billing" },
       { label: "Settings", icon: Settings, href: "/settings" },
     ],
