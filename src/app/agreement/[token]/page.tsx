@@ -22,7 +22,7 @@ export default async function AgreementPage({ params }: { params: Promise<{ toke
       <div className="app-root dark min-h-dvh px-4 py-8 print:bg-white print:p-0">
         <main id="main-content" className="mx-auto w-full max-w-3xl">
           <div className="mb-6 flex items-center justify-between gap-4 print:hidden">
-            <Logo />
+            <Logo tone="dark" />
             <span className="text-caption text-app-muted">{a.number}</span>
           </div>
           <AgreementSigner token={token} initial={JSON.parse(JSON.stringify(a))} />

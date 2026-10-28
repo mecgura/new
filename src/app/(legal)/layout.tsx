@@ -12,7 +12,7 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
     <div className="app-root dark min-h-dvh px-4 py-10">
       <main id="main-content" className="mx-auto w-full max-w-3xl">
         <div className="mb-8 flex items-center justify-between gap-4">
-          <Logo />
+          <Logo tone="dark" />
           <Link href="/login" className="text-sm font-semibold text-brand-400 hover:underline">
             Sign in
           </Link>

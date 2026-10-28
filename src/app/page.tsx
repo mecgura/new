@@ -82,7 +82,7 @@ export default async function Landing() {
       <header className="wa-topbar sticky top-0 z-30">
         {publicPromo ? <FestivalPromoBar promo={publicPromo} whatsapp={whatsappDigits} /> : null}
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-          <Logo />
+          <Logo tone="light" />
           <nav aria-label="Main" className="flex items-center gap-1 sm:gap-2">
             <a href="#services" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Services</a>
             <a href="#channels" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Channels</a>

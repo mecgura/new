@@ -7,28 +7,32 @@ import { siteConfig } from "@/config/site";
 import { cn } from "@/lib/utils";
 
 /**
- * Official MECGURA logo lives at `public/logo.png` (230x70, black background).
- * It sits in a dark rounded chip so it looks clean on the light theme.
+ * Official MECGURA logo, transparent background (230x70):
+ * - `public/logo-light.png`: dark "MECGURA" text, for light backgrounds.
+ * - `public/logo.png`: white "MECGURA" text, for dark backgrounds.
+ * `tone="auto"` follows the app's light/dark theme; pages with a fixed background pick their tone.
  */
-const LOGO_SRC = "/logo.png";
+const SRC = { light: "/logo-light.png", dark: "/logo.png" } as const;
 
-export function Logo({ className, href = "/" }: { className?: string; href?: string }) {
+export function Logo({ className, href = "/", tone = "auto" }: { className?: string; href?: string; tone?: "auto" | "light" | "dark" }) {
   const [failed, setFailed] = useState(false);
+  const img = (src: string, extra = "") => (
+    <Image src={src} alt="MECGURA logo" width={184} height={56} priority className={cn("h-10 w-auto", extra)} onError={() => setFailed(true)} />
+  );
 
   return (
     <Link href={href} className={cn("group inline-flex items-center", className)} aria-label="MECGURA home">
       {!failed ? (
-        <span className="inline-flex items-center rounded-xl bg-[#0A0A0F] px-3.5 py-2 shadow-sm ring-1 ring-black">
-          <Image
-            src={LOGO_SRC}
-            alt="MECGURA logo"
-            width={184}
-            height={56}
-            priority
-            className="h-9 w-auto"
-            onError={() => setFailed(true)}
-          />
-        </span>
+        tone === "light" ? (
+          img(SRC.light)
+        ) : tone === "dark" ? (
+          img(SRC.dark)
+        ) : (
+          <>
+            {img(SRC.light, "dark:hidden")}
+            {img(SRC.dark, "hidden dark:block")}
+          </>
+        )
       ) : (
         <span className="inline-flex items-center gap-2.5">
           <span
@@ -37,7 +41,7 @@ export function Logo({ className, href = "/" }: { className?: string; href?: str
           >
             M
           </span>
-          <span className="font-display text-lg font-bold tracking-[0.18em] text-[#0C160D] dark:text-[#f4f4f6]">
+          <span className={cn("font-display text-lg font-bold tracking-[0.18em]", tone === "dark" ? "text-[#f4f4f6]" : tone === "light" ? "text-[#0C160D]" : "text-[#0C160D] dark:text-[#f4f4f6]")}>
             {siteConfig.name}
           </span>
         </span>
