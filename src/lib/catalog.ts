@@ -3,9 +3,9 @@
 export const SERVICES = [
   { key: "WHATSAPP_AUTOMATION", label: "WhatsApp Automation", description: "Inbox, templates, campaigns and flows" },
   { key: "CRM", label: "CRM", description: "Contacts, leads and pipelines" },
-  { key: "SOCIAL_MEDIA", label: "Social Media Management", description: "Coming soon: content calendar and publishing" },
-  { key: "ATS", label: "ATS (Applicant Tracking)", description: "Coming soon: job openings and candidates" },
-  { key: "HRMS", label: "HRMS", description: "Coming soon: employees, attendance and leave" },
+  { key: "SOCIAL_MEDIA", label: "Social Media Management", description: "Content calendar: plan, schedule and publish Facebook and Instagram posts" },
+  { key: "ATS", label: "ATS (Applicant Tracking)", description: "Job openings, a careers page and a candidate pipeline with WhatsApp follow-up" },
+  { key: "HRMS", label: "HRMS", description: "Employees, daily attendance, leave requests and a monthly attendance report" },
   { key: "AI_ASSISTANT", label: "AI Assistant", description: "AI Agent: automatic replies, lead qualification and appointment requests (also needs a plan that includes it)" },
   { key: "OMNICHANNEL", label: "Omnichannel inbox", description: "Email, website chat, Messenger and Instagram in the shared inbox" },
   { key: "ADS_MANAGER", label: "Ads Manager", description: "Create and run click-to-WhatsApp ads from MECGURA and see chats and cost per chat (needs Meta approval for other businesses' ad accounts)" },
@@ -16,7 +16,7 @@ export const SERVICES = [
 ] as const;
 
 /** Services that switch a whole module on or off in the client's sidebar and APIs (the rest are labels or plan features). */
-export const GATED_SERVICES = ["OMNICHANNEL", "AI_CALLING", "AI_ASSISTANT", "ADS_MANAGER", "AUTOMATION_PACK"] as const;
+export const GATED_SERVICES = ["OMNICHANNEL", "AI_CALLING", "AI_ASSISTANT", "ADS_MANAGER", "AUTOMATION_PACK", "SOCIAL_MEDIA", "ATS", "HRMS"] as const;
 
 /** Listed so the package can be planned, but nothing sits behind it yet: shown disabled and never saved as on. */
 export const isComingSoon = (s: { description: string }) => s.description.startsWith("Coming soon");

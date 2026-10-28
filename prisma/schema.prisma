@@ -73,6 +73,12 @@ model Organization {
   adCampaigns             AdCampaign[]
   waCalls                 WaCall[]
   agreements              ClientAgreement[]
+  socialPosts             SocialPost[]
+  jobs                    Job[]
+  candidates              Candidate[]
+  employees               Employee[]
+  attendance              Attendance[]
+  leaveRequests           LeaveRequest[]
   clientDocuments         ClientDocument[]
   usageCounters           UsageCounter[]
   wabas                   WhatsAppBusinessAccount[]
@@ -1590,4 +1596,133 @@ model ClientDocument {
 
   @@index([organizationId])
   @@index([agreementId])
+}
+
+// Social Media Management: posts planned on the content calendar and published to Facebook / Instagram.
+model SocialPost {
+  id             String    @id @default(cuid())
+  organizationId String
+  caption        String    @default("")
+  channels       String    @default("[]") // JSON: ["facebook","instagram"]
+  mediaType      String    @default("") // "" | image/jpeg | image/png | image/webp
+  media          Bytes?
+  mediaKey       String    @unique // random, so the public image URL can't be guessed
+  scheduledAt    DateTime?
+  status         String    @default("draft") // draft | scheduled | publishing | published | failed
+  publishedAt    DateTime?
+  results        String    @default("{}") // JSON per channel: { id?, error? }
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, scheduledAt])
+  @@index([status, scheduledAt])
+}
+
+// ATS: job openings and the people who applied.
+model Job {
+  id             String   @id @default(cuid())
+  organizationId String
+  title          String
+  department     String   @default("")
+  location       String   @default("")
+  type           String   @default("full_time") // full_time | part_time | contract | internship
+  salary         String   @default("")
+  description    String   @default("")
+  status         String   @default("open") // open | closed
+  slug           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  candidates   Candidate[]
+
+  @@unique([organizationId, slug])
+}
+
+model Candidate {
+  id             String   @id @default(cuid())
+  organizationId String
+  jobId          String
+  name           String
+  phone          String   @default("")
+  email          String   @default("")
+  stage          String   @default("applied") // applied | screening | interview | offer | hired | rejected
+  rating         Int      @default(0)
+  source         String   @default("careers_page") // careers_page | manual | referral
+  notes          String   @default("")
+  experience     String   @default("")
+  resumeName     String   @default("")
+  resumeType     String   @default("")
+  resume         Bytes?
+  contactId      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job          Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, jobId, stage])
+}
+
+// HRMS: staff, daily attendance and leave.
+model Employee {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  phone          String   @default("")
+  email          String   @default("")
+  designation    String   @default("")
+  department     String   @default("")
+  joinDate       String   @default("") // YYYY-MM-DD
+  salaryPaise    Int      @default(0) // monthly
+  status         String   @default("active") // active | exited
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  attendance    Attendance[]
+  leaveRequests LeaveRequest[]
+
+  @@index([organizationId, status])
+}
+
+model Attendance {
+  id             String   @id @default(cuid())
+  organizationId String
+  employeeId     String
+  date           String // YYYY-MM-DD (India date)
+  status         String // present | absent | half_day | leave | holiday
+  checkIn        String   @default("") // HH:MM
+  checkOut       String   @default("")
+  note           String   @default("")
+  markedById     String?
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@index([organizationId, date])
+}
+
+model LeaveRequest {
+  id             String    @id @default(cuid())
+  organizationId String
+  employeeId     String
+  from           String // YYYY-MM-DD
+  to             String
+  type           String    @default("casual") // casual | sick | paid | unpaid
+  reason         String    @default("")
+  status         String    @default("pending") // pending | approved | rejected
+  decidedById    String?
+  decidedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
 }

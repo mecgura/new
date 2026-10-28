@@ -1,5 +1,8 @@
 import {
   FileSignature,
+  CalendarDays,
+  Briefcase,
+  IdCard,
   Bot,
   BarChart3,
   Building2,
@@ -42,7 +45,7 @@ export type NavItem = {
   /** Extra path prefixes that also mark this item active. */
   also?: string[];
   /** Shown locked (and the page refuses) unless the admin enabled this service for the workspace. */
-  service?: "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER";
+  service?: "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "SOCIAL_MEDIA" | "ATS" | "HRMS";
   /** Module ships in a later phase: rendered disabled with a "Soon" badge, never a fake page. */
   comingSoon?: boolean;
 };
@@ -66,6 +69,9 @@ export const CLIENT_NAV: NavSection[] = [
       { label: "Flows", icon: GitBranch, href: "/flows" },
       { label: "AI Agent", icon: Bot, href: "/ai", service: "AI_ASSISTANT" },
       { label: "AI Calling", icon: Phone, href: "/voice", service: "AI_CALLING" },
+      { label: "Social Media", icon: CalendarDays, href: "/social", service: "SOCIAL_MEDIA" },
+      { label: "Hiring (ATS)", icon: Briefcase, href: "/hiring", service: "ATS" },
+      { label: "HR & Attendance", icon: IdCard, href: "/hr", service: "HRMS" },
       { label: "Analytics", icon: BarChart3, href: "/analytics" },
       { label: "Industry packs", icon: Sparkles, href: "/packs" },
     ],

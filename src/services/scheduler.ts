@@ -3,6 +3,7 @@ import { runDueWebhooks } from "@/services/webhooks/delivery";
 import { runBillingCycle } from "@/services/billing/billing";
 import { purgeOldApiLogs } from "@/services/api/keys";
 import { runDueAutomations } from "@/services/automations/engine";
+import { runDueSocialPosts } from "@/services/social/posts";
 
 /** One scheduler tick: scheduled campaigns + automation delays, reply timeouts, retries and schedule triggers. */
 export async function runScheduledWork(budgetMs = 50_000) {
@@ -12,5 +13,6 @@ export async function runScheduledWork(budgetMs = 50_000) {
   const webhooks = await runDueWebhooks(Math.max(3_000, budgetMs - (Date.now() - started)));
   const apiLogsPurged = await purgeOldApiLogs();
   const billing = await runBillingCycle();
-  return { automations, campaigns, webhooks, apiLogsPurged, billing };
+  const social = await runDueSocialPosts().catch(() => ({ due: 0, published: 0 }));
+  return { automations, campaigns, webhooks, apiLogsPurged, billing, social };
 }

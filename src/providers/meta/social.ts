@@ -16,3 +16,21 @@ export async function sendSocialMessage(token: string, recipientId: string, text
   });
   return r.message_id ?? "";
 }
+
+/** Publishes to a Facebook Page: a photo post when there is an image URL, otherwise a text post. Returns the post id. */
+export async function publishFacebookPost(token: string, pageId: string, caption: string, imageUrl?: string) {
+  if (imageUrl) {
+    const r = await graph<{ id?: string; post_id?: string }>(`${pageId}/photos`, { token, method: "POST", body: { url: imageUrl, caption } });
+    return r.post_id ?? r.id ?? "";
+  }
+  const r = await graph<{ id?: string }>(`${pageId}/feed`, { token, method: "POST", body: { message: caption } });
+  return r.id ?? "";
+}
+
+/** Publishes an image post to an Instagram business account (create the container, then publish it). Returns the media id. */
+export async function publishInstagramPost(token: string, igUserId: string, caption: string, imageUrl: string) {
+  const c = await graph<{ id?: string }>(`${igUserId}/media`, { token, method: "POST", body: { image_url: imageUrl, caption } });
+  if (!c.id) throw new Error("Instagram did not accept the image.");
+  const r = await graph<{ id?: string }>(`${igUserId}/media_publish`, { token, method: "POST", body: { creation_id: c.id }, timeoutMs: 30_000 });
+  return r.id ?? "";
+}

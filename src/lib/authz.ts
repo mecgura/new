@@ -88,6 +88,10 @@ export const ORG_PERMISSIONS = {
   "billing:read": ["CLIENT_OWNER", "MANAGER"], // plan, usage, invoices
   "billing:manage": ["CLIENT_OWNER"], // change plan, cancel, pay
   "analytics:read": ["CLIENT_OWNER", "MANAGER"],
+  // Social media, hiring (ATS) and HR modules
+  "social:manage": ["CLIENT_OWNER", "MANAGER"], // plan, schedule and publish posts
+  "ats:manage": ["CLIENT_OWNER", "MANAGER"], // jobs and candidates
+  "hr:manage": ["CLIENT_OWNER", "MANAGER"], // employees, attendance and leave
 } as const satisfies Record<string, readonly OrgRole[]>;
 
 export type OrgPermission = keyof typeof ORG_PERMISSIONS;

@@ -181,8 +181,8 @@ describe("client lifecycle", () => {
     expect(enabled.map((s) => s.service)).toEqual(["OMNICHANNEL"]);
     expect(await db.auditLog.count({ where: { organizationId: orgId, action: "service.enabled" } })).toBe(2);
     expect(await db.auditLog.count({ where: { organizationId: orgId, action: "service.disabled", targetId: "CRM" } })).toBe(1);
-    // Services with nothing behind them yet (SMS, RCS, Social, ATS, HRMS) can't be switched on.
-    for (const key of ["SMS", "RCS", "HRMS"]) expect((await clientServices.PUT(req("/x", { method: "PUT", body: { services: { [key]: true } } }), params({ id: orgId }))).status).toBe(400);
+    // Services with nothing behind them yet (SMS, RCS) can't be switched on.
+    for (const key of ["SMS", "RCS"]) expect((await clientServices.PUT(req("/x", { method: "PUT", body: { services: { [key]: true } } }), params({ id: orgId }))).status).toBe(400);
     expect((await clientServices.PUT(req("/x", { method: "PUT", body: { services: { NOT_A_SERVICE: true } } }), params({ id: orgId }))).status).toBe(400);
   });
 

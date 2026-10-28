@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { isSuperAdmin } from "@/lib/authz";
 
-const APP_PREFIXES = ["/dashboard", "/settings", "/whatsapp", "/inbox", "/contacts", "/team", "/templates", "/campaigns", "/automations", "/lead-ads", "/channels", "/voice", "/packs", "/ads", "/flows", "/ai", "/webhooks", "/billing", "/analytics", "/onboarding"];
+const APP_PREFIXES = ["/dashboard", "/settings", "/whatsapp", "/inbox", "/contacts", "/team", "/templates", "/campaigns", "/automations", "/lead-ads", "/channels", "/voice", "/packs", "/ads", "/flows", "/ai", "/webhooks", "/billing", "/analytics", "/onboarding", "/social", "/hiring", "/hr"];
 const matches = (pathname: string, prefix: string) => pathname === prefix || pathname.startsWith(`${prefix}/`);
 
 

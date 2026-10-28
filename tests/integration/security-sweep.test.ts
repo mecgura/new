@@ -323,6 +323,8 @@ describe("5. public and secret-protected surfaces", () => {
         "/api/agreement/[token]/documents/[docId]",
         "/api/agreement/[token]/sign",
         "/api/auth/[...nextauth]",
+        "/api/careers/[orgSlug]/[jobSlug]/apply",
+        "/api/social-media/[key]",
         "/api/auth/forgot-password",
         "/api/auth/reset-password",
         "/api/automations/hooks/[aid]",
