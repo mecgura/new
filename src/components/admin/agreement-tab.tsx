@@ -97,7 +97,9 @@ export function AgreementTab({ organizationId, onChanged }: { organizationId: st
     setBusy("");
     if (!r.ok) return toast(r.error, "error");
     const parts = [r.data.log.whatsapp && `WhatsApp: ${r.data.log.whatsapp.message}`, r.data.log.email && `Email: ${r.data.log.email.message}`].filter(Boolean);
-    toast(parts.join(" · ") || "Marked as sent", r.data.log.whatsapp?.sent === false || r.data.log.email?.sent === false ? "error" : "success");
+    // Red only when nothing went out; a skipped email next to a delivered WhatsApp is fine.
+    const anySent = r.data.log.whatsapp?.sent || r.data.log.email?.sent;
+    toast(parts.join(" · ") || "Marked as sent", anySent || (!r.data.log.whatsapp && !r.data.log.email) ? "success" : "error");
     void load();
   }
 

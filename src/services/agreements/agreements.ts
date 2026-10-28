@@ -430,7 +430,7 @@ async function sendEmail(a: ClientAgreement, kind: "invite" | "signed"): Promise
         ].join("\n");
   const r = await sendMail(a.email, subject, text);
   if (r.delivered) return { sent: true, message: r.channel === "dev-log" ? "Logged (development)" : `Sent to ${a.email}` };
-  return { sent: false, message: isEmailConfigured() ? "The email service refused the message." : "Email is not set up (RESEND_API_KEY / EMAIL_FROM)." };
+  return { sent: false, message: isEmailConfigured() ? "The email service refused the message." : "Skipped — email isn't set up yet (add RESEND_API_KEY and EMAIL_FROM)." };
 }
 
 /** Sends (or re-sends) the agreement link. The status moves to "sent" even if a channel failed, so the link can be shared by hand. */
