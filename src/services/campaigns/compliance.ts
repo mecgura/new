@@ -198,6 +198,15 @@ export async function runCompliance(campaignId: string): Promise<{ report: Compl
       check("tier", "Messaging limit", "warn", `Meta lets this number start ${TIER_LIMITS[tier]} new conversations per 24 h (${tier}). Recipients above that will fail — split the campaign.`);
     }
   }
+  // 6a. Message package (MECGURA pays Meta; the plan's monthly allowance plus top-ups)
+  if (acct && !acct.isDemo && t) {
+    const { packageRemaining } = await import("@/services/billing/package");
+    const left = await packageRemaining(c.organizationId, categoryOfMessage("template", { category: t.category }));
+    if (Number.isFinite(left)) {
+      if (eligible > left) check("package", "Message package", "fail", `${eligible} messages needed but only ${left} ${t.category.toLowerCase()} messages are left in the package. Buy a top-up pack in Billing.`);
+      else check("package", "Message package", "pass", `${eligible} of ${left} ${t.category.toLowerCase()} messages left in the package will be used.`);
+    }
+  }
   // 6. Wallet (MECGURA's per-message fee; free until an admin sets a price)
   if (acct && !acct.isDemo && t) {
     const cat = categoryOfMessage("template", { category: t.category });

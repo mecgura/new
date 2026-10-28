@@ -4,12 +4,13 @@ import * as React from "react";
 import { Alert, Button, Card, CardBody, CardHeader, Field, Input, useToast } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
 
-type Mode = "client_pays" | "prepaid_wallet";
+type Mode = "client_pays" | "prepaid_wallet" | "package";
 type Rates = { marketing: number; utility: number; authentication: number };
 type Resp = { billing: { mode: Mode; markupPaise: number }; rates: Rates };
 
 const OPTIONS: { mode: Mode; title: string; text: string }[] = [
   { mode: "client_pays", title: "Client pays Meta", text: "The client adds their own card in Meta Billing on their WhatsApp Business account. Meta bills them directly. No risk for you." },
+  { mode: "package", title: "Message package", text: "Your card is on the client's WhatsApp account. The plan includes a monthly number of marketing and utility messages; extra needs a top-up pack. Set the numbers on the plan (Billing & Plans)." },
   { mode: "prepaid_wallet", title: "Prepaid wallet", text: "Your card is on the client's WhatsApp account. The client recharges the MECGURA wallet and each template message is deducted at Meta's rate + your markup." },
 ];
 const rs = (paise: number) => `₹${(paise / 100).toFixed(2)}`;
@@ -38,7 +39,7 @@ export function MetaBillingCard({ organizationId, onSaved }: { organizationId: s
     setBusy(false);
     if (!r.ok) return toast(r.error, "error");
     setData(r.data);
-    toast(mode === "prepaid_wallet" ? "Prepaid wallet on. Message prices updated." : "Client pays Meta. Wallet prices reset.");
+    toast(mode === "prepaid_wallet" ? "Prepaid wallet on. Message prices updated." : mode === "package" ? "Message package on. Messages come out of the plan allowance." : "Client pays Meta. Wallet prices reset.");
     onSaved?.();
   }
 
@@ -81,7 +82,7 @@ export function MetaBillingCard({ organizationId, onSaved }: { organizationId: s
           </div>
         ) : null}
         <div className="mt-4">
-          <Button loading={busy} onClick={() => void save()} disabled={mode === data.billing.mode && (mode === "client_pays" || m === data.billing.markupPaise)}>
+          <Button loading={busy} onClick={() => void save()} disabled={mode === data.billing.mode && (mode !== "prepaid_wallet" || m === data.billing.markupPaise)}>
             Save billing type
           </Button>
         </div>

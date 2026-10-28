@@ -96,7 +96,7 @@ export const adminDetailsSchema = clientDetailsSchema.extend({
   priceRupees: z.coerce.number().min(0).max(10_000_000).default(0),
   setupFeeRupees: z.coerce.number().min(0).max(10_000_000).default(0),
   services: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
-  billingMode: z.enum(["client_pays", "prepaid_wallet"]).default("client_pays"),
+  billingMode: z.enum(["client_pays", "prepaid_wallet", "package"]).default("client_pays"),
   startDate: z.string().trim().refine((v) => v === "" || /^\d{4}-\d{2}-\d{2}$/.test(v), "Pick a date").default(""),
   termMonths: z.coerce.number().int().min(1).max(60).default(12),
   extraTerms: optional(4000).default(""),

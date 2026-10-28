@@ -156,7 +156,7 @@ export const createClientSchema = z.object({
   status: z.enum(["active", "suspended"]).default("active"),
   services: z.array(serviceKeySchema).max(SERVICE_KEYS.length).default([]),
   /** Who pays Meta: the client's own card, or MECGURA's prepaid wallet at Meta rate + markup. */
-  metaBillingMode: z.enum(["client_pays", "prepaid_wallet"]).default("client_pays"),
+  metaBillingMode: z.enum(["client_pays", "prepaid_wallet", "package"]).default("client_pays"),
   markupRupees: z.coerce.number().min(0, "Enter 0 or more").max(100, "Too high").optional(),
   /** Create the service agreement and send its link on WhatsApp + email right away. */
   sendAgreement: z.boolean().default(false),

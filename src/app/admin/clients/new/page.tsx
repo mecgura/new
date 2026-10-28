@@ -25,7 +25,7 @@ export default function NewClientPage() {
     ownerPassword: "",
     planId: "",
     status: "active" as "active" | "suspended",
-    metaBillingMode: "client_pays" as "client_pays" | "prepaid_wallet",
+    metaBillingMode: "client_pays" as "client_pays" | "prepaid_wallet" | "package",
     markupRupees: "0.20",
   });
   const [sendAgreement, setSendAgreement] = React.useState(true);
@@ -193,6 +193,13 @@ export default function NewClientPage() {
                 onChange={() => setForm((f) => ({ ...f, metaBillingMode: "client_pays" }))}
                 label="Client pays Meta"
                 description="Client adds their own card in Meta Billing. No risk for you."
+              />
+              <Radio
+                name="metaBillingMode"
+                checked={form.metaBillingMode === "package"}
+                onChange={() => setForm((f) => ({ ...f, metaBillingMode: "package" }))}
+                label="Message package"
+                description="Your card on their WhatsApp account; the plan includes N marketing + N utility messages a month."
               />
               <Radio
                 name="metaBillingMode"

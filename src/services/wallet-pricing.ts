@@ -79,6 +79,9 @@ const short = (n: number) => `${formatINR(n)}`;
 
 /** Refuses (HTTP 402) when the wallet can't cover `count` messages of this category. Free categories always pass. */
 export async function assertCanAfford(organizationId: string, category: FeeCategory, count = 1) {
+  // Message-package clients: the plan's monthly allowance (plus top-ups) must cover the message first.
+  const { assertPackageAllows } = await import("@/services/billing/package");
+  await assertPackageAllows(organizationId, category, count);
   const fee = await feeFor(organizationId, category);
   if (fee <= 0 || count <= 0) return;
   const { balance } = await getWallet(organizationId);
@@ -92,6 +95,8 @@ export async function chargeMessage(messageId: string): Promise<"charged" | "fre
   const m = await db.message.findUnique({ where: { id: messageId }, select: { organizationId: true, type: true, payload: true, isDemo: true, direction: true } });
   if (!m || m.isDemo || m.direction !== "outbound") return "free";
   const category = categoryOfMessage(m.type, m.payload);
+  const { consumePackage } = await import("@/services/billing/package");
+  await consumePackage(m.organizationId, category).catch((e) => console.error("[package] counting failed for", messageId, e));
   const fee = await feeFor(m.organizationId, category);
   if (fee <= 0) return "free";
   try {

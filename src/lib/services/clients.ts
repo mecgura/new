@@ -49,7 +49,7 @@ export type CreateClientInput = {
   planId?: string;
   status?: "active" | "suspended";
   services?: ServiceKey[];
-  metaBillingMode?: "client_pays" | "prepaid_wallet";
+  metaBillingMode?: "client_pays" | "prepaid_wallet" | "package";
   markupRupees?: number;
 };
 
@@ -96,7 +96,7 @@ export async function createClient(actorUserId: string, input: CreateClientInput
   }
   if (plan) await audit({ action: "plan.changed", actorUserId, organizationId: orgId, targetType: "plan", targetId: plan.id, metadata: { from: null, to: plan.slug }, req });
   for (const s of services) await audit({ action: "service.enabled", actorUserId, organizationId: orgId, targetType: "service", targetId: s, req });
-  if (input.metaBillingMode === "prepaid_wallet" || input.markupRupees !== undefined) {
+  if (input.metaBillingMode === "prepaid_wallet" || input.metaBillingMode === "package" || input.markupRupees !== undefined) {
     const { setMetaBilling } = await import("@/services/billing/meta-billing");
     await setMetaBilling(orgId, { mode: input.metaBillingMode ?? "client_pays", markupRupees: input.markupRupees }, actorUserId, req);
   }

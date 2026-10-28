@@ -76,6 +76,9 @@ const planBase = z.object({
   maxAutomations: limit(0).optional(),
   maxAiReplies: limit(0).optional(),
   maxApiRequests: limit(0).optional(),
+  /** Message package: marketing and utility messages included per month (-1 unlimited, 0 none). */
+  includedMarketing: limit(0).optional(),
+  includedUtility: limit(0).optional(),
   features: z.array(z.enum(FEATURE_KEYS)).max(FEATURE_KEYS.length).optional(),
   isActive: z.boolean().optional(),
   selfServe: z.boolean().optional(),
@@ -90,6 +93,8 @@ export const planSchema = planBase.transform((v) => ({
   maxAutomations: v.maxAutomations ?? UNLIMITED,
   maxAiReplies: v.maxAiReplies ?? UNLIMITED,
   maxApiRequests: v.maxApiRequests ?? UNLIMITED,
+  includedMarketing: v.includedMarketing ?? 0,
+  includedUtility: v.includedUtility ?? 0,
   features: v.features ?? [...FEATURE_KEYS],
   isActive: v.isActive ?? true,
   selfServe: v.selfServe ?? true,

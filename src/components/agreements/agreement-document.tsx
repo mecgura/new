@@ -56,7 +56,7 @@ export function AgreementDocument({ details: d, sections, signedText, provider, 
         <Row k="Plan" v={d.planName} />
         <Row k="Fee" v={`${d.pricePaise ? `${formatINR(d.pricePaise)}/month + GST` : ""}${d.setupFeePaise ? ` · setup ${formatINR(d.setupFeePaise)}` : ""}`} />
         <Row k="Services" v={d.services.join(", ")} />
-        <Row k="Meta charges" v={d.billingMode === "prepaid_wallet" ? "Paid from MECGURA prepaid wallet" : "Paid by the client directly to Meta"} />
+        <Row k="Meta charges" v={d.billingMode === "prepaid_wallet" ? "Paid from MECGURA prepaid wallet" : d.billingMode === "package" ? "Included in the MECGURA package" : "Paid by the client directly to Meta"} />
       </dl>
       <div className="mt-6 space-y-5">
         {sections

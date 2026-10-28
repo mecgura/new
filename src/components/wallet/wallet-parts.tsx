@@ -8,7 +8,7 @@ import { formatINR } from "@/lib/catalog";
 
 export type WalletView = { balance: number; currency: string; lowBalanceThreshold: number; low: boolean };
 export type WalletEntry = { id: string; direction: "credit" | "debit"; amount: number; balanceAfter: number; reason: string; note: string; reference: string; createdAt: string; createdBy: string | null };
-export type WalletData = { wallet: WalletView; prices?: Record<"marketing" | "utility" | "authentication" | "service", number>; billingMode?: "client_pays" | "prepaid_wallet"; entries: WalletEntry[]; total: number; page: number; pageSize: number };
+export type WalletData = { wallet: WalletView; prices?: Record<"marketing" | "utility" | "authentication" | "service", number>; billingMode?: "client_pays" | "prepaid_wallet" | "package"; entries: WalletEntry[]; total: number; page: number; pageSize: number };
 
 const dateTime = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 const REASONS: Record<string, string> = { topup: "Credit added", correction: "Correction", usage: "Message usage", refund: "Refund" };

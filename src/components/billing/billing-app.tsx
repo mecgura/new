@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowDownRight, ArrowUpRight, Check, CreditCard, FileText, Gauge, Receipt, Wallet } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Check, CreditCard, FileText, Gauge, Receipt, Wallet, MessageSquareText } from "lucide-react";
 import {
   Alert,
   Badge,
@@ -29,6 +29,7 @@ import {
   type BadgeTone,
 } from "@/components/ds";
 import { cn } from "@/lib/utils";
+import { PackagePanel } from "@/components/billing/package-panel";
 import { apiFetch } from "@/lib/client-api";
 import { formatINR, formatNumber } from "@/lib/catalog";
 import { LIMIT_META, limitLabel, type PlanLimits } from "@/lib/plans";
@@ -72,6 +73,7 @@ const INV_STATUS: Record<string, { label: string; tone: BadgeTone }> = {
 };
 const TABS = [
   { id: "plan", label: "Plan", icon: CreditCard },
+  { id: "package", label: "Message package", icon: MessageSquareText },
   { id: "usage", label: "Usage", icon: Gauge },
   { id: "invoices", label: "Invoices", icon: Receipt },
   { id: "wallet", label: "Wallet", icon: Wallet },
@@ -117,6 +119,7 @@ export function BillingApp({ orgId, canManage, initialTab }: { orgId: string; ca
         ))}
       </nav>
       {tab === "plan" ? <PlanTab base={base} data={data} canManage={canManage} reload={load} onOpenInvoices={() => setTab("invoices")} /> : null}
+      {tab === "package" ? <PackagePanel orgId={orgId} canManage={canManage} onWallet={() => setTab("wallet")} /> : null}
       {tab === "usage" ? <UsageTab base={base} /> : null}
       {tab === "wallet" ? <WalletTab orgId={orgId} base={base} data={data} canManage={canManage} reload={load} /> : null}
       {tab === "invoices" ? <InvoicesTab base={base} data={data} canManage={canManage} reload={load} /> : null}

@@ -9,10 +9,12 @@ import { setPrices, type FeeCategory } from "@/services/wallet-pricing";
  * Who pays Meta for a client's WhatsApp messages.
  * - client_pays: the client's own card is on their WhatsApp Business account; Meta bills them. The wallet only holds
  *   MECGURA's own service fees (if any).
+ * - package: MECGURA's card is on the client's account and the plan includes a monthly number of marketing and utility
+ *   messages (plus top-ups). No per-message wallet charge; sending stops when the allowance is used.
  * - prepaid_wallet: MECGURA's card is on the client's account. The client recharges the MECGURA wallet and each
  *   template message is charged at Meta's rate plus a markup, so MECGURA recovers what Meta bills it.
  */
-export const META_BILLING_MODES = ["client_pays", "prepaid_wallet"] as const;
+export const META_BILLING_MODES = ["client_pays", "prepaid_wallet", "package"] as const;
 export type MetaBillingMode = (typeof META_BILLING_MODES)[number];
 
 export const metaBillingSchema = z.object({

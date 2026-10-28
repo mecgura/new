@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/client-api";
 import { formatINR } from "@/lib/catalog";
 import { FeeEditor } from "@/components/wallet/fee-editor";
 import { MetaBillingCard } from "@/components/wallet/meta-billing-card";
+import { AdminPackageCard } from "@/components/admin/package-admin";
 import { WalletBalance, WalletLedger, WalletLoading, useWallet } from "@/components/wallet/wallet-parts";
 
 /** Super Admin: add money received from the client, take back a mistaken credit, set the low-balance alert. */
@@ -90,6 +91,7 @@ export function AdminWallet({ organizationId }: { organizationId: string }) {
         </CardBody>
       </Card>
       <MetaBillingCard organizationId={organizationId} onSaved={() => setFeesKey((k) => k + 1)} />
+      <AdminPackageCard organizationId={organizationId} refreshKey={feesKey} />
       <FeeEditor key={feesKey} url={`${url}/prices`} scope="client" />
       <WalletLedger data={data} onPage={setPage} />
       <ConfirmationDialog

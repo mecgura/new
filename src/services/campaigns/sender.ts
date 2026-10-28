@@ -69,11 +69,19 @@ export async function processCampaign(campaignId: string, budgetMs = 50_000): Pr
   // MECGURA's per-message fee: sending stops (paused, nothing lost) when the wallet can't cover the next message.
   const fee = acct.isDemo ? 0 : await feeFor(c.organizationId, categoryOfMessage("template", { category: t.category }));
   let funds = fee > 0 ? (await getWallet(c.organizationId)).balance : Infinity;
+  // Message package: how many of this category are left this month (Infinity when not on a package).
+  const { packageRemaining } = await import("@/services/billing/package");
+  let pkgLeft = acct.isDemo ? Infinity : await packageRemaining(c.organizationId, categoryOfMessage("template", { category: t.category }));
 
   while (Date.now() - started < budgetMs) {
     const batch = await db.campaignRecipient.findMany({ where: { campaignId, status: "queued" }, orderBy: { createdAt: "asc" }, take: BATCH });
     if (!batch.length) break;
     for (const r of batch) {
+      if (pkgLeft <= 0) {
+        await stop(c.id, c.organizationId, "paused", "Your message package for this month is used up. Buy a top-up pack in Billing, then resume the campaign.");
+        publish(c.organizationId, { type: "campaign.updated", campaignId: c.id });
+        return { ...tally, done: false };
+      }
       if (fee > 0 && funds < fee) {
         await stop(c.id, c.organizationId, "paused", "Wallet balance is too low to send the next message. Add credit, then resume the campaign.");
         publish(c.organizationId, { type: "campaign.updated", campaignId: c.id });
@@ -118,6 +126,7 @@ export async function processCampaign(campaignId: string, budgetMs = 50_000): Pr
         if (acct.isDemo && acct.phoneRecordId) await db.phoneNumber.update({ where: { id: acct.phoneRecordId }, data: { messagesSent: { increment: 1 } } });
         tally.sent++;
         if (fee > 0) funds -= fee;
+        pkgLeft -= 1;
       } else {
         await db.campaignRecipient.update({ where: { id: r.id }, data: { status: "failed", failedAt: now, error: sent.error } });
         tally.failed++;

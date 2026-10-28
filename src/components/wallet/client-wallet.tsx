@@ -34,7 +34,9 @@ export function ClientWallet({ orgId, canTopUp = false, onTopUp, busy = false }:
         </Card>
       ) : null}
       <Alert tone="info" title="About your wallet">
-        {data.billingMode === "prepaid_wallet"
+        {data.billingMode === "package"
+          ? "WhatsApp messages come out of your monthly message package (see Billing → Message package). The wallet pays for top-up packs and any MECGURA service fees. "
+          : data.billingMode === "prepaid_wallet"
           ? "Your WhatsApp message charges are paid from this wallet: each template message is deducted at the rate shown, which includes Meta's charge. Keep a balance so campaigns and replies are not paused. "
           : "The wallet holds prepaid MECGURA service credit. WhatsApp message charges made by Meta are billed by Meta to the payment method on your own WhatsApp Business account. "}
         {canTopUp ? "You can add credit online above, or pay MECGURA directly and it will be added here" : "To add credit, pay MECGURA and it will be added here"}

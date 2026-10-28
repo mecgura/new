@@ -341,6 +341,7 @@ function DetailsEditor({ agreement: a, onSaved }: { agreement: Agreement; onSave
             <Select value={form.billingMode} onChange={set("billingMode")}>
               <option value="client_pays">Client pays Meta</option>
               <option value="prepaid_wallet">Prepaid wallet</option>
+              <option value="package">Message package</option>
             </Select>
           </Field>
           <Field id="adm-start" label="Start date" error={errors.startDate}>

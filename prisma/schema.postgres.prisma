@@ -220,6 +220,9 @@ model Plan {
   maxAutomations     Int      @default(-1)
   maxAiReplies       Int      @default(-1)
   maxApiRequests     Int      @default(-1)
+  // WhatsApp message package (billing type "package"): Meta-paid messages included each month. -1 = unlimited, 0 = none.
+  includedMarketing  Int      @default(0)
+  includedUtility    Int      @default(0) // utility + authentication
   features           String   @default("[\"campaigns\",\"automations\",\"flows\",\"ai_agent\",\"api\",\"webhooks\",\"analytics\"]") // JSON array of feature keys
   isActive           Boolean  @default(true)
   selfServe          Boolean  @default(true) // false = clients can't pick it themselves ("contact sales"); the admin can still assign it
@@ -287,6 +290,10 @@ model OrganizationSettings {
   // (MECGURA pays Meta and charges the client's wallet Meta's rate plus a markup).
   metaBillingMode    String   @default("client_pays")
   prepaidMarkupPaise Int      @default(20)
+  // Message package top-ups bought on top of the plan (used after the monthly allowance; they don't expire).
+  creditMarketing    Int      @default(0)
+  creditUtility      Int      @default(0)
+  packageAlerts      String   @default("{}") // JSON: usage alerts already sent this month
   updatedAt         DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)

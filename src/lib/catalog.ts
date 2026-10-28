@@ -37,7 +37,7 @@ export const CONNECTION_METHOD_LABELS: Record<string, string> = {
   demo: "Demo",
 };
 
-export const USAGE_METRICS = ["messages_sent", "contacts_created", "ai_replies", "api_calls", "campaigns_launched"] as const; // ai_replies: live (Claude) replies only
+export const USAGE_METRICS = ["messages_sent", "contacts_created", "ai_replies", "api_calls", "campaigns_launched", "pkg_marketing", "pkg_utility"] as const; // ai_replies: live (Claude) replies only
 export type UsageMetric = (typeof USAGE_METRICS)[number];
 
 export const WHATSAPP_STATUS_LABELS: Record<string, string> = {

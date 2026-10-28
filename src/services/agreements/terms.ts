@@ -93,7 +93,12 @@ export function agreementSections(d: AgreementDetails, p: Provider): Section[] {
     },
     {
       heading: "5. WhatsApp (Meta) message charges",
-      body: prepaid
+      body: d.billingMode === "package"
+        ? [
+            "Meta charges for WhatsApp messages are paid by MECGURA. The Client's plan includes a fixed number of marketing and utility (including authentication) messages each calendar month, as shown on the plan and in the dashboard. Replies sent within 24 hours of a customer's message are not counted.",
+            "Unused messages do not carry forward to the next month. When the monthly allowance is used up, further messages are paused until the Client buys a top-up pack or the next month starts. Top-up packs do not expire. If Meta raises its rates, MECGURA may revise the package with 30 days' notice.",
+          ]
+        : prepaid
         ? [
             "Meta charges for WhatsApp template messages are paid by MECGURA and recovered from the Client's prepaid MECGURA wallet. Each message is deducted at the rate shown in the Client's wallet, which includes Meta's charge and MECGURA's handling fee.",
             "The Client keeps enough balance in the wallet. When the balance is too low, messages are paused until the wallet is recharged. If Meta changes its rates, the wallet rates change from the next message and the new rates are shown in the dashboard. Unused balance is refunded on termination, after settling dues.",

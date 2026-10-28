@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, CreditCard, FileText, IndianRupee, Pencil, Plus, Receipt, Settings2, Trash2, Users, Wallet } from "lucide-react";
+import { AlertTriangle, CreditCard, FileText, IndianRupee, Pencil, Plus, Receipt, Settings2, Trash2, Users, Wallet, Package } from "lucide-react";
 import {
   Alert,
   Badge,
@@ -34,6 +34,7 @@ import {
   type BadgeTone,
 } from "@/components/ds";
 import { cn } from "@/lib/utils";
+import { PackagesAdminTab } from "@/components/admin/package-admin";
 import { apiFetch } from "@/lib/client-api";
 import { formatINR, formatNumber } from "@/lib/catalog";
 import { FEATURES, FEATURE_KEYS, LIMIT_META, limitLabel, parseFeatures, type FeatureKey, type PlanLimits } from "@/lib/plans";
@@ -54,6 +55,8 @@ type Plan = {
   maxCampaigns: number;
   maxAutomations: number;
   maxAiReplies: number;
+  includedMarketing: number;
+  includedUtility: number;
   maxApiRequests: number;
   features: string;
   isActive: boolean;
@@ -79,6 +82,7 @@ const TABS = [
   { id: "invoices", label: "Invoices", icon: Receipt },
   { id: "payments", label: "Payments", icon: AlertTriangle },
   { id: "fees", label: "Message fees", icon: IndianRupee },
+  { id: "packages", label: "Message packages", icon: Package },
   { id: "settings", label: "Settings", icon: Settings2 },
 ] as const;
 const INV_TONE: Record<string, BadgeTone> = { paid: "success", open: "warning", overdue: "danger", payment_failed: "danger", void: "neutral" };
@@ -100,6 +104,7 @@ export default function AdminBillingPage() {
       {tab === "invoices" ? <InvoicesTab /> : null}
       {tab === "payments" ? <PaymentsTab /> : null}
       {tab === "fees" ? <FeeEditor url="/api/admin/wallet-prices" scope="default" /> : null}
+      {tab === "packages" ? <PackagesAdminTab /> : null}
       {tab === "settings" ? <SettingsTab /> : null}
     </>
   );
@@ -362,7 +367,7 @@ function PlansTab() {
 }
 
 type Form = { name: string; slug: string; description: string; priceMonthly: string; sortOrder: string; isActive: boolean; selfServe: boolean; features: FeatureKey[] } & Record<string, string | boolean | FeatureKey[]>;
-const EMPTY: Form = { name: "", slug: "", description: "", priceMonthly: "0", sortOrder: "0", isActive: true, selfServe: true, features: [...FEATURE_KEYS], maxUsers: "3", maxWhatsAppNumbers: "1", maxMonthlyMessages: "1000", maxContacts: "1000", maxCampaigns: "5", maxAutomations: "3", maxAiReplies: "0", maxApiRequests: "0" };
+const EMPTY: Form = { name: "", slug: "", description: "", priceMonthly: "0", sortOrder: "0", isActive: true, selfServe: true, features: [...FEATURE_KEYS], maxUsers: "3", maxWhatsAppNumbers: "1", maxMonthlyMessages: "1000", maxContacts: "1000", maxCampaigns: "5", maxAutomations: "3", maxAiReplies: "0", maxApiRequests: "0", includedMarketing: "0", includedUtility: "0" };
 
 function PlanModal({ plan, onClose, onSaved }: { plan: Plan | "new" | null; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
@@ -376,7 +381,7 @@ function PlanModal({ plan, onClose, onSaved }: { plan: Plan | "new" | null; onCl
     setErrors({});
     setForm(
       plan && plan !== "new"
-        ? { ...EMPTY, name: plan.name, slug: plan.slug, description: plan.description, priceMonthly: String(plan.priceMonthly / 100), sortOrder: String(plan.sortOrder), isActive: plan.isActive, selfServe: plan.selfServe, features: parseFeatures(plan.features), ...Object.fromEntries(LIMIT_FIELDS.map((f) => [f, String(plan[f])])) }
+        ? { ...EMPTY, name: plan.name, slug: plan.slug, description: plan.description, priceMonthly: String(plan.priceMonthly / 100), sortOrder: String(plan.sortOrder), isActive: plan.isActive, selfServe: plan.selfServe, features: parseFeatures(plan.features), ...Object.fromEntries(LIMIT_FIELDS.map((f) => [f, String(plan[f])])), includedMarketing: String(plan.includedMarketing ?? 0), includedUtility: String(plan.includedUtility ?? 0) }
         : EMPTY
     );
   }
@@ -424,6 +429,14 @@ function PlanModal({ plan, onClose, onSaved }: { plan: Plan | "new" | null; onCl
           <legend className="mb-2 text-small font-medium text-app-text">Limits <span className="font-normal text-app-subtle">(-1 = unlimited)</span></legend>
           <div className="grid gap-4 sm:grid-cols-3">
             {(Object.keys(LIMIT_META) as (keyof PlanLimits)[]).map((k) => num(LIMIT_META[k].field, `${LIMIT_META[k].label} (${LIMIT_META[k].per})`))}
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend className="mb-1 text-small font-medium text-app-text">Message package <span className="font-normal text-app-subtle">(for clients on the &quot;Message package&quot; billing type; 0 = none, -1 = unlimited)</span></legend>
+          <p className="mb-2 text-caption text-app-subtle">Meta-paid WhatsApp messages included every month. Marketing costs you about ₹0.78 each, utility about ₹0.12, replies within 24 h are free.</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {num("includedMarketing", "Included marketing messages / month")}
+            {num("includedUtility", "Included utility messages / month")}
           </div>
         </fieldset>
         <fieldset>
