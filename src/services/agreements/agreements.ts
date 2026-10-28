@@ -472,6 +472,9 @@ async function byToken(token: string) {
 export type PublicAgreement = Awaited<ReturnType<typeof publicAgreement>>;
 
 /** What the client sees. Marks the first view. A replaced agreement points to nothing (the client gets the new link). */
+const PUBLIC_DETAIL_KEYS = ["number", "version", "businessName", "businessType", "contactName", "designation", "phone", "email", "address", "city", "state", "pincode", "gstin", "pan", "planName", "pricePaise", "setupFeePaise", "services", "billingMode", "startDate", "termMonths", "extraTerms"] as const satisfies readonly (keyof AgreementDetails)[];
+const publicDetails = (d: AgreementDetails) => Object.fromEntries(PUBLIC_DETAIL_KEYS.map((k) => [k, d[k]])) as Pick<AgreementDetails, (typeof PUBLIC_DETAIL_KEYS)[number]>;
+
 export async function publicAgreement(token: string, markViewed = true) {
   const a = await byToken(token);
   if (markViewed && !a.viewedAt && a.status === "sent") await db.clientAgreement.update({ where: { id: a.id }, data: { viewedAt: new Date() } });
@@ -480,7 +483,8 @@ export async function publicAgreement(token: string, markViewed = true) {
     number: v.number,
     version: v.version,
     status: v.status,
-    details: v.details,
+    // Only the agreement's own fields: never internal ids, the token, the send log or the signer's IP/device.
+    details: publicDetails(v.details),
     sections: v.sections,
     signedText: v.signedText,
     provider: v.provider,
