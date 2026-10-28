@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type * as React from "react";
 import Link from "next/link";
+import { RotatingWord } from "@/components/marketing/rotating-word";
 import { BadgeCheck, Bot, Camera, Check, CheckCheck, Globe, Mail, Megaphone, MessageCircle, MessagesSquare, Phone, Plug, Smartphone, Sparkles, Workflow } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
@@ -116,7 +117,16 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
           <div>
             <p className="wa-pill"><BadgeCheck className="size-3.5" aria-hidden="true" /> Official WhatsApp Business Platform</p>
             <h1 className="mt-5 font-display text-4xl font-bold leading-[1.1] sm:text-5xl lg:text-6xl">
-              Talk to your customers where they already are.
+              Talk to your customers on{" "}
+              <RotatingWord
+                items={[
+                  { word: "WhatsApp.", color: "#128c4a" },
+                  { word: "Instagram.", color: "#c13584" },
+                  { word: "Messenger.", color: "#0866ff" },
+                  { word: "email.", color: "#b45309" },
+                  { word: "your website.", color: "#7c3aed" },
+                ]}
+              />
             </h1>
             <p className="wa-muted mt-5 max-w-xl text-lg">
               WhatsApp, Instagram, Messenger, email and website chat land in one inbox. Your team replies together, campaigns stay compliant and an AI agent helps after hours.

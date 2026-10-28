@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { clientIp, ApiError } from "@/lib/api";
 import { ingestWebhook, MAX_WEBHOOK_BYTES, verifyWebhookSubscription } from "@/services/whatsapp";
+import { tickSoon } from "@/services/scheduler-tick";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ export async function POST(req: Request) {
       console.warn(`[webhook:meta] rejected ${result.status}: ${result.error}`);
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
+    tickSoon();
     console.info(`[webhook:meta] accepted received=${result.received} duplicates=${result.duplicates}`);
     // 200 quickly so Meta doesn't retry; processing already happened idempotently.
     return NextResponse.json({ received: result.received, duplicates: result.duplicates });

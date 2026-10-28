@@ -7,7 +7,9 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createClient() {
-  const url = process.env.DATABASE_URL ?? "file:./dev.db";
+  // sslmode=require/prefer already behave as verify-full in pg; saying so explicitly keeps that behaviour and stops
+  // pg's deprecation warning on every cold start.
+  const url = (process.env.DATABASE_URL ?? "file:./dev.db").replace(/([?&]sslmode=)(require|prefer|verify-ca)\b/, "$1verify-full");
   // Production (PostgreSQL, e.g. Neon/Supabase) vs local dev (SQLite) —
   // picked automatically from the DATABASE_URL scheme.
   const adapter = url.startsWith("postgres")

@@ -86,7 +86,7 @@ export function ContactProfile({ orgId, contactId, perms, accounts }: { orgId: s
       <PageHeader
         breadcrumb={[{ label: "Contacts", href: "/contacts" }, { label: c.name || c.phone }]}
         title={c.name || c.phone}
-        description={<span className="flex flex-wrap items-center gap-2"><span className="font-mono">{c.phone}</span><Badge tone={consentInfo.tone} dot>{consentInfo.label}</Badge>{c.suppressed ? <Badge tone="danger">Suppressed</Badge> : null}</span>}
+        description={<span className="flex flex-wrap items-center gap-2"><span className="break-all font-mono">{c.phone}</span><Badge tone={consentInfo.tone} dot>{consentInfo.label}</Badge>{c.suppressed ? <Badge tone="danger">Suppressed</Badge> : null}</span>}
         actions={perms["contacts:delete"] ? <Button variant="ghost" onClick={() => setDeleteOpen(true)} aria-label="Delete contact"><Trash2 aria-hidden="true" /></Button> : null}
       />
       <div className="grid gap-4 xl:grid-cols-3">

@@ -397,3 +397,31 @@ html[data-inbox-focus="1"] .app-sidebar { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .fest-bar::after, .fest-pop { animation: none; }
 }
+
+/* Rotating word in a heading (src/components/marketing/rotating-word.tsx). */
+.rotating-word {
+  display: inline-grid;
+  vertical-align: bottom;
+  overflow: hidden;
+  padding-bottom: 0.08em;
+}
+.rotating-word > [data-state] {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s ease, filter 0.5s ease;
+}
+.rotating-word > [data-state="out"] {
+  opacity: 0;
+  transform: translateY(-0.9em);
+  filter: blur(4px);
+}
+.rotating-word > [data-state="in"] {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rotating-word > [data-state] {
+    transition: none;
+  }
+}

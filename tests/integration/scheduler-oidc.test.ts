@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { generateKeyPairSync, sign } from "node:crypto";
+import { db } from "@/lib/db";
 import * as cron from "@/app/api/cron/campaigns/route";
 
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -35,5 +36,17 @@ describe("scheduler called by the GitHub Actions workflow", () => {
     const forged = token(good()).split(".");
     forged[2] = b64u("not-a-signature");
     expect((await call(forged.join("."))).status).toBe(401);
+  });
+});
+
+describe("backup scheduler tick", () => {
+  it("only one instance claims a tick per minute", async () => {
+    const { claimTick } = await import("@/services/scheduler-tick");
+    await db.siteSetting.deleteMany({ where: { key: "scheduler:lastTick" } });
+    const now = Date.now();
+    expect(await claimTick(now)).toBe(true);
+    expect(await claimTick(now + 1_000)).toBe(false);
+    // A minute after the last claim, the next tick can run.
+    expect(await claimTick(now + 2 * 60_000)).toBe(true);
   });
 });

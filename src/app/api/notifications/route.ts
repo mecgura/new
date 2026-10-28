@@ -3,11 +3,13 @@ import { handle, ok, readQuery } from "@/lib/api";
 import { requireUser } from "@/lib/session";
 import { paginationSchema } from "@/lib/validations";
 import { listNotifications, markAllRead } from "@/lib/notifications";
+import { tickSoon } from "@/services/scheduler-tick";
 
 const querySchema = paginationSchema.extend({ unread: z.enum(["1", "0"]).optional() });
 
 export const GET = handle(async (req) => {
   const user = await requireUser();
+  tickSoon();
   const q = readQuery(req, querySchema);
   const data = await listNotifications(user.id, { page: q.page, pageSize: q.pageSize, unreadOnly: q.unread === "1" });
   return ok({ ...data, page: q.page, pageSize: q.pageSize });
