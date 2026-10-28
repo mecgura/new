@@ -118,7 +118,7 @@ describe("client agreements", () => {
     expect(signed.signedText).toContain("Ludhiana, Punjab");
     // The public link shows the agreement (whose accepted text records the IP), never the stored device, internal ids, the token or the send log.
     const view = JSON.stringify((await json(await pub.GET(req("/x"), params({ token })))).body);
-    for (const leak of ["TestPhone", "signerIp", a.organizationId, "sendLog", "createdById", `"token"`]) expect(view).not.toContain(leak);
+    for (const leak of ["TestPhone", "signerIp", signed.organizationId, "sendLog", "createdById", `"token"`]) expect(view).not.toContain(leak);
     expect(view).toContain("Ravi Traders");
     // Locked after signing.
     expect((await pub.PUT(req("/x", { method: "PUT", body: base }), params({ token }))).status).toBe(409);
