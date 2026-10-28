@@ -20,7 +20,7 @@ let owner: Awaited<ReturnType<typeof makeUser>>;
 let agent: Awaited<ReturnType<typeof makeUser>>;
 let accountId: string;
 let wabaId: string;
-const fest: Festival = { id: "testfest-x", name: "Testival", emoji: "🪔", start: inDays(10), days: 1, greeting: "", offer: "", offerCode: "", effect: "fireworks", showOnSite: true, showToClients: true, hasPhoto: false };
+const fest: Festival = { id: "testfest-x", name: "Testival", emoji: "🪔", start: inDays(10), days: 1, greeting: "", offer: "", offerCode: "", effect: "fireworks", showOnSite: true, showToClients: true, hasPhoto: false, leadDays: 3, discountPercent: 10, applyToPlans: true, theme: "auto" };
 
 beforeAll(async () => {
   const org = await makeOrg("Festival Shop");

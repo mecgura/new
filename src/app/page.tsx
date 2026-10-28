@@ -9,8 +9,9 @@ import { formatINR, formatNumber } from "@/lib/catalog";
 import { FEATURES, isUnlimited, parseFeatures } from "@/lib/plans";
 import { Logo } from "@/components/layout/logo";
 import { getHomeContent } from "@/services/site/home-content";
-import { activeFestival, festivalEnd, getFestivals, istToday } from "@/services/site/festivals";
+import { festivalPromo, festivePrice, getFestivals, istToday } from "@/services/site/festivals";
 import { FestivalSiteBanner } from "@/components/festival/festival-banner";
+import { FestivalPromoBar, FestivalPromoPopup, FestivePriceTag, type PublicPromo } from "@/components/festival/festival-promo";
 import { FestivalCalendar } from "@/components/festival/festival-calendar";
 import { FloatingChat } from "@/components/home/floating-chat";
 import { ScrollReveal } from "@/components/home/scroll-reveal";
@@ -65,14 +66,21 @@ const wa = (text: string) => `https://wa.me/${whatsappDigits}?text=${encodeURICo
 export default async function Landing() {
   const [plans, session, content, festivals] = await Promise.all([loadPlans(), auth().catch(() => null), getHomeContent(), getFestivals()]);
   const today = istToday();
-  const festival = activeFestival(festivals, "site", today);
+  const promo = festivalPromo(festivals, today);
+  const festival = promo?.festival ?? null;
+  const dateLabel = (iso: string) => endsFmt.format(new Date(`${iso}T00:00:00Z`));
+  const publicPromo: PublicPromo | null = promo
+    ? { id: promo.festival.id, name: promo.festival.name, emoji: promo.festival.emoji, phase: promo.phase, offer: promo.offer, offerCode: promo.festival.offerCode, discountPercent: promo.festival.discountPercent, startsOn: promo.startsOn, endsOn: promo.endsOn, startLabel: dateLabel(promo.startsOn), endLabel: dateLabel(promo.endsOn) }
+    : null;
+  const planDiscount = promo && promo.festival.applyToPlans && promo.festival.discountPercent > 0 ? promo.festival.discountPercent : 0;
   const calendar = festivals.enabled ? festivals.festivals.filter((x) => x.showOnSite).map((x) => ({ id: x.id, name: x.name, emoji: x.emoji, start: x.start, days: x.days })) : [];
   const signedIn = Boolean(session?.user);
   const appHref = signedIn ? "/dashboard" : "/login";
   return (
-    <div className="wa-root min-h-dvh overflow-x-hidden">
+    <div className="wa-root min-h-dvh overflow-x-hidden" data-festival-theme={promo && promo.theme !== "none" ? promo.theme : undefined}>
       <ScrollReveal />
       <header className="wa-topbar sticky top-0 z-30">
+        {publicPromo ? <FestivalPromoBar promo={publicPromo} whatsapp={whatsappDigits} /> : null}
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
           <Logo />
           <nav aria-label="Main" className="flex items-center gap-1 sm:gap-2">
@@ -89,7 +97,7 @@ export default async function Landing() {
         {festival ? (
           <FestivalSiteBanner
             whatsapp={whatsappDigits}
-            festival={{ ...festival, photoUrl: festival.hasPhoto ? `/api/festival-photo/${festival.id}` : null, endsLabel: endsFmt.format(new Date(`${festivalEnd(festival)}T00:00:00Z`)) }}
+            festival={{ ...festival, offer: promo?.offer ?? festival.offer, phase: promo?.phase, startLabel: publicPromo?.startLabel, photoUrl: festival.hasPhoto ? `/api/festival-photo/${festival.id}` : null, endsLabel: publicPromo?.endLabel ?? "" }}
           />
         ) : null}
         <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 pb-16 pt-10 lg:grid-cols-2 lg:pt-16">
@@ -237,12 +245,23 @@ export default async function Landing() {
                 <div key={p.id} data-reveal style={{ "--d": `${i * 0.07}s` } as React.CSSProperties} className={`wa-card flex flex-col p-6 ${plans.length >= 3 && i === 1 ? "!border-[#128c7e] ring-2 ring-[#128c7e]/30" : ""}`}>
                   {plans.length >= 3 && i === 1 ? <span className="wa-pill mb-3 self-start">Recommended</span> : null}
                   <h3 className="text-lg font-bold">{p.name}</h3>
-                  <p className="mt-2 font-display text-4xl font-bold">
-                    {p.selfServe ? formatINR(p.priceMonthly) : "Custom"}
-                    {p.selfServe ? <span className="wa-muted text-small font-medium"> / month</span> : null}
-                  </p>
+                  {p.selfServe && planDiscount && p.priceMonthly > 0 && festival ? (
+                    <div className="mt-2">
+                      <FestivePriceTag percent={planDiscount} name={festival.name} />
+                      <p className="mt-2 font-display text-4xl font-bold">
+                        {formatINR(festivePrice(p.priceMonthly, planDiscount))}
+                        <span className="wa-muted text-small font-medium"> / month</span>
+                      </p>
+                      <p className="wa-muted text-small"><s>{formatINR(p.priceMonthly)}</s> · festive price till {publicPromo?.endLabel}</p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 font-display text-4xl font-bold">
+                      {p.selfServe ? formatINR(p.priceMonthly) : "Custom"}
+                      {p.selfServe ? <span className="wa-muted text-small font-medium"> / month</span> : null}
+                    </p>
+                  )}
                   <p className="wa-muted mt-1 text-small">{p.description}</p>
-                  <a href={wa(`Hi MECGURA, I am interested in the ${p.name} plan.`)} className="wa-btn wa-btn-ghost mt-5 !min-h-11 w-full text-small">
+                  <a href={wa(`Hi MECGURA, I am interested in the ${p.name} plan${planDiscount && festival ? ` with the ${festival.name} offer${festival.offerCode ? ` (${festival.offerCode})` : ""}` : ""}.`)} className="wa-btn wa-btn-ghost mt-5 !min-h-11 w-full text-small">
                     {p.selfServe ? "Get started" : "Talk to us"}
                   </a>
                   <ul className="mt-5 space-y-2 text-small">
@@ -302,6 +321,7 @@ export default async function Landing() {
           </nav>
         </div>
       </footer>
+      {publicPromo ? <FestivalPromoPopup promo={publicPromo} whatsapp={whatsappDigits} /> : null}
       <FloatingChat digits={whatsappDigits} />
     </div>
   );

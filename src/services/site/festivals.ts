@@ -22,6 +22,21 @@ export const EFFECT_LABELS: Record<FestivalEffect, string> = {
   none: "No effect",
 };
 
+/** Colour theme the public website switches to while a festival offer runs. */
+export const FESTIVAL_THEMES = ["auto", "gold", "saffron", "maroon", "holi", "winter", "green", "tricolour", "none"] as const;
+export type FestivalTheme = (typeof FESTIVAL_THEMES)[number];
+export const THEME_LABELS: Record<FestivalTheme, string> = {
+  auto: "Automatic (from the festival)",
+  gold: "Gold & diya glow (Diwali, Gurpurab, Lohri)",
+  saffron: "Saffron (Dussehra, Vaisakhi)",
+  maroon: "Maroon & rose (Karwa Chauth, Rakhi)",
+  holi: "Holi colours",
+  winter: "Winter blue (Christmas, New Year)",
+  green: "Crescent green (Eid)",
+  tricolour: "Tricolour (Republic / Independence Day)",
+  none: "Keep the normal website colours",
+};
+
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-11-08.");
 
 export const festivalSchema = z.object({
@@ -37,14 +52,21 @@ export const festivalSchema = z.object({
   showOnSite: z.boolean().default(true),
   showToClients: z.boolean().default(true),
   hasPhoto: z.boolean().default(false),
+  /** Days before the festival the website offer starts (pre-festival advertising). */
+  leadDays: z.coerce.number().int().min(0).max(14).default(3),
+  /** Festive discount on MECGURA plans, shown on the website. 0 = no discount. */
+  discountPercent: z.coerce.number().int().min(0).max(90).default(10),
+  /** Show the discounted price on the pricing cards. */
+  applyToPlans: z.boolean().default(true),
+  theme: z.enum(FESTIVAL_THEMES).default("auto"),
 });
 export type Festival = z.infer<typeof festivalSchema>;
 
 export const festivalsSchema = z.object({ enabled: z.boolean(), festivals: z.array(festivalSchema).max(60) });
 export type FestivalSettings = z.infer<typeof festivalsSchema>;
 
-const f = (id: string, name: string, emoji: string, start: string, days: number, effect: FestivalEffect, greeting: string): Festival => ({
-  id, name, emoji, start, days, effect, greeting, offer: "", offerCode: "", showOnSite: true, showToClients: true, hasPhoto: false,
+const f = (id: string, name: string, emoji: string, start: string, days: number, effect: FestivalEffect, greeting: string, discountPercent = 10, offerCode = ""): Festival => ({
+  id, name, emoji, start, days, effect, greeting, offer: "", offerCode, showOnSite: true, showToClients: true, hasPhoto: false, leadDays: 3, discountPercent, applyToPlans: true, theme: "auto",
 });
 
 /** Starting list. Dates of lunar festivals are approximate: check them once in the admin panel. */
@@ -53,11 +75,11 @@ export const DEFAULT_FESTIVALS: FestivalSettings = {
   festivals: [
     f("dussehra-2026", "Dussehra", "🏹", "2026-10-20", 1, "fireworks", "Wishing you a Dussehra full of victory, courage and new beginnings."),
     f("karwa-chauth-2026", "Karwa Chauth", "🌕", "2026-10-29", 1, "petals", "Wishing you love, togetherness and blessings this Karwa Chauth."),
-    f("dhanteras-2026", "Dhanteras", "🪙", "2026-11-06", 1, "diyas", "May this Dhanteras bring wealth, health and prosperity to your business."),
-    f("diwali-2026", "Diwali & Bandi Chhor Divas", "🪔", "2026-11-07", 3, "fireworks", "Wishing you and your family a bright, safe and prosperous Diwali and Bandi Chhor Divas."),
+    f("dhanteras-2026", "Dhanteras", "🪙", "2026-11-06", 1, "diyas", "May this Dhanteras bring wealth, health and prosperity to your business.", 15, "DHAN15"),
+    f("diwali-2026", "Diwali & Bandi Chhor Divas", "🪔", "2026-11-07", 3, "fireworks", "Wishing you and your family a bright, safe and prosperous Diwali and Bandi Chhor Divas.", 20, "DIWALI20"),
     f("gurpurab-2026", "Guru Nanak Gurpurab", "🙏", "2026-11-24", 1, "diyas", "Warm wishes on Guru Nanak Dev Ji's Gurpurab. May his teachings guide us all."),
     f("christmas-2026", "Christmas", "🎄", "2026-12-24", 2, "snow", "Merry Christmas! Wishing you joy, peace and a wonderful season."),
-    f("new-year-2027", "New Year", "🎉", "2026-12-31", 2, "fireworks", "Happy New Year 2027! Here's to more customers and bigger wins."),
+    f("new-year-2027", "New Year", "🎉", "2026-12-31", 2, "fireworks", "Happy New Year 2027! Here's to more customers and bigger wins.", 15, "NEWYEAR15"),
     f("lohri-2027", "Lohri", "🔥", "2027-01-13", 1, "diyas", "Happy Lohri! May the bonfire bring warmth, happiness and a great harvest."),
     f("republic-day-2027", "Republic Day", "🇮🇳", "2027-01-26", 1, "confetti", "Happy Republic Day! Proud to build for Indian businesses."),
     f("holi-2027", "Holi", "🎨", "2027-03-21", 2, "colors", "Happy Holi! Wishing you a life full of colours."),
@@ -141,3 +163,46 @@ export function upcomingFestivals(s: FestivalSettings, today = istToday(), limit
     .slice(0, limit)
     .map((x) => ({ ...x, inDays: Math.max(0, daysBetween(today, x.start)) }));
 }
+
+const THEME_BY_NAME: [RegExp, Exclude<FestivalTheme, "auto">][] = [
+  [/diwali|dhanteras|deepavali|gurpurab|gurupurab|lohri|bandi/i, "gold"],
+  [/dussehra|dasara|vaisakhi|baisakhi|navratri|ganesh|pongal|onam/i, "saffron"],
+  [/karwa|raksha|rakhi|teej|valentine/i, "maroon"],
+  [/holi/i, "holi"],
+  [/christmas|new year/i, "winter"],
+  [/eid|ramadan|ramzan/i, "green"],
+  [/republic|independence/i, "tricolour"],
+];
+const THEME_BY_EFFECT: Record<FestivalEffect, Exclude<FestivalTheme, "auto">> = { fireworks: "gold", diyas: "gold", petals: "maroon", colors: "holi", snow: "winter", confetti: "saffron", none: "none" };
+
+/** The website colour theme for a festival ("auto" is worked out from its name, then its effect). */
+export function themeFor(x: Festival): Exclude<FestivalTheme, "auto"> {
+  if (x.theme !== "auto") return x.theme;
+  return THEME_BY_NAME.find(([re]) => re.test(`${x.id} ${x.name}`))?.[1] ?? THEME_BY_EFFECT[x.effect];
+}
+
+/** What the offer says: the admin's own text, or "N% off on all MECGURA plans". */
+export function offerText(x: Festival): string {
+  if (x.offer.trim()) return x.offer.trim();
+  return x.discountPercent > 0 ? `${x.discountPercent}% off on all MECGURA plans` : "";
+}
+
+export type FestivalPromo = { festival: Festival; phase: "pre" | "live"; daysToStart: number; offer: string; theme: Exclude<FestivalTheme, "auto">; startsOn: string; endsOn: string };
+
+/**
+ * The festival the public website should advertise today. A running festival wins; otherwise the next one whose
+ * advertising window (leadDays before its start) has opened. Runs by itself every day, no switch to flip.
+ */
+export function festivalPromo(s: FestivalSettings, today = istToday()): FestivalPromo | null {
+  const live = activeFestival(s, "site", today);
+  const pick = (x: Festival, phase: "pre" | "live"): FestivalPromo => ({ festival: x, phase, daysToStart: Math.max(0, daysBetween(today, x.start)), offer: offerText(x), theme: themeFor(x), startsOn: x.start, endsOn: festivalEnd(x) });
+  if (live) return pick(live, "live");
+  if (!s.enabled) return null;
+  const next = s.festivals
+    .filter((x) => x.showOnSite && x.leadDays > 0 && x.start > today && addDays(x.start, -x.leadDays) <= today)
+    .sort((a, b) => a.start.localeCompare(b.start))[0];
+  return next ? pick(next, "pre") : null;
+}
+
+/** Plan price after the festive discount (paise, rounded down to whole rupees). */
+export const festivePrice = (paise: number, percent: number) => Math.floor((paise * (100 - percent)) / 100 / 100) * 100;

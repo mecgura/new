@@ -17,6 +17,18 @@ const EFFECTS: { value: EffectKind; label: string }[] = [
   { value: "none", label: "No effect" },
 ];
 
+const THEMES: { value: Festival["theme"]; label: string }[] = [
+  { value: "auto", label: "Automatic (from the festival)" },
+  { value: "gold", label: "Gold & diya glow" },
+  { value: "saffron", label: "Saffron" },
+  { value: "maroon", label: "Maroon & rose" },
+  { value: "holi", label: "Holi colours" },
+  { value: "winter", label: "Winter blue" },
+  { value: "green", label: "Crescent green" },
+  { value: "tricolour", label: "Tricolour" },
+  { value: "none", label: "Keep normal colours" },
+];
+
 const slug = (name: string) => `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 26) || "festival"}-${Math.random().toString(36).slice(2, 7)}`;
 const addDays = (s: string, n: number) => {
   const d = new Date(`${s}T00:00:00Z`);
@@ -57,11 +69,12 @@ export function FestivalEditor({ initial, today }: { initial: FestivalSettings; 
     const end = addDays(x.start, x.days - 1);
     if (x.start <= today && today <= end) return <Badge tone="success">Live today</Badge>;
     if (end < today) return <Badge tone="neutral">Past</Badge>;
+    if (x.leadDays && addDays(x.start, -x.leadDays) <= today) return <Badge tone="warning">Advertising now</Badge>;
     return <Badge tone="info">Upcoming</Badge>;
   };
 
   function add() {
-    const f: Festival = { id: slug("festival"), name: "", emoji: "🎉", start: today, days: 1, greeting: "", offer: "", offerCode: "", effect: "confetti", showOnSite: true, showToClients: true, hasPhoto: false };
+    const f: Festival = { id: slug("festival"), name: "", emoji: "🎉", start: today, days: 1, greeting: "", offer: "", offerCode: "", effect: "confetti", showOnSite: true, showToClients: true, hasPhoto: false, leadDays: 3, discountPercent: 10, applyToPlans: true, theme: "auto" };
     setList((xs) => [...xs, f]);
     setOpen(f.id);
   }
@@ -164,11 +177,27 @@ export function FestivalEditor({ initial, today }: { initial: FestivalSettings; 
                     </div>
                     <div>
                       <Label htmlFor={`fo-${x.id}`}>Special offer (optional)</Label>
-                      <Input id={`fo-${x.id}`} value={x.offer} maxLength={200} placeholder="Free WhatsApp setup this Diwali" onChange={(e) => patch(x.id, { offer: e.target.value })} />
+                      <Input id={`fo-${x.id}`} value={x.offer} maxLength={200} placeholder={x.discountPercent ? `Empty = "${x.discountPercent}% off on all MECGURA plans"` : "Free WhatsApp setup this Diwali"} onChange={(e) => patch(x.id, { offer: e.target.value })} />
                     </div>
                     <div>
                       <Label htmlFor={`fc-${x.id}`}>Offer code (optional)</Label>
                       <Input id={`fc-${x.id}`} value={x.offerCode} maxLength={30} placeholder="DIWALI26" onChange={(e) => patch(x.id, { offerCode: e.target.value.toUpperCase() })} />
+                    </div>
+                    <div>
+                      <Label htmlFor={`fl-${x.id}`}>Start advertising (days before)</Label>
+                      <Input id={`fl-${x.id}`} type="number" min={0} max={14} value={x.leadDays} onChange={(e) => patch(x.id, { leadDays: Math.min(14, Math.max(0, Number(e.target.value) || 0)) })} />
+                      <p className="mt-1 text-caption text-app-subtle">{x.leadDays ? `Offer bar, popup and theme start on ${fmt.format(new Date(`${addDays(x.start, -x.leadDays)}T00:00:00Z`))}.` : "Only on the festival days."}</p>
+                    </div>
+                    <div>
+                      <Label htmlFor={`fp-${x.id}`}>Festive discount on plans (%)</Label>
+                      <Input id={`fp-${x.id}`} type="number" min={0} max={90} value={x.discountPercent} onChange={(e) => patch(x.id, { discountPercent: Math.min(90, Math.max(0, Number(e.target.value) || 0)) })} />
+                      <div className="mt-2 flex items-center gap-3"><Switch checked={x.applyToPlans} onCheckedChange={(v) => patch(x.id, { applyToPlans: v })} label="Show festive price on pricing cards" /><span className="text-small text-app-text">Show festive price on pricing cards</span></div>
+                    </div>
+                    <div>
+                      <Label htmlFor={`ft-${x.id}`}>Website theme</Label>
+                      <Select id={`ft-${x.id}`} value={x.theme} onChange={(e) => patch(x.id, { theme: e.target.value as Festival["theme"] })}>
+                        {THEMES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </Select>
                     </div>
                     <div>
                       <Label htmlFor={`fx-${x.id}`}>Screen effect</Label>

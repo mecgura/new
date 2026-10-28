@@ -369,3 +369,31 @@ html[data-inbox-focus="1"] .app-sidebar { display: none !important; }
   background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px);
   background-size: 18px 18px;
 }
+
+/* Festival themes for the public website: set on .wa-root by the festival offer (a few days before and during). */
+.wa-root { --fest-a: #3b0a45; --fest-b: #7a1f3d; --fest-c: #c2410c; --fest-glow: #ffd16688; }
+.wa-root[data-festival-theme="gold"] { --wa-bg: #fbf3e2; --wa-teal: #7c4a03; --wa-teal-2: #b45309; --wa-line: #f0dfbd; --fest-a: #3d1d00; --fest-b: #8a4b06; --fest-c: #d97706; --fest-glow: #ffd166aa; }
+.wa-root[data-festival-theme="saffron"] { --wa-bg: #fdf0e3; --wa-teal: #9a3412; --wa-teal-2: #ea580c; --wa-line: #f6dcc3; --fest-a: #431407; --fest-b: #9a3412; --fest-c: #f97316; --fest-glow: #fdba7488; }
+.wa-root[data-festival-theme="maroon"] { --wa-bg: #fbeef0; --wa-teal: #7f1d3a; --wa-teal-2: #be185d; --wa-line: #f3d3dc; --fest-a: #3b0a20; --fest-b: #7f1d3a; --fest-c: #db2777; --fest-glow: #f9a8d488; }
+.wa-root[data-festival-theme="holi"] { --wa-bg: #f7f0fb; --wa-teal: #6d28d9; --wa-teal-2: #c026d3; --wa-line: #e9d8f6; --fest-a: #6d28d9; --fest-b: #db2777; --fest-c: #f59e0b; --fest-glow: #22d3ee88; }
+.wa-root[data-festival-theme="winter"] { --wa-bg: #eef4fb; --wa-teal: #1e3a8a; --wa-teal-2: #2563eb; --wa-line: #d6e2f3; --fest-a: #0b1e4a; --fest-b: #1e3a8a; --fest-c: #b91c1c; --fest-glow: #ffffff66; }
+.wa-root[data-festival-theme="green"] { --wa-bg: #edf7f1; --wa-teal: #14532d; --wa-teal-2: #15803d; --wa-line: #cfe9da; --fest-a: #052e16; --fest-b: #166534; --fest-c: #ca8a04; --fest-glow: #fde68a88; }
+.wa-root[data-festival-theme="tricolour"] { --wa-bg: #f6f7f2; --wa-teal: #14532d; --wa-teal-2: #ea580c; --wa-line: #e3e6dc; --fest-a: #ea580c; --fest-b: #1e3a8a; --fest-c: #15803d; --fest-glow: #ffffff66; }
+.wa-root[data-festival-theme]:not([data-festival-theme="none"]) {
+  background-image: radial-gradient(color-mix(in srgb, var(--wa-teal-2) 14%, transparent) 1px, transparent 1px);
+}
+.wa-root[data-festival-theme]:not([data-festival-theme="none"]) .wa-pill,
+.wa-root[data-festival-theme]:not([data-festival-theme="none"]) .wa-icon { background: color-mix(in srgb, var(--wa-teal-2) 12%, #fff); color: var(--wa-teal); }
+.fest-grad, .fest-bar, .fest-pop, .fest-tag { background: linear-gradient(120deg, var(--fest-a), var(--fest-b) 45%, var(--fest-c)); }
+.fest-bar { position: relative; overflow: hidden; }
+.fest-bar::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.22) 50%, transparent 70%);
+  transform: translateX(-100%); animation: fest-shine 4.5s ease-in-out infinite;
+}
+.fest-pop { animation: fest-in 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+@keyframes fest-shine { 60%, 100% { transform: translateX(100%); } }
+@keyframes fest-in { from { opacity: 0; transform: translateY(24px) scale(0.96); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .fest-bar::after, .fest-pop { animation: none; }
+}

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Gift, MessageCircle, X } from "lucide-react";
 import { FestivalEffect, type EffectKind } from "@/components/festival/festival-effect";
 
-export type PublicFestival = { id: string; name: string; emoji: string; greeting: string; offer: string; offerCode: string; effect: EffectKind; photoUrl: string | null; endsLabel: string };
+export type PublicFestival = { id: string; name: string; emoji: string; greeting: string; offer: string; offerCode: string; effect: EffectKind; photoUrl: string | null; endsLabel: string; phase?: "pre" | "live"; startLabel?: string };
 
 const seenKey = (id: string, who: string) => `mgc_fx_${who}_${id}`;
 const read = (k: string) => {
@@ -24,30 +24,33 @@ const write = (k: string, v: string) => {
 };
 
 /** Plays the festival effect once per browser per festival. */
-function useOncePerFestival(id: string, who: string) {
+function useOncePerFestival(id: string, who: string, enabled = true) {
   const [play, setPlay] = useState(false);
   useEffect(() => {
+    if (!enabled) return;
     const t = setTimeout(() => {
       if (read(seenKey(id, who))) return;
       write(seenKey(id, who), "1");
       setPlay(true);
     }, 700);
     return () => clearTimeout(t);
-  }, [id, who]);
+  }, [id, who, enabled]);
   return [play, setPlay] as const;
 }
 
 /** Home page greeting banner for the current festival, with its offer and a one-time screen effect. */
 export function FestivalSiteBanner({ festival, whatsapp }: { festival: PublicFestival; whatsapp: string }) {
   const [hidden, setHidden] = useState(false);
-  const [play, setPlay] = useOncePerFestival(festival.id, "site");
+  const early = festival.phase === "pre";
+  // The screen effect is for the festival itself; the days before only advertise the offer.
+  const [play, setPlay] = useOncePerFestival(festival.id, "site", !early);
   const claim = `https://wa.me/${whatsapp}?text=${encodeURIComponent(`Hi MECGURA, I saw your ${festival.name} offer${festival.offerCode ? ` (${festival.offerCode})` : ""}.`)}`;
   if (hidden) return play ? <FestivalEffect kind={festival.effect} onDone={() => setPlay(false)} /> : null;
   return (
     <>
       {play ? <FestivalEffect kind={festival.effect} onDone={() => setPlay(false)} /> : null}
       <section aria-label={`${festival.name} greetings`} className="mx-auto max-w-6xl px-4 pt-6">
-        <div className="relative overflow-hidden rounded-3xl bg-[linear-gradient(120deg,#3b0a45,#7a1f3d_45%,#c2410c)] text-white shadow-xl">
+        <div className="relative overflow-hidden rounded-3xl fest-grad text-white shadow-xl">
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-30 [background:radial-gradient(circle_at_20%_20%,#ffd16688,transparent_35%),radial-gradient(circle_at_80%_70%,#ffb70388,transparent_40%)]" />
           <button type="button" onClick={() => setHidden(true)} aria-label="Close greeting" className="absolute right-3 top-3 z-10 rounded-full bg-white/15 p-1.5 hover:bg-white/25">
             <X className="size-4" aria-hidden="true" />
@@ -55,8 +58,9 @@ export function FestivalSiteBanner({ festival, whatsapp }: { festival: PublicFes
           <div className={`relative grid items-center gap-5 p-5 sm:p-8 ${festival.photoUrl ? "md:grid-cols-[1fr_minmax(0,22rem)]" : ""}`}>
             <div>
               <p className="text-4xl" aria-hidden="true">{festival.emoji || "🎉"}</p>
-              <h2 className="mt-2 font-display text-3xl font-bold sm:text-4xl">Happy {festival.name}!</h2>
-              {festival.greeting ? <p className="mt-2 max-w-xl text-white/90">{festival.greeting}</p> : null}
+              {early ? <p className="mt-2 text-xs font-bold uppercase tracking-widest text-white/80">Early festive offer · {festival.name} on {festival.startLabel}</p> : null}
+              <h2 className="mt-2 font-display text-3xl font-bold sm:text-4xl">{early ? `${festival.name} offer is here!` : `Happy ${festival.name}!`}</h2>
+              {early ? <p className="mt-2 max-w-xl text-white/90">Celebrate early with MECGURA: set up WhatsApp automation for your business before the festive rush.</p> : festival.greeting ? <p className="mt-2 max-w-xl text-white/90">{festival.greeting}</p> : null}
               {festival.offer ? (
                 <div className="mt-5 inline-flex max-w-full flex-wrap items-center gap-3 rounded-2xl bg-white/12 p-3 ring-1 ring-white/25 backdrop-blur">
                   <Gift className="size-6 shrink-0 text-[#ffd166]" aria-hidden="true" />
@@ -73,7 +77,7 @@ export function FestivalSiteBanner({ festival, whatsapp }: { festival: PublicFes
                 <a href={claim} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#25d366] px-5 font-bold text-[#06281a] hover:brightness-95">
                   <MessageCircle className="size-5" aria-hidden="true" /> {festival.offer ? "Claim on WhatsApp" : "Say hello on WhatsApp"}
                 </a>
-                {festival.effect !== "none" ? (
+                {festival.effect !== "none" && !early ? (
                   <button type="button" onClick={() => setPlay(true)} className="inline-flex min-h-11 items-center rounded-full bg-white/15 px-5 font-semibold hover:bg-white/25">
                     Celebrate again {festival.emoji}
                   </button>
