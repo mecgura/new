@@ -206,3 +206,10 @@ export function festivalPromo(s: FestivalSettings, today = istToday()): Festival
 
 /** Plan price after the festive discount (paise, rounded down to whole rupees). */
 export const festivePrice = (paise: number, percent: number) => Math.floor((paise * (100 - percent)) / 100 / 100) * 100;
+
+/** Super Admin preview: shows any festival's offer as it will look before ("pre") or on ("live") the day. */
+export function previewPromo(s: FestivalSettings, id: string, phase: "pre" | "live", today = istToday()): FestivalPromo | null {
+  const x = s.festivals.find((f) => f.id === id);
+  if (!x) return null;
+  return { festival: x, phase, daysToStart: Math.max(0, daysBetween(today, x.start)), offer: offerText(x), theme: themeFor(x), startsOn: x.start, endsOn: festivalEnd(x) };
+}

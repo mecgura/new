@@ -9,7 +9,8 @@ import { formatINR, formatNumber } from "@/lib/catalog";
 import { FEATURES, isUnlimited, parseFeatures } from "@/lib/plans";
 import { Logo } from "@/components/layout/logo";
 import { getHomeContent } from "@/services/site/home-content";
-import { festivalPromo, festivePrice, getFestivals, istToday } from "@/services/site/festivals";
+import { festivalPromo, festivePrice, getFestivals, istToday, previewPromo } from "@/services/site/festivals";
+import { getSessionUser } from "@/lib/session";
 import { FestivalSiteBanner } from "@/components/festival/festival-banner";
 import { FestivalPromoBar, FestivalPromoPopup, FestivePriceTag, type PublicPromo } from "@/components/festival/festival-promo";
 import { FestivalCalendar } from "@/components/festival/festival-calendar";
@@ -63,10 +64,14 @@ const endsFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short
 const phoneLabel = /^91\d{10}$/.test(whatsappDigits) ? `+91 ${whatsappDigits.slice(2, 7)} ${whatsappDigits.slice(7)}` : `+${whatsappDigits}`;
 const wa = (text: string) => `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(text)}`;
 
-export default async function Landing() {
-  const [plans, session, content, festivals] = await Promise.all([loadPlans(), auth().catch(() => null), getHomeContent(), getFestivals()]);
+export default async function Landing({ searchParams }: { searchParams: Promise<{ festivalPreview?: string; phase?: string }> }) {
+  const [plans, session, content, festivals, sp] = await Promise.all([loadPlans(), auth().catch(() => null), getHomeContent(), getFestivals(), searchParams]);
   const today = istToday();
-  const promo = festivalPromo(festivals, today);
+  // ?festivalPreview=<id>&phase=pre|live lets the Super Admin see any festival's offer early; everyone else gets today's.
+  const wantsPreview = typeof sp.festivalPreview === "string" && /^[a-z0-9-]{1,40}$/.test(sp.festivalPreview);
+  const viewer = wantsPreview ? await getSessionUser().catch(() => null) : null;
+  const previewing = Boolean(wantsPreview && viewer?.platformRole === "SUPER_ADMIN");
+  const promo = previewing ? previewPromo(festivals, sp.festivalPreview!, sp.phase === "live" ? "live" : "pre", today) : festivalPromo(festivals, today);
   const festival = promo?.festival ?? null;
   const dateLabel = (iso: string) => endsFmt.format(new Date(`${iso}T00:00:00Z`));
   const publicPromo: PublicPromo | null = promo
@@ -79,6 +84,12 @@ export default async function Landing() {
   return (
     <div className="wa-root min-h-dvh overflow-x-hidden" data-festival-theme={promo && promo.theme !== "none" ? promo.theme : undefined}>
       <ScrollReveal />
+      {previewing ? (
+        <div className="fixed bottom-4 left-1/2 z-[70] -translate-x-1/2 rounded-full bg-black/85 px-4 py-2 text-center text-xs font-semibold text-white shadow-lg">
+          {promo ? `Preview: ${promo.festival.name} (${promo.phase === "pre" ? "days before" : "festival day"}). Only you can see this.` : "Preview: festival not found. Save it first."}{" "}
+          <Link href="/admin/festivals" className="underline">Back to Festivals</Link>
+        </div>
+      ) : null}
       <header className="wa-topbar sticky top-0 z-30">
         {publicPromo ? <FestivalPromoBar promo={publicPromo} whatsapp={whatsappDigits} /> : null}
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
@@ -96,6 +107,7 @@ export default async function Landing() {
       <main id="main-content">
         {festival ? (
           <FestivalSiteBanner
+            preview={previewing}
             whatsapp={whatsappDigits}
             festival={{ ...festival, offer: promo?.offer ?? festival.offer, phase: promo?.phase, startLabel: publicPromo?.startLabel, photoUrl: festival.hasPhoto ? `/api/festival-photo/${festival.id}` : null, endsLabel: publicPromo?.endLabel ?? "" }}
           />
@@ -321,7 +333,7 @@ export default async function Landing() {
           </nav>
         </div>
       </footer>
-      {publicPromo ? <FestivalPromoPopup promo={publicPromo} whatsapp={whatsappDigits} /> : null}
+      {publicPromo ? <FestivalPromoPopup promo={publicPromo} whatsapp={whatsappDigits} preview={previewing} /> : null}
       <FloatingChat digits={whatsappDigits} />
     </div>
   );

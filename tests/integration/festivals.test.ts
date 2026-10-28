@@ -4,7 +4,7 @@ import * as route from "@/app/api/admin/festivals/route";
 import * as photoRoute from "@/app/api/admin/festivals/photo/route";
 import * as publicPhoto from "@/app/api/festival-photo/[id]/route";
 import { setSetting } from "@/lib/settings";
-import { activeFestival, DEFAULT_FESTIVALS, festivalPromo, festivePrice, getFestivals, offerText, themeFor, upcomingFestivals, type Festival } from "@/services/site/festivals";
+import { activeFestival, DEFAULT_FESTIVALS, festivalPromo, festivePrice, previewPromo, getFestivals, offerText, themeFor, upcomingFestivals, type Festival } from "@/services/site/festivals";
 
 let admin: Awaited<ReturnType<typeof makeUser>>;
 let other: Awaited<ReturnType<typeof makeUser>>;
@@ -73,6 +73,12 @@ describe("festival offers on the website", () => {
     expect(festivalPromo({ ...s, enabled: false }, "2026-11-05")).toBeNull();
     expect(festivalPromo({ enabled: true, festivals: [fest({ leadDays: 0 })] }, "2026-11-05")).toBeNull();
     expect(festivalPromo({ enabled: true, festivals: [fest({ showOnSite: false })] }, "2026-11-05")).toBeNull();
+  });
+
+  it("the admin preview shows any festival, before or on the day", () => {
+    expect(previewPromo(s, "xmas", "pre", "2026-10-28")).toMatchObject({ phase: "pre", theme: "winter", daysToStart: 57 });
+    expect(previewPromo(s, "diwali-t", "live", "2026-10-28")).toMatchObject({ phase: "live", offer: "20% off on all MECGURA plans" });
+    expect(previewPromo(s, "nope", "pre")).toBeNull();
   });
 
   it("works out the theme, offer text and festive price", () => {

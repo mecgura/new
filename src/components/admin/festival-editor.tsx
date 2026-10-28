@@ -62,9 +62,13 @@ export function FestivalEditor({ initial, today }: { initial: FestivalSettings; 
   const [saving, setSaving] = React.useState(false);
   const [preview, setPreview] = React.useState<EffectKind | null>(null);
   const [photoBust, setPhotoBust] = React.useState<Record<string, number>>({});
+  const [dirty, setDirty] = React.useState(false);
 
   const sorted = [...list].sort((a, b) => a.start.localeCompare(b.start));
-  const patch = (id: string, change: Partial<Festival>) => setList((xs) => xs.map((x) => (x.id === id ? { ...x, ...change } : x)));
+  const patch = (id: string, change: Partial<Festival>) => {
+    setDirty(true);
+    setList((xs) => xs.map((x) => (x.id === id ? { ...x, ...change } : x)));
+  };
   const status = (x: Festival) => {
     const end = addDays(x.start, x.days - 1);
     if (x.start <= today && today <= end) return <Badge tone="success">Live today</Badge>;
@@ -106,6 +110,7 @@ export function FestivalEditor({ initial, today }: { initial: FestivalSettings; 
     setSaving(false);
     if (!r.ok) return toast(r.details ? Object.values(r.details).flat()[0] ?? r.error : r.error, "error");
     setList(r.data.festivals);
+    setDirty(false);
     toast("Saved. The home page and client panels are updated.");
   }
 
@@ -212,6 +217,29 @@ export function FestivalEditor({ initial, today }: { initial: FestivalSettings; 
                       <Label>Show to</Label>
                       <div className="flex items-center gap-3"><Switch checked={x.showOnSite} onCheckedChange={(v) => patch(x.id, { showOnSite: v })} label="Website visitors (banner + calendar)" /><span className="text-small text-app-text">Website visitors (banner + calendar)</span></div>
                       <div className="flex items-center gap-3"><Switch checked={x.showToClients} onCheckedChange={(v) => patch(x.id, { showToClients: v })} label="Client panels (greeting card)" /><span className="text-small text-app-text">Client panels (greeting card)</span></div>
+                    </div>
+                    <div className="sm:col-span-2 rounded-xl border border-app-border p-3">
+                      <Label>Preview on website</Label>
+                      <p className="mb-2 text-caption text-app-subtle">{dirty ? "Save first: the preview shows the saved version." : "Opens the home page as visitors will see it. Only you see the preview."}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {(["pre", "live"] as const).map((ph) => (
+                          <a
+                            key={ph}
+                            href={`/?festivalPreview=${x.id}&phase=${ph}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => {
+                              if (!dirty) return;
+                              e.preventDefault();
+                              toast("Save first, then preview.", "error");
+                            }}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius-control)] border border-app-border px-3 text-small text-app-text hover:bg-app-hover"
+                          >
+                            <ExternalLink className="size-4" aria-hidden="true" />
+                            {ph === "pre" ? `Days before${x.leadDays ? ` (from ${fmt.format(new Date(`${addDays(x.start, -x.leadDays)}T00:00:00Z`))})` : ""}` : "Festival day"}
+                          </a>
+                        ))}
+                      </div>
                     </div>
                     <div className="sm:col-span-2">
                       <Label>Banner photo (optional)</Label>

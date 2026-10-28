@@ -24,26 +24,27 @@ const write = (k: string, v: string) => {
 };
 
 /** Plays the festival effect once per browser per festival. */
-function useOncePerFestival(id: string, who: string, enabled = true) {
+function useOncePerFestival(id: string, who: string, enabled = true, always = false) {
   const [play, setPlay] = useState(false);
   useEffect(() => {
     if (!enabled) return;
     const t = setTimeout(() => {
+      if (always) return setPlay(true);
       if (read(seenKey(id, who))) return;
       write(seenKey(id, who), "1");
       setPlay(true);
     }, 700);
     return () => clearTimeout(t);
-  }, [id, who, enabled]);
+  }, [id, who, enabled, always]);
   return [play, setPlay] as const;
 }
 
 /** Home page greeting banner for the current festival, with its offer and a one-time screen effect. */
-export function FestivalSiteBanner({ festival, whatsapp }: { festival: PublicFestival; whatsapp: string }) {
+export function FestivalSiteBanner({ festival, whatsapp, preview = false }: { festival: PublicFestival; whatsapp: string; preview?: boolean }) {
   const [hidden, setHidden] = useState(false);
   const early = festival.phase === "pre";
   // The screen effect is for the festival itself; the days before only advertise the offer.
-  const [play, setPlay] = useOncePerFestival(festival.id, "site", !early);
+  const [play, setPlay] = useOncePerFestival(festival.id, "site", !early, preview);
   const claim = `https://wa.me/${whatsapp}?text=${encodeURIComponent(`Hi MECGURA, I saw your ${festival.name} offer${festival.offerCode ? ` (${festival.offerCode})` : ""}.`)}`;
   if (hidden) return play ? <FestivalEffect kind={festival.effect} onDone={() => setPlay(false)} /> : null;
   return (

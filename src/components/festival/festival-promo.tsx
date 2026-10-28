@@ -99,20 +99,21 @@ export function FestivalPromoBar({ promo, whatsapp }: { promo: PublicPromo; what
 }
 
 /** A small advert card that slides in once per visitor per festival, a few seconds after they arrive. */
-export function FestivalPromoPopup({ promo, whatsapp }: { promo: PublicPromo; whatsapp: string }) {
+export function FestivalPromoPopup({ promo, whatsapp, preview = false }: { promo: PublicPromo; whatsapp: string; preview?: boolean }) {
   const [open, setOpen] = useState(false);
   const countdown = useCountdown(promo);
   useEffect(() => {
     if (!promo.offer) return;
     const t = setTimeout(() => {
       // Phones already see the offer bar and banner; a popup there would cover the page.
+      if (preview) return setOpen(true);
       if (typeof window.matchMedia === "function" && window.matchMedia("(max-width: 639px)").matches) return;
       if (store.get("local", `mgc_pop_${promo.id}`)) return;
       store.set("local", `mgc_pop_${promo.id}`, "1");
       setOpen(true);
-    }, 6000);
+    }, preview ? 1500 : 6000);
     return () => clearTimeout(t);
-  }, [promo.id, promo.offer]);
+  }, [promo.id, promo.offer, preview]);
   if (!open) return null;
   // "20% off on all MECGURA plans" → big "20% OFF" + "on all MECGURA plans"; a custom offer keeps its own words.
   const auto = promo.discountPercent > 0 && promo.offer.toLowerCase().startsWith(`${promo.discountPercent}% off`);
