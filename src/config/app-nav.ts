@@ -33,6 +33,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+export type NavService = "WHATSAPP_AUTOMATION" | "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "SOCIAL_MEDIA" | "ATS" | "HRMS";
+
 export type NavItem = {
   label: string;
   icon: LucideIcon;
@@ -44,8 +46,8 @@ export type NavItem = {
   excludes?: string[];
   /** Extra path prefixes that also mark this item active. */
   also?: string[];
-  /** Shown locked (and the page refuses) unless the admin enabled this service for the workspace. */
-  service?: "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "SOCIAL_MEDIA" | "ATS" | "HRMS";
+  /** Hidden from the client menu (and the page refuses) unless the admin enabled this service, or one of these services, for the workspace. */
+  service?: NavService | NavService[];
   /** Module ships in a later phase: rendered disabled with a "Soon" badge, never a fake page. */
   comingSoon?: boolean;
 };
@@ -57,23 +59,23 @@ export const CLIENT_NAV: NavSection[] = [
   {
     items: [
       { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard", exact: true },
-      { label: "Inbox", icon: Inbox, href: "/inbox" },
+      { label: "Inbox", icon: Inbox, href: "/inbox", service: ["WHATSAPP_AUTOMATION", "OMNICHANNEL"] },
       { label: "Contacts", icon: Contact, href: "/contacts" },
-      { label: "WhatsApp", icon: MessageCircle, href: "/dashboard/whatsapp", also: ["/whatsapp"] },
-      { label: "Campaigns", icon: Megaphone, href: "/campaigns" },
-      { label: "Templates", icon: FileText, href: "/templates" },
-      { label: "Automations", icon: Workflow, href: "/automations" },
-      { label: "Lead Ads", icon: Target, href: "/lead-ads" },
+      { label: "WhatsApp", icon: MessageCircle, href: "/dashboard/whatsapp", also: ["/whatsapp"], service: "WHATSAPP_AUTOMATION" },
+      { label: "Campaigns", icon: Megaphone, href: "/campaigns", service: "WHATSAPP_AUTOMATION" },
+      { label: "Templates", icon: FileText, href: "/templates", service: "WHATSAPP_AUTOMATION" },
+      { label: "Automations", icon: Workflow, href: "/automations", service: "WHATSAPP_AUTOMATION" },
+      { label: "Lead Ads", icon: Target, href: "/lead-ads", service: "WHATSAPP_AUTOMATION" },
       { label: "Ads Manager", icon: Rocket, href: "/ads", service: "ADS_MANAGER" },
       { label: "Channels", icon: Mail, href: "/channels", service: "OMNICHANNEL" },
-      { label: "Flows", icon: GitBranch, href: "/flows" },
+      { label: "Flows", icon: GitBranch, href: "/flows", service: "WHATSAPP_AUTOMATION" },
       { label: "AI Agent", icon: Bot, href: "/ai", service: "AI_ASSISTANT" },
       { label: "AI Calling", icon: Phone, href: "/voice", service: "AI_CALLING" },
       { label: "Social Media", icon: CalendarDays, href: "/social", service: "SOCIAL_MEDIA" },
       { label: "Hiring (ATS)", icon: Briefcase, href: "/hiring", service: "ATS" },
       { label: "HR & Attendance", icon: IdCard, href: "/hr", service: "HRMS" },
       { label: "Analytics", icon: BarChart3, href: "/analytics" },
-      { label: "Industry packs", icon: Sparkles, href: "/packs" },
+      { label: "Industry packs", icon: Sparkles, href: "/packs", service: "WHATSAPP_AUTOMATION" },
     ],
   },
   {
@@ -120,4 +122,10 @@ export function isActive(pathname: string, item: NavItem): boolean {
   if (item.excludes?.some(under)) return false;
   if (item.also?.some(under)) return true;
   return item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
+}
+
+/** The client menu with only the services this workspace has; sections left empty are dropped. */
+export function navForServices(sections: NavSection[], enabled: string[]): NavSection[] {
+  const on = (i: NavItem) => !i.service || (Array.isArray(i.service) ? i.service : [i.service]).some((x) => enabled.includes(x));
+  return sections.map((s) => ({ ...s, items: s.items.filter(on) })).filter((s) => s.items.length);
 }

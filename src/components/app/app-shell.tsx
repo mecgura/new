@@ -9,7 +9,6 @@ import {
   ChevronsUpDown,
   CircleHelp,
   LayoutDashboard,
-  Lock,
   LogOut,
   Mail,
   Menu,
@@ -21,7 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/layout/logo";
-import { ADMIN_NAV, CLIENT_NAV, isActive, type NavSection } from "@/config/app-nav";
+import { ADMIN_NAV, CLIENT_NAV, isActive, navForServices, type NavSection } from "@/config/app-nav";
 import { siteConfig } from "@/config/site";
 import { ORG_ROLE_LABELS, type OrgRole } from "@/lib/authz";
 import {
@@ -60,7 +59,8 @@ export function AppShell({
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [searchOpen, setSearchOpen] = React.useState(false);
-  const sections = variant === "admin" ? ADMIN_NAV : CLIENT_NAV;
+  // Clients only see the services MECGURA turned on for them; the rest stay out of the menu and search.
+  const sections = React.useMemo(() => (variant === "admin" ? ADMIN_NAV : navForServices(CLIENT_NAV, enabledServices)), [variant, enabledServices]);
 
   // Close the mobile drawer whenever the route changes.
   const [lastPath, setLastPath] = React.useState(pathname);
@@ -91,10 +91,10 @@ export function AppShell({
           Skip to content
         </a>
         <aside className="app-sidebar glass sticky top-0 hidden h-dvh w-64 shrink-0 rounded-none border-y-0 border-l-0 lg:block">
-          <Sidebar variant={variant} sections={sections} pathname={pathname} enabledServices={enabledServices} />
+          <Sidebar variant={variant} sections={sections} pathname={pathname} />
         </aside>
         <Drawer open={mobileOpen} onClose={() => setMobileOpen(false)} title="Main navigation">
-          <Sidebar variant={variant} sections={sections} pathname={pathname} enabledServices={enabledServices} onClose={() => setMobileOpen(false)} />
+          <Sidebar variant={variant} sections={sections} pathname={pathname} onClose={() => setMobileOpen(false)} />
         </Drawer>
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -120,11 +120,9 @@ function Sidebar({
   variant,
   sections,
   pathname,
-  enabledServices,
   onClose,
 }: {
   variant: "client" | "admin";
-  enabledServices: string[];
   sections: NavSection[];
   pathname: string;
   onClose?: () => void;
@@ -165,21 +163,6 @@ function Sidebar({
                         <span className="rounded-full border border-app-border px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-app-subtle">
                           Soon
                         </span>
-                      </span>
-                    </li>
-                  );
-                }
-                if (variant === "client" && item.service && !enabledServices.includes(item.service)) {
-                  return (
-                    <li key={item.label}>
-                      <span
-                        aria-disabled="true"
-                        title="Not enabled for your workspace. Ask MECGURA to turn it on."
-                        className="flex cursor-not-allowed items-center gap-3 rounded-[var(--radius-control)] px-3 py-2 text-body text-app-subtle"
-                      >
-                        <Icon className="size-[18px] shrink-0" aria-hidden="true" />
-                        <span className="flex-1">{item.label}</span>
-                        <Lock className="size-3.5 shrink-0" aria-label="Not enabled" />
                       </span>
                     </li>
                   );
