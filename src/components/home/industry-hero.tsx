@@ -203,6 +203,7 @@ export function IndustryHero({ slides, whatsapp, signedIn, appHref }: { slides: 
             ) : null}
           </div>
         </div>
+        <p className="absolute inset-x-0 -bottom-9 text-center text-[11px] text-[#54656f] sm:text-right">Example business and chat. People shown are not MECGURA customers.</p>
       </div>
     </section>
   );

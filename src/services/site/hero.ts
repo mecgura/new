@@ -96,6 +96,12 @@ export const SLIDE_DEFAULTS: Record<SlideId, SlideDefaults> = {
   },
 };
 
+/**
+ * Free stock photos kept in /public/images/mecgura/ (licence and source in docs/image-credits.md). A slide uses its
+ * local photo unless the admin set another one in Admin → Website. Add a file name here only once the file exists.
+ */
+export const LOCAL_PHOTOS: Partial<Record<SlideId, string>> = {};
+
 const KEY = "home:hero";
 const slideEdit = z.object({
   headline: z.string().trim().min(5).max(90),
@@ -134,7 +140,7 @@ export async function getHero(): Promise<HeroSlide[]> {
       headline: o.headline || d.headline,
       description: o.description || d.description,
       photoHint: d.photoHint,
-      photoUrl: o.photoId ? `/api/site/hero/${id}?v=${o.photoId}` : null,
+      photoUrl: o.photoId ? `/api/site/hero/${id}?v=${o.photoId}` : LOCAL_PHOTOS[id] ? `/images/mecgura/${LOCAL_PHOTOS[id]}` : null,
       enabled: o.enabled ?? true,
       chat: d.chat,
     };
