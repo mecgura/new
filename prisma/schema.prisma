@@ -1809,3 +1809,17 @@ model MarketingPost {
 
   @@index([date])
 }
+
+/** An image made with AI in Admin → Marketing → AI studio (kept so it can be downloaded or used in a creative later). */
+model MarketingImage {
+  id        String   @id @default(cuid())
+  provider  String // gemini | openai
+  prompt    String
+  aspect    String   @default("post") // post | square | story | landscape
+  mimeType  String   @default("image/png")
+  data      Bytes
+  createdById String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

@@ -11,11 +11,12 @@ import { cn } from "@/lib/utils";
  * Ready-to-post images with MECGURA branding, drawn on a canvas in the browser and downloaded as PNG. The proof
  * template uses real platform numbers (no client named), the offer template the next festival from Festivals.
  */
-type TemplateId = "offer" | "proof" | "tip" | "compare" | "feature";
+type TemplateId = "photo" | "offer" | "proof" | "tip" | "compare" | "feature";
 type SizeId = "post" | "square" | "story";
 type ThemeId = "dark" | "light" | "festive" | "warm";
 
 const TEMPLATES: { id: TemplateId; label: string; hint: string }[] = [
+  { id: "photo", label: "Photo ad", hint: "Your photo or an AI image + headline and button" },
   { id: "offer", label: "Offer / festival", hint: "Discount, code and a WhatsApp button" },
   { id: "proof", label: "Proof (real numbers)", hint: "Live totals from MECGURA, no client named" },
   { id: "tip", label: "Tip", hint: "A useful tip with three points" },
@@ -40,6 +41,7 @@ const DEFAULTS: Record<TemplateId, Fields> = {
   proof: { headline: "Real results, last 30 days", sub: "WhatsApp messages sent by businesses on MECGURA", big: "", code: "", points: "", cta: "Your business could be next · 78377 22567" },
   tip: { headline: "Customer messaged at 11 pm?", sub: "3 ways to never lose a WhatsApp lead", big: "", code: "", points: "Auto-reply in seconds, day and night\nSend the price list and catalogue automatically\nFollow up every lead the next morning", cta: "Free demo: 78377 22567" },
   compare: { headline: "Just software, or the full solution?", sub: "Everyone gives WhatsApp API. The difference is service.", big: "", code: "", points: "Setup|Do it yourself|Our team sets it up\nSupport|Ticket / email|WhatsApp + call, Punjabi & Hindi\nMeta bill|Separate card to Meta|One monthly package\nAutomation|Empty panel|Ready flows for your business", cta: "Free demo · 78377 22567 · mecgura.tech" },
+  photo: { headline: "Never miss a customer on WhatsApp", sub: "Auto replies, broadcasts and lead follow-up. Set up by our team.", big: "", code: "", points: "", cta: "Free demo: 78377 22567" },
   feature: { headline: "Every lead gets a reply in 5 seconds", sub: "Click-to-WhatsApp ads + automatic follow-up", big: "", code: "", points: "Hi! Price of the gold package?\nHi Priya 👋 Gold package is ₹4,999/month. Want a free demo today?\nYes please!", cta: "Free demo: 78377 22567" },
 };
 
@@ -99,7 +101,7 @@ function fit(ctx: CanvasRenderingContext2D, s: string, maxW: number, start: numb
 
 type Proof = { days: number; messagesSent: number; deliveredRate: number; readRate: number; newContacts: number; activeClients: number; campaignsCompleted: number };
 
-function draw(canvas: HTMLCanvasElement, o: { template: TemplateId; size: SizeId; theme: ThemeId; f: Fields; proof: Proof | null; logo: HTMLImageElement | null; display: string; sans: string }) {
+function draw(canvas: HTMLCanvasElement, o: { template: TemplateId; size: SizeId; theme: ThemeId; f: Fields; proof: Proof | null; logo: HTMLImageElement | null; photo: HTMLImageElement | null; display: string; sans: string }) {
   const { w, h } = SIZES[o.size];
   canvas.width = w;
   canvas.height = h;
@@ -245,6 +247,27 @@ function draw(canvas: HTMLCanvasElement, o: { template: TemplateId; size: SizeId
           text(ctx, `✕  ${b}`, x1 + 16, ry + 22, c1 - 24, 25, S, t.muted, 500, 1.25);
           text(ctx, `✓  ${c}`, x2 + 22, ry + 22, c2 - 40, 25, S, t.ink, 700, 1.25);
         });
+      } else if (o.template === "photo") {
+        // Photo on top (cover-cropped, rounded), headline and second line under it.
+        const textH = (square ? 56 : 66) * 2.3 + 90;
+        const ph = Math.max(200, bottom - ctaH - 50 - y - textH);
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(pad, y, inner, ph, 32);
+        ctx.clip();
+        if (o.photo) {
+          const sc = Math.max(inner / o.photo.width, ph / o.photo.height);
+          const dw = o.photo.width * sc;
+          const dh = o.photo.height * sc;
+          ctx.drawImage(o.photo, pad + (inner - dw) / 2, y + (ph - dh) / 2, dw, dh);
+        } else {
+          ctx.fillStyle = t.card;
+          ctx.fillRect(pad, y, inner, ph);
+          text(ctx, "Upload a photo or pick one from AI studio", pad, y + ph / 2 - 20, inner, 30, S, t.muted, 600, 1.2, "center");
+        }
+        ctx.restore();
+        y = text(ctx, f.headline, pad, y + ph + 34, inner, square ? 56 : 66, D, t.ink, 800, 1.06);
+        y = text(ctx, f.sub, pad, y + 12, inner, 30, S, t.muted, 500, 1.3);
       } else {
         y = text(ctx, f.headline, pad, y, inner, square ? 60 : 72, D, t.ink, 800, 1.06);
         y = text(ctx, f.sub, pad, y + 14, inner, 32, S, t.accent, 700, 1.3) + 36;
@@ -281,7 +304,7 @@ function draw(canvas: HTMLCanvasElement, o: { template: TemplateId; size: SizeId
   ctx.globalAlpha = 0;
   const end = drawBody();
   ctx.restore();
-  const gap = o.template === "feature" || o.template === "offer" ? 0 : Math.max(0, (bottom - ctaH - 40 - end) / 2);
+  const gap = o.template === "feature" || o.template === "offer" || o.template === "photo" ? 0 : Math.max(0, (bottom - ctaH - 40 - end) / 2);
   ctx.save();
   ctx.translate(0, Math.min(gap, story ? 220 : 160));
   drawBody();
@@ -293,11 +316,18 @@ function draw(canvas: HTMLCanvasElement, o: { template: TemplateId; size: SizeId
   text(ctx, f.cta, pad, bottom - ctaH + (ctaH - cs) / 2, inner, cs, D, t.accentInk, 800, 1, "center");
 }
 
-export function CreativeMaker() {
+export function CreativeMaker({ imageId = null }: { imageId?: string | null }) {
   const toast = useToast();
+  const [photo, setPhoto] = React.useState<HTMLImageElement | null>(null);
+  const loadPhoto = React.useCallback((src: string) => {
+    const img = new Image();
+    img.onload = () => setPhoto(img);
+    img.onerror = () => toast("Couldn't open that image", "error");
+    img.src = src;
+  }, [toast]);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const probe = React.useRef<HTMLSpanElement>(null);
-  const [template, setTemplate] = React.useState<TemplateId>("offer");
+  const [template, setTemplate] = React.useState<TemplateId>(imageId ? "photo" : "offer");
   const [size, setSize] = React.useState<SizeId>("post");
   const [theme, setTheme] = React.useState<ThemeId>("dark");
   const [fields, setFields] = React.useState<Record<TemplateId, Fields>>(DEFAULTS);
@@ -331,8 +361,13 @@ export function CreativeMaker() {
   }, []);
 
   React.useEffect(() => {
-    if (canvasRef.current && fonts) draw(canvasRef.current, { template, size, theme, f, proof, logo, ...fonts });
-  }, [template, size, theme, f, proof, logo, fonts]);
+    if (canvasRef.current && fonts) draw(canvasRef.current, { template, size, theme, f, proof, logo, photo, ...fonts });
+  }, [template, size, theme, f, proof, logo, photo, fonts]);
+
+  // Opened from AI studio with an image.
+  React.useEffect(() => {
+    if (imageId && /^[A-Za-z0-9_-]{1,64}$/.test(imageId)) loadPhoto(`/api/admin/marketing/images/${imageId}`);
+  }, [imageId, loadPhoto]);
 
   const set = (k: keyof Fields) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setFields((p) => ({ ...p, [template]: { ...p[template], [k]: e.target.value } }));
 
@@ -404,9 +439,21 @@ export function CreativeMaker() {
               </Field>
             </div>
           ) : null}
-          {template !== "proof" ? (
+          {template !== "proof" && template !== "photo" ? (
             <Field id="cm-points" label={template === "tip" || template === "offer" ? "Points (one per line)" : template === "compare" ? "Rows: topic|DIY tool|MECGURA (one per line)" : "Chat messages (customer, you, customer…)"}>
               <Textarea rows={5} value={f.points} onChange={set("points")} maxLength={600} />
+            </Field>
+          ) : null}
+          {template === "photo" ? (
+            <Field id="cm-photo" label="Photo" hint="Your own photo, or make one in AI studio and press its 'Use in Creative maker' button.">
+              <Input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) loadPhoto(URL.createObjectURL(file));
+                }}
+              />
             </Field>
           ) : null}
           {template === "proof" ? (
