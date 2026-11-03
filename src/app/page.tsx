@@ -117,26 +117,29 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
         ) : null}
         <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 pb-16 pt-10 lg:grid-cols-2 lg:pt-16">
           <div>
-            <p className="wa-pill"><BadgeCheck className="size-3.5" aria-hidden="true" /> Official WhatsApp Business Platform</p>
+            <p className="wa-pill"><BadgeCheck className="size-3.5" aria-hidden="true" /> Official WhatsApp Business API · set up by our team</p>
             <h1 className="mt-5 font-display text-4xl font-bold leading-[1.1] sm:text-5xl lg:text-6xl">
-              Talk to your customers on{" "}
+              WhatsApp that replies for your
+              <br />
               <RotatingWord
-                items={[
-                  { word: "WhatsApp.", color: "#128c4a" },
-                  { word: "Instagram.", color: "#c13584" },
-                  { word: "Messenger.", color: "#0866ff" },
-                  { word: "email.", color: "#b45309" },
-                  { word: "your website.", color: "#7c3aed" },
-                ]}
+                interval={2400}
+                items={["sweet shop.", "salon.", "clinic.", "gym.", "boutique.", "coaching centre."].map((word) => ({ word, color: "#128c4a" }))}
               />
             </h1>
             <p className="wa-muted mt-5 max-w-xl text-lg">
-              WhatsApp, Instagram, Messenger, email and website chat land in one inbox. Your team replies together, campaigns stay compliant and an AI agent helps after hours.
+              A customer messages at 11 pm and gets left on &ldquo;seen&rdquo;. By morning they&apos;ve ordered from someone else. We set up WhatsApp on your number so every message gets a reply, and we stay on call in Punjabi, Hindi or English.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <a href={wa("Hi MECGURA, I would like a demo of the platform.")} data-track="demo_hero" className="wa-btn"><MessageCircle className="size-5" aria-hidden="true" /> Book a demo on WhatsApp</a>
               <Link href={appHref} className="wa-btn wa-btn-ghost">{signedIn ? "Open workspace" : "Client sign in"}</Link>
             </div>
+            <ul className="wa-muted mt-6 flex flex-wrap gap-x-5 gap-y-2 text-small">
+              {["Live in about a day", "Usually on your existing number", "A real person on call when you need help"].map((t) => (
+                <li key={t} className="inline-flex items-center gap-1.5">
+                  <BadgeCheck className="size-4 text-[#128c4a]" aria-hidden="true" /> {t}
+                </li>
+              ))}
+            </ul>
           </div>
 
           <div className="mx-auto w-full max-w-sm" aria-hidden="true">
