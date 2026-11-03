@@ -69,7 +69,7 @@ const wa = (text: string) => `https://wa.me/${whatsappDigits}?text=${encodeURICo
 
 export default async function Landing({ searchParams }: { searchParams: Promise<{ festivalPreview?: string; phase?: string }> }) {
   const [plans, session, content, festivals, sp, hero] = await Promise.all([loadPlans(), auth().catch(() => null), getHomeContent(), getFestivals(), searchParams, getHero().catch(() => null)]);
-  const heroSlides = (hero ?? []).filter((x) => x.enabled).map(({ id, category, business, headline, description, photoUrl, chat }) => ({ id, category, business, headline, description, photoUrl, chat }));
+  const heroSlides = (hero ?? []).filter((x) => x.enabled).map(({ id, category, business, headline, description, photoUrl, outcome, chat }) => ({ id, category, business, headline, description, photoUrl, outcome, chat }));
   const today = istToday();
   // ?festivalPreview=<id>&phase=pre|live lets the Super Admin see any festival's offer early; everyone else gets today's.
   const wantsPreview = typeof sp.festivalPreview === "string" && /^[a-z0-9-]{1,40}$/.test(sp.festivalPreview);

@@ -13,7 +13,9 @@ export const SLIDE_IDS = ["retail", "salon", "food", "education", "healthcare", 
 export type SlideId = (typeof SLIDE_IDS)[number];
 
 export type ChatLine = { from: "customer" | "business"; text: string; time: string };
-type SlideDefaults = { category: string; business: string; headline: string; description: string; photoHint: string; chat: ChatLine[] };
+/** The result of the chat, shown as a small notification card once the conversation ends. */
+export type Outcome = { label: string; value: string; note: string };
+type SlideDefaults = { category: string; business: string; headline: string; description: string; photoHint: string; outcome: Outcome; chat: ChatLine[] };
 
 export const SLIDE_DEFAULTS: Record<SlideId, SlideDefaults> = {
   retail: {
@@ -22,6 +24,7 @@ export const SLIDE_DEFAULTS: Record<SlideId, SlideDefaults> = {
     headline: "WhatsApp that replies for your shop.",
     description: "Never miss a customer enquiry. Manage orders, product questions and customer conversations automatically.",
     photoHint: "Indian male grocery shop owner at his counter",
+    outcome: { label: "New order", value: "₹465", note: "Order #2481 · pay on delivery" },
     chat: [
       { from: "customer", text: "Bhaiya, Aashirvaad atta 10 kg available hai?", time: "7:42 pm" },
       { from: "business", text: "Yes ji, in stock ✅ ₹465. Home delivery in 30 minutes. Shall I add it to your order?", time: "7:42 pm" },
@@ -35,6 +38,7 @@ export const SLIDE_DEFAULTS: Record<SlideId, SlideDefaults> = {
     headline: "WhatsApp that books for your salon.",
     description: "Manage appointments, send reminders and respond to customer enquiries automatically.",
     photoHint: "Indian female salon owner in her salon",
+    outcome: { label: "Booking confirmed", value: "Sat, 4:00 pm", note: "Reminder goes out 2 hours before" },
     chat: [
       { from: "customer", text: "Hi! Any slot for a haircut on Saturday?", time: "11:05 am" },
       { from: "business", text: "Hi Priya 👋 Saturday has 12:30 pm and 4:00 pm free. Which one suits you?", time: "11:05 am" },
@@ -48,6 +52,7 @@ export const SLIDE_DEFAULTS: Record<SlideId, SlideDefaults> = {
     headline: "WhatsApp that grows your food business.",
     description: "Share offers, manage orders and connect with customers through smart campaigns.",
     photoHint: "Indian sweet shop owner with trays of mithai",
+    outcome: { label: "Out for delivery", value: "Order #1197", note: "Customer updated automatically" },
     chat: [
       { from: "customer", text: "Is my Diwali box order on its way?", time: "4:18 pm" },
       { from: "business", text: "Yes! Order #1197 is out for delivery 🚚 It will reach you in about 25 minutes.", time: "4:18 pm" },
@@ -61,6 +66,7 @@ export const SLIDE_DEFAULTS: Record<SlideId, SlideDefaults> = {
     headline: "WhatsApp that connects with every student.",
     description: "Handle course enquiries, admission follow-ups and student communication.",
     photoHint: "Indian coaching institute teacher in a classroom",
+    outcome: { label: "Demo class booked", value: "Sun, 10:00 am", note: "Syllabus and location sent" },
     chat: [
       { from: "customer", text: "Sir, IELTS batch kab start ho raha hai? Fees?", time: "6:10 pm" },
       { from: "business", text: "Next batch starts 15 Nov, 7–9 am 📚 Fees ₹12,000 for 2 months. Free demo class this Sunday.", time: "6:10 pm" },
@@ -74,6 +80,7 @@ export const SLIDE_DEFAULTS: Record<SlideId, SlideDefaults> = {
     headline: "WhatsApp that cares for your patients.",
     description: "Simplify appointment enquiries, reminders and patient communication.",
     photoHint: "Indian doctor in a clean clinic",
+    outcome: { label: "Appointment confirmed", value: "Token 7", note: "Tomorrow, 10:20 am" },
     chat: [
       { from: "customer", text: "Can I see Dr. Mehta tomorrow morning?", time: "8:30 pm" },
       { from: "business", text: "Tomorrow 10:20 am is available. Shall I confirm it for you?", time: "8:30 pm" },
@@ -87,6 +94,7 @@ export const SLIDE_DEFAULTS: Record<SlideId, SlideDefaults> = {
     headline: "WhatsApp that turns enquiries into opportunities.",
     description: "Capture property enquiries, respond to leads and follow up with potential buyers.",
     photoHint: "Indian real estate agent outside a new home",
+    outcome: { label: "Site visit fixed", value: "Sat, 5:30 pm", note: "New lead added for follow-up" },
     chat: [
       { from: "customer", text: "Saw your ad. Is the 3BHK in Model Town still available?", time: "1:14 pm" },
       { from: "business", text: "Yes 🏡 3BHK, 1,650 sq ft, ₹78 lakh. Photos and floor plan sent. Want a site visit?", time: "1:14 pm" },
@@ -114,7 +122,7 @@ export const heroTextSchema = z
   .object({ slides: z.partialRecord(z.enum(SLIDE_IDS), slideEdit.pick({ headline: true, description: true, enabled: true }).strict()) })
   .strict();
 
-export type HeroSlide = { id: SlideId; category: string; business: string; headline: string; description: string; photoHint: string; photoUrl: string | null; enabled: boolean; chat: ChatLine[] };
+export type HeroSlide = { id: SlideId; category: string; business: string; headline: string; description: string; photoHint: string; photoUrl: string | null; enabled: boolean; outcome: Outcome; chat: ChatLine[] };
 
 type Stored = { slides: Partial<Record<SlideId, Partial<z.infer<typeof slideEdit>>>> };
 
@@ -142,6 +150,7 @@ export async function getHero(): Promise<HeroSlide[]> {
       photoHint: d.photoHint,
       photoUrl: o.photoId ? `/api/site/hero/${id}?v=${o.photoId}` : LOCAL_PHOTOS[id] ? `/images/mecgura/${LOCAL_PHOTOS[id]}` : null,
       enabled: o.enabled ?? true,
+      outcome: d.outcome,
       chat: d.chat,
     };
   });

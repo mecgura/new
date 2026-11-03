@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { BadgeCheck, Building2, CakeSlice, CheckCheck, GraduationCap, MessageCircle, Pause, Play, Scissors, Stethoscope, Store } from "lucide-react";
+import { BadgeCheck, BellRing, Building2, CakeSlice, CheckCheck, GraduationCap, MessageCircle, Pause, Play, Scissors, Stethoscope, Store } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
  * prefer reduced motion. Every box has a fixed size so nothing jumps between slides.
  */
 type ChatLine = { from: "customer" | "business"; text: string; time: string };
-export type HeroSlideView = { id: string; category: string; business: string; headline: string; description: string; photoUrl: string | null; chat: ChatLine[] };
+export type HeroSlideView = { id: string; category: string; business: string; headline: string; description: string; photoUrl: string | null; outcome: { label: string; value: string; note: string }; chat: ChatLine[] };
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = { retail: Store, salon: Scissors, food: CakeSlice, education: GraduationCap, healthcare: Stethoscope, realestate: Building2 };
 const SLIDE_MS = 4800;
@@ -161,7 +161,7 @@ export function IndustryHero({ slides, whatsapp, signedIn, appHref }: { slides: 
                   // eslint-disable-next-line @next/next/no-img-element -- small WebP served by our own route
                   <img src={s.photoUrl} alt={i === index ? `${s.category} business owner` : ""} className={cn("size-full object-cover", i === index && !reduced && "hero-zoom")} decoding="async" fetchPriority={i === index ? "high" : "low"} />
                 ) : (
-                  <div className="hero-fallback grid size-full place-items-center pb-[45%]">
+                  <div className="hero-fallback grid size-full place-items-center pb-[46%] pt-[34%]">
                     <div className="text-center text-white/90">
                       <SIcon className="mx-auto size-16 opacity-90" />
                       <p className="mt-4 font-display text-2xl font-bold">{s.business}</p>
@@ -178,6 +178,18 @@ export function IndustryHero({ slides, whatsapp, signedIn, appHref }: { slides: 
           </p>
         </div>
 
+        {visible >= slide.chat.length ? (
+          <div key={`out-${slide.id}`} className="hero-pop absolute left-3 top-14 z-10 flex max-w-[14rem] items-center gap-2.5 rounded-2xl border border-white/10 bg-[#0b3d26]/90 p-2.5 pr-3.5 text-white shadow-xl backdrop-blur sm:left-auto sm:-right-4 sm:top-16" aria-hidden="true">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#25d366] text-[#063b22]">
+              <BellRing className="size-4" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[11px] text-white/70">{slide.outcome.label}</span>
+              <span className="block font-display text-base font-bold leading-tight">{slide.outcome.value}</span>
+              <span className="hidden truncate text-[11px] text-white/60 sm:block">{slide.outcome.note}</span>
+            </span>
+          </div>
+        ) : null}
         <div className="absolute -bottom-2 left-1/2 w-[92%] -translate-x-1/2 overflow-hidden rounded-2xl border border-black/5 bg-[#efeae2] shadow-2xl sm:-left-10 sm:w-[21rem] sm:translate-x-0 lg:-left-16" aria-hidden="true">
           <div className="flex items-center gap-2.5 bg-[#075e54] px-3.5 py-2.5 text-white">
             <span className="grid size-8 place-items-center rounded-full bg-white/15 text-sm font-bold">{slide.business[0]}</span>

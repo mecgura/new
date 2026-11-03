@@ -429,6 +429,7 @@ html[data-inbox-focus="1"] .app-sidebar { display: none !important; }
   .hero-in { opacity: 0; animation: hero-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
   .hero-bubble { animation: hero-bubble 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
   .hero-zoom { animation: hero-zoom 7s ease-out both; }
+  .hero-pop { animation: hero-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
   .hero-typing { animation: hero-typing 1s steps(3) infinite; }
   .hero-progress { width: 0; animation: hero-progress linear forwards; }
   .hero-progress-paused { animation-play-state: paused; }
@@ -439,6 +440,7 @@ html[data-inbox-focus="1"] .app-sidebar { display: none !important; }
 @keyframes hero-word { from { opacity: 0; transform: translateY(0.45em); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
 @keyframes hero-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes hero-bubble { from { opacity: 0; transform: translateY(8px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes hero-pop { from { opacity: 0; transform: translateY(-8px) scale(0.92); } to { opacity: 1; transform: none; } }
 @keyframes hero-zoom { from { transform: scale(1.08); } to { transform: scale(1); } }
 @keyframes hero-typing { from { width: 0.5rem; } to { width: 1.6rem; } }
 @keyframes hero-progress { from { width: 0; } to { width: 100%; } }
