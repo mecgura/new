@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import type * as React from "react";
 import Link from "next/link";
-import { RotatingWord } from "@/components/marketing/rotating-word";
 import { SiteTracker } from "@/components/marketing/site-tracker";
+import { IndustryHero } from "@/components/home/industry-hero";
+import { getHero } from "@/services/site/hero";
 import { BadgeCheck, Bot, Camera, Check, CheckCheck, Globe, Mail, Megaphone, MessageCircle, MessagesSquare, Phone, Plug, Smartphone, Sparkles, Workflow } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
@@ -67,7 +68,8 @@ const phoneLabel = /^91\d{10}$/.test(whatsappDigits) ? `+91 ${whatsappDigits.sli
 const wa = (text: string) => `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(text)}`;
 
 export default async function Landing({ searchParams }: { searchParams: Promise<{ festivalPreview?: string; phase?: string }> }) {
-  const [plans, session, content, festivals, sp] = await Promise.all([loadPlans(), auth().catch(() => null), getHomeContent(), getFestivals(), searchParams]);
+  const [plans, session, content, festivals, sp, hero] = await Promise.all([loadPlans(), auth().catch(() => null), getHomeContent(), getFestivals(), searchParams, getHero().catch(() => null)]);
+  const heroSlides = (hero ?? []).filter((x) => x.enabled).map(({ id, category, business, headline, description, photoUrl, chat }) => ({ id, category, business, headline, description, photoUrl, chat }));
   const today = istToday();
   // ?festivalPreview=<id>&phase=pre|live lets the Super Admin see any festival's offer early; everyone else gets today's.
   const wantsPreview = typeof sp.festivalPreview === "string" && /^[a-z0-9-]{1,40}$/.test(sp.festivalPreview);
@@ -115,52 +117,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
             festival={{ ...festival, offer: promo?.offer ?? festival.offer, phase: promo?.phase, startLabel: publicPromo?.startLabel, photoUrl: festival.hasPhoto ? `/api/festival-photo/${festival.id}` : null, endsLabel: publicPromo?.endLabel ?? "" }}
           />
         ) : null}
-        <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 pb-16 pt-10 lg:grid-cols-2 lg:pt-16">
-          <div>
-            <p className="wa-pill"><BadgeCheck className="size-3.5" aria-hidden="true" /> Official WhatsApp Business API · set up by our team</p>
-            <h1 className="mt-5 font-display text-4xl font-bold leading-[1.1] sm:text-5xl lg:text-6xl">
-              WhatsApp that replies for your
-              <br />
-              <RotatingWord
-                interval={2400}
-                items={["sweet shop.", "salon.", "clinic.", "gym.", "boutique.", "coaching centre."].map((word) => ({ word, color: "#128c4a" }))}
-              />
-            </h1>
-            <p className="wa-muted mt-5 max-w-xl text-lg">
-              A customer messages at 11 pm and gets left on &ldquo;seen&rdquo;. By morning they&apos;ve ordered from someone else. We set up WhatsApp on your number so every message gets a reply, and we stay on call in Punjabi, Hindi or English.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <a href={wa("Hi MECGURA, I would like a demo of the platform.")} data-track="demo_hero" className="wa-btn"><MessageCircle className="size-5" aria-hidden="true" /> Book a demo on WhatsApp</a>
-              <Link href={appHref} className="wa-btn wa-btn-ghost">{signedIn ? "Open workspace" : "Client sign in"}</Link>
-            </div>
-            <ul className="wa-muted mt-6 flex flex-wrap gap-x-5 gap-y-2 text-small">
-              {["Live in about a day", "Usually on your existing number", "A real person on call when you need help"].map((t) => (
-                <li key={t} className="inline-flex items-center gap-1.5">
-                  <BadgeCheck className="size-4 text-[#128c4a]" aria-hidden="true" /> {t}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="mx-auto w-full max-w-sm" aria-hidden="true">
-            <div className="overflow-hidden rounded-[1.75rem] border border-[var(--wa-line)] bg-white shadow-xl">
-              <div className="flex items-center gap-3 bg-[#075e54] px-4 py-3 text-white">
-                <span className="grid size-9 place-items-center rounded-full bg-white/15 font-bold">S</span>
-                <div>
-                  <p className="text-sm font-bold leading-tight">Sharma Sweets</p>
-                  <p className="text-xs text-white/80">online</p>
-                </div>
-              </div>
-              <div className="wa-chat-bg flex min-h-[21rem] flex-col gap-2.5 p-4">
-                <p className="wa-bubble wa-in wa-seq" style={{ "--d": "0.3s" } as React.CSSProperties}>Hi! Is my Diwali box order on its way?<span className="wa-time">10:42</span></p>
-                <p className="wa-bubble wa-out wa-seq" style={{ "--d": "1.4s" } as React.CSSProperties}>Yes! It is out for delivery today. Track it here: sharma.in/t/4821<span className="wa-time">10:42 <CheckCheck className="wa-ticks inline size-3.5" /></span></p>
-                <p className="wa-bubble wa-in wa-seq" style={{ "--d": "2.6s" } as React.CSSProperties}>Great, thank you!<span className="wa-time">10:43</span></p>
-                <p className="wa-bubble wa-out wa-seq" style={{ "--d": "3.6s" } as React.CSSProperties}>Anything else we can help with? 😊<span className="wa-time">10:43 <CheckCheck className="wa-ticks inline size-3.5" /></span></p>
-                <p className="wa-bubble wa-in wa-seq !w-16" style={{ "--d": "4.6s" } as React.CSSProperties}><span className="wa-dot" /><span className="wa-dot" /><span className="wa-dot" /></p>
-              </div>
-            </div>
-          </div>
-        </section>
+        <IndustryHero slides={heroSlides} whatsapp={whatsappDigits} signedIn={signedIn} appHref={appHref} />
 
         {content.services.length ? (
           <section id="services" aria-labelledby="services-title" className="mx-auto max-w-6xl px-4 py-14">

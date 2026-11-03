@@ -398,30 +398,47 @@ html[data-inbox-focus="1"] .app-sidebar { display: none !important; }
   .fest-bar::after, .fest-pop { animation: none; }
 }
 
-/* Rotating word in a heading (src/components/marketing/rotating-word.tsx). */
-.rotating-word {
-  display: inline-grid;
-  vertical-align: bottom;
-  overflow: hidden;
-  padding-bottom: 0.08em;
+/* Home page industry hero (src/components/home/industry-hero.tsx). */
+.hero-cta {
+  display: inline-flex;
+  min-height: 3rem;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  padding: 0 1.5rem;
+  font-weight: 700;
+  color: #2a1203;
+  background: linear-gradient(135deg, #ffb020, #f97316);
+  box-shadow: 0 12px 28px -12px rgba(249, 115, 22, 0.7);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
 }
-.rotating-word > [data-state] {
-  grid-area: 1 / 1;
-  white-space: nowrap;
-  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s ease, filter 0.5s ease;
+.hero-cta:hover { filter: brightness(1.04); box-shadow: 0 16px 32px -12px rgba(249, 115, 22, 0.8); }
+.hero-cta:active { transform: scale(0.98); }
+.hero-cta:focus-visible { outline: 3px solid #128c4a; outline-offset: 2px; }
+.hero-fallback {
+  background: radial-gradient(28rem 20rem at 80% 10%, rgba(37, 211, 102, 0.35), transparent 60%), linear-gradient(160deg, #0f5132, #062b1b);
 }
-.rotating-word > [data-state="out"] {
-  opacity: 0;
-  transform: translateY(-0.9em);
-  filter: blur(4px);
+.hero-typing {
+  display: inline-block;
+  width: 1.6rem;
+  height: 0.5rem;
+  background: radial-gradient(circle, #667781 40%, transparent 42%) 0 50% / 0.5rem 0.5rem repeat-x;
 }
-.rotating-word > [data-state="in"] {
-  opacity: 1;
-  transform: translateY(0);
-  filter: blur(0);
+@media (prefers-reduced-motion: no-preference) {
+  .hero-word { opacity: 0; animation: hero-word 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .hero-in { opacity: 0; animation: hero-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .hero-bubble { animation: hero-bubble 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .hero-zoom { animation: hero-zoom 7s ease-out both; }
+  .hero-typing { animation: hero-typing 1s steps(3) infinite; }
+  .hero-progress { width: 0; animation: hero-progress linear forwards; }
+  .hero-progress-paused { animation-play-state: paused; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rotating-word > [data-state] {
-    transition: none;
-  }
+  .hero-progress { width: 100%; }
 }
+@keyframes hero-word { from { opacity: 0; transform: translateY(0.45em); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes hero-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes hero-bubble { from { opacity: 0; transform: translateY(8px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes hero-zoom { from { transform: scale(1.08); } to { transform: scale(1); } }
+@keyframes hero-typing { from { width: 0.5rem; } to { width: 1.6rem; } }
+@keyframes hero-progress { from { width: 0; } to { width: 100%; } }

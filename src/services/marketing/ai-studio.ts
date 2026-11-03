@@ -107,14 +107,14 @@ async function generateImage(input: z.infer<typeof imageSchema>): Promise<{ data
 const MAX_PER_DAY = 60;
 
 export async function createImage(input: z.infer<typeof imageSchema>, actorId: string, req?: Request) {
-  const today = await db.marketingImage.count({ where: { createdAt: { gte: new Date(Date.now() - 86_400_000) } } });
+  const today = await db.marketingImage.count({ where: { provider: { in: ["gemini", "openai"] }, createdAt: { gte: new Date(Date.now() - 86_400_000) } } });
   if (today >= MAX_PER_DAY) throw new ApiError("RATE_LIMITED", `Up to ${MAX_PER_DAY} AI images a day, to keep the AI bill in check. Try again tomorrow.`);
   const { data, mimeType } = await generateImage(input);
   if (data.length > 8 * 1024 * 1024) throw new ApiError("SERVICE_UNAVAILABLE", "The image was too large to keep.");
   const img = await db.marketingImage.create({ data: { provider: input.provider, prompt: input.prompt, aspect: input.aspect, mimeType, data: new Uint8Array(data), createdById: actorId } });
   await audit({ action: "marketing.post_saved", actorUserId: actorId, targetType: "marketing_image", targetId: img.id, metadata: { provider: input.provider, aspect: input.aspect }, req });
   // Keep the gallery to the latest 200 images.
-  const old = await db.marketingImage.findMany({ orderBy: { createdAt: "desc" }, skip: 200, select: { id: true } });
+  const old = await db.marketingImage.findMany({ where: { provider: { not: "hero" } }, orderBy: { createdAt: "desc" }, skip: 200, select: { id: true } });
   if (old.length) await db.marketingImage.deleteMany({ where: { id: { in: old.map((o) => o.id) } } });
   return imageDto(img);
 }
@@ -122,7 +122,7 @@ export async function createImage(input: z.infer<typeof imageSchema>, actorId: s
 const imageDto = (i: { id: string; provider: string; prompt: string; aspect: string; createdAt: Date }) => ({ id: i.id, provider: i.provider, prompt: i.prompt, aspect: i.aspect, createdAt: i.createdAt, url: `/api/admin/marketing/images/${i.id}` });
 
 export async function listImages() {
-  const rows = await db.marketingImage.findMany({ orderBy: { createdAt: "desc" }, take: 60, select: { id: true, provider: true, prompt: true, aspect: true, createdAt: true } });
+  const rows = await db.marketingImage.findMany({ where: { provider: { not: "hero" } }, orderBy: { createdAt: "desc" }, take: 60, select: { id: true, provider: true, prompt: true, aspect: true, createdAt: true } });
   return rows.map(imageDto);
 }
 

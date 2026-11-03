@@ -333,6 +333,7 @@ describe("5. public and secret-protected surfaces", () => {
         "/api/health",
         "/api/m/track",
         "/api/site-chat",
+        "/api/site/hero/[slide]",
         "/api/webchat/[key]",
         "/api/webhooks/channels/[key]",
         "/api/webhooks/meta",

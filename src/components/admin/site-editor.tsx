@@ -137,7 +137,7 @@ function WhatsAppBotCard() {
   );
 }
 
-export function SiteEditor({ initial }: { initial: HomeContent }) {
+export function SiteEditor({ initial, top }: { initial: HomeContent; top?: React.ReactNode }) {
   const toast = useToast();
   const [team, setTeam] = React.useState<Team[]>(initial.team);
   const [services, setServices] = React.useState<Service[]>(initial.services);
@@ -183,6 +183,7 @@ export function SiteEditor({ initial }: { initial: HomeContent }) {
         }
       />
 
+      {top}
       <ChatbotCard />
       <WhatsAppBotCard />
 
