@@ -66,7 +66,7 @@ describe("create client", () => {
     expect(await bcrypt.compare("Passw0rd!", org.members[0].user.passwordHash)).toBe(true);
     expect(org.subscriptions).toEqual([expect.objectContaining({ planId: starter.id, status: "active", priceMonthly: 199900 })]);
     expect(org.settings).toMatchObject({ timezone: "Asia/Kolkata", currency: "INR" });
-    expect(org.services).toHaveLength(12);
+    expect(org.services).toHaveLength(10);
     expect(org.services.filter((s) => s.enabled).map((s) => s.service).sort()).toEqual(["CRM", "WHATSAPP_AUTOMATION"]);
     const actions = (await db.auditLog.findMany({ where: { organizationId: orgId } })).map((a) => a.action).sort();
     expect(actions).toEqual(["client.created", "plan.changed", "service.enabled", "service.enabled", "user.created"]);
@@ -174,7 +174,7 @@ describe("client lifecycle", () => {
   it("services enable/disable are persisted and audited individually", async () => {
     const { orgId } = await createClient({ services: [] });
     actAs(admin);
-    const res = await clientServices.PUT(req("/x", { method: "PUT", body: { services: { CRM: true, ATS: false } } }), params({ id: orgId }));
+    const res = await clientServices.PUT(req("/x", { method: "PUT", body: { services: { CRM: true, SOCIAL_MEDIA: false } } }), params({ id: orgId }));
     expect(res.status).toBe(200);
     await clientServices.PUT(req("/x", { method: "PUT", body: { services: { CRM: false, OMNICHANNEL: true } } }), params({ id: orgId }));
     const enabled = await db.organizationService.findMany({ where: { organizationId: orgId, enabled: true } });
@@ -325,7 +325,7 @@ describe("client users never get admin privileges", () => {
       client.GET(req("/x"), p),
       client.PATCH(req("/x", { method: "PATCH", body: { status: "active" } }), p),
       client.DELETE(req("/x", { method: "DELETE", body: { confirmName: "x" } }), p),
-      clientServices.PUT(req("/x", { method: "PUT", body: { services: { HRMS: true } } }), p),
+      clientServices.PUT(req("/x", { method: "PUT", body: { services: { SOCIAL_MEDIA: true } } }), p),
       clientPlan.PUT(req("/x", { method: "PUT", body: { planId: starter.id } }), p),
       resetAccess.POST(req("/x", { method: "POST", body: {} }), p),
       clientNumbers.POST(req("/x", { method: "POST", body: { displayName: "x", phoneNumber: "+919999999999" } }), p),
@@ -337,7 +337,7 @@ describe("client users never get admin privileges", () => {
     ];
     for (const res of await Promise.all(calls)) expect(res.status).toBe(403);
     // Even their own organization's plan/services were not touched.
-    expect(await db.organizationService.count({ where: { organizationId: orgId, service: "HRMS", enabled: true } })).toBe(0);
+    expect(await db.organizationService.count({ where: { organizationId: orgId, service: "SOCIAL_MEDIA", enabled: true } })).toBe(0);
     expect((await db.subscription.findFirstOrThrow({ where: { organizationId: orgId, status: "active" } })).planId).toBe(growth.id);
   });
 
