@@ -4,7 +4,7 @@ export const STAGES = ["new", "contacted", "demo", "proposal", "won", "lost"] as
 export type Stage = (typeof STAGES)[number];
 export const STAGE_LABELS: Record<Stage, string> = { new: "New", contacted: "Contacted", demo: "Demo", proposal: "Proposal", won: "Won", lost: "Lost" };
 
-export const SOURCES = ["website_chat", "whatsapp", "demo_click", "festival", "referral", "manual"] as const;
+export const SOURCES = ["website_chat", "whatsapp", "demo_click", "festival", "referral", "maps", "manual"] as const;
 export type Source = (typeof SOURCES)[number];
 export const SOURCE_LABELS: Record<Source, string> = {
   website_chat: "Website chat",
@@ -12,12 +12,16 @@ export const SOURCE_LABELS: Record<Source, string> = {
   demo_click: "Demo button",
   festival: "Festival offer",
   referral: "Client referral",
+  maps: "Google Maps search",
   manual: "Added by hand",
 };
 
 /** A ready WhatsApp message for the next step, so following up takes one tap. */
-export function followUpText(l: { name: string; stage: string; business: string }): string {
+export function followUpText(l: { name: string; stage: string; business: string; source?: string }): string {
   const hi = `Hi${l.name ? ` ${l.name.split(" ")[0]}` : ""}`;
+  // Found on Maps: they never asked, so the first message introduces MECGURA and makes saying no easy.
+  if (l.source === "maps" && l.stage === "new")
+    return `${hi}, I'm Gurjeet from MECGURA 🙏 I saw ${l.business || "your business"} on Google Maps. We set up WhatsApp so every customer message gets an instant reply. Can I show you a 10-minute demo? If not interested, just say no and I won't message again.`;
   switch (l.stage) {
     case "new":
       return `${hi}, this is Gurjeet from MECGURA 👋 Thanks for your interest in WhatsApp automation${l.business ? ` for ${l.business}` : ""}. When is a good time for a quick 15-minute demo?`;
@@ -32,4 +36,14 @@ export function followUpText(l: { name: string; stage: string; business: string 
     default:
       return `${hi}, hope business is going well! MECGURA has new WhatsApp automation features this month. Would you like a quick look?`;
   }
+}
+
+/** Fills an outreach template: {name}, {business}, {city}, {category}. Empty values drop cleanly. */
+export function fillTemplate(template: string, v: { name?: string; business?: string; city?: string; category?: string }): string {
+  return template
+    .replace(/\{name\}/g, (v.name ?? "").split(" ")[0] || "there")
+    .replace(/\{business\}/g, v.business || "your business")
+    .replace(/\{city\}/g, v.city || "your city")
+    .replace(/\{category\}/g, v.category || "business")
+    .trim();
 }

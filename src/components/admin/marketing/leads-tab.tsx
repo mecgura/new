@@ -46,7 +46,7 @@ const ago = (iso: string) => {
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
   return m < 60 ? `${Math.max(1, m)} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
 };
-const waLink = (l: Pick<Lead, "phone" | "name" | "stage" | "business">) => `https://wa.me/${l.phone.replace(/\D/g, "")}?text=${encodeURIComponent(followUpText(l))}`;
+const waLink = (l: Pick<Lead, "phone" | "name" | "stage" | "business" | "source">) => `https://wa.me/${l.phone.replace(/\D/g, "")}?text=${encodeURIComponent(followUpText(l))}`;
 /** datetime-local value in India time. */
 const toLocalInput = (iso: string | null) => (iso ? new Date(new Date(iso).getTime() + 5.5 * 3_600_000).toISOString().slice(0, 16) : "");
 const fromLocalInput = (v: string) => (v ? new Date(`${v}:00+05:30`).toISOString() : "");

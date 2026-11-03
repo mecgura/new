@@ -1756,6 +1756,10 @@ model MarketingLead {
   nextFollowUpAt DateTime?
   lastContactAt  DateTime?
   organizationId String? // the client workspace once onboarded
+  website        String    @default("")
+  placeId        String    @default("") // Google Maps place id when found with Outreach
+  emailOptOut    Boolean   @default(false) // unsubscribed from outreach email
+  lastEmailedAt  DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 

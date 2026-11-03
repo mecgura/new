@@ -26,6 +26,8 @@ export const newLeadSchema = z
     source: z.enum(SOURCES).default("manual"),
     note: text(1000),
     valueRupees: z.coerce.number().min(0).max(10_000_000).default(0),
+    website: z.string().trim().max(300).default(""),
+    placeId: z.string().trim().max(300).default(""),
   })
   .merge(attributionSchema)
   .strict();
@@ -51,7 +53,7 @@ type LeadRow = Awaited<ReturnType<typeof db.marketingLead.findFirstOrThrow>>;
 export function heatScore(l: Pick<LeadRow, "source" | "stage" | "createdAt" | "lastContactAt" | "nextFollowUpAt">, now = Date.now()): number {
   if (l.stage === "won") return 100;
   if (l.stage === "lost") return 0;
-  const base: Record<string, number> = { referral: 35, whatsapp: 30, website_chat: 25, festival: 25, demo_click: 20, manual: 10 };
+  const base: Record<string, number> = { referral: 35, whatsapp: 30, website_chat: 25, festival: 25, demo_click: 20, maps: 12, manual: 10 };
   let s = base[l.source] ?? 10;
   const ageDays = (now - l.createdAt.getTime()) / 86_400_000;
   s += ageDays < 2 ? 25 : ageDays < 7 ? 15 : ageDays < 30 ? 5 : 0;
@@ -84,6 +86,8 @@ export async function recordLead(input: z.input<typeof newLeadSchema>, actorId: 
         email: existing.email || v.email,
         business: existing.business || v.business,
         city: existing.city || v.city,
+        website: existing.website || v.website,
+        placeId: existing.placeId || v.placeId,
         ...(reopened ? { stage: "new", lostReason: "" } : {}),
       },
     });
@@ -100,6 +104,8 @@ export async function recordLead(input: z.input<typeof newLeadSchema>, actorId: 
       business: v.business,
       city: v.city,
       source: v.source,
+      website: v.website,
+      placeId: v.placeId,
       medium: v.medium,
       campaign: v.campaign,
       ref: v.ref.toLowerCase(),

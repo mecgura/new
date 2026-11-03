@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarDays, ImagePlus, LineChart, Sparkles, UsersRound } from "lucide-react";
+import { CalendarDays, ImagePlus, LineChart, MapPin, Sparkles, UsersRound } from "lucide-react";
 import { PageHeader } from "@/components/ds";
 import { cn } from "@/lib/utils";
 import { MarketingOverview } from "@/components/admin/marketing/overview-tab";
@@ -10,10 +10,12 @@ import { LeadsTab } from "@/components/admin/marketing/leads-tab";
 import { CalendarTab } from "@/components/admin/marketing/calendar-tab";
 import { CreativeMaker } from "@/components/admin/marketing/creative-maker";
 import { AiStudio } from "@/components/admin/marketing/ai-studio";
+import { OutreachTab } from "@/components/admin/marketing/outreach-tab";
 
 const TABS = [
   { id: "overview", label: "Overview", icon: LineChart },
   { id: "leads", label: "Leads", icon: UsersRound },
+  { id: "outreach", label: "Outreach", icon: MapPin },
   { id: "calendar", label: "Content calendar", icon: CalendarDays },
   { id: "ai", label: "AI studio", icon: Sparkles },
   { id: "creatives", label: "Creative maker", icon: ImagePlus },
@@ -46,6 +48,7 @@ function MarketingPage() {
       </nav>
       {tab === "overview" ? <MarketingOverview onOpenLeads={() => go("leads")} /> : null}
       {tab === "leads" ? <LeadsTab initialLeadId={sp.get("lead")} /> : null}
+      {tab === "outreach" ? <OutreachTab /> : null}
       {tab === "calendar" ? <CalendarTab /> : null}
       {tab === "ai" ? <AiStudio /> : null}
       {tab === "creatives" ? <CreativeMaker key={sp.get("img") ?? "none"} imageId={sp.get("img")} /> : null}
