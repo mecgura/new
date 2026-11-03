@@ -496,6 +496,9 @@ export async function receiveInbound(organizationId: string, whatsappAccountId: 
   // AI agent: answers after the response is sent (the webhook must not wait on the model).
   const aiInput = { conversationId: conv.id, contactId: contact.id, whatsappAccountId, messageId: msg.id, type: input.type, text: input.body, optOut, automationHandled };
   runAfterResponse(async () => {
+    // A first message to MECGURA's own number becomes a lead in Admin → Marketing.
+    const { captureWhatsAppLead } = await import("@/services/marketing/capture");
+    await captureWhatsAppLead({ ...aiInput, whatsappAccountId }).catch((e) => console.error("[marketing] capture failed:", e));
     const { handleInboundForAi } = await import("@/services/ai/engine");
     const ai = await handleInboundForAi(organizationId, aiInput);
     // No AI agent answered: the built-in MECGURA assistant covers the chosen number (see Admin → Website).

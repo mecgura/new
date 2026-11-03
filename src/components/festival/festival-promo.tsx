@@ -79,7 +79,7 @@ export function FestivalPromoBar({ promo, whatsapp }: { promo: PublicPromo; what
         <span>{promo.offer}</span>
         {promo.offerCode ? <span className="rounded bg-white/20 px-1.5 py-0.5 font-mono text-xs font-bold tracking-wider">{promo.offerCode}</span> : null}
         {countdown ? <span className="text-white/85">· {promo.phase === "pre" ? `${promo.name} in ${countdown}` : `Ends in ${countdown}`}</span> : null}
-        <a href={claimLink(promo, whatsapp)} target="_blank" rel="noreferrer" className="font-bold underline underline-offset-2 hover:no-underline">
+        <a href={claimLink(promo, whatsapp)} data-track="festival_claim" target="_blank" rel="noreferrer" className="font-bold underline underline-offset-2 hover:no-underline">
           Claim now →
         </a>
       </div>
@@ -136,7 +136,7 @@ export function FestivalPromoPopup({ promo, whatsapp, preview = false }: { promo
           {promo.phase === "pre" ? `${promo.name} on ${promo.startLabel}` : `Valid till ${promo.endLabel}`}
           {countdown ? ` · ${countdown} left` : ""}
         </p>
-        <a href={claimLink(promo, whatsapp)} target="_blank" rel="noreferrer" onClick={() => setOpen(false)} className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-full bg-white font-bold text-[#3b0a45] hover:bg-white/90">
+        <a href={claimLink(promo, whatsapp)} data-track="festival_claim" target="_blank" rel="noreferrer" onClick={() => setOpen(false)} className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-full bg-white font-bold text-[#3b0a45] hover:bg-white/90">
           <MessageCircle className="size-4" aria-hidden="true" /> Claim on WhatsApp
         </a>
       </div>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type * as React from "react";
 import Link from "next/link";
 import { RotatingWord } from "@/components/marketing/rotating-word";
+import { SiteTracker } from "@/components/marketing/site-tracker";
 import { BadgeCheck, Bot, Camera, Check, CheckCheck, Globe, Mail, Megaphone, MessageCircle, MessagesSquare, Phone, Plug, Smartphone, Sparkles, Workflow } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
@@ -85,6 +86,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
   return (
     <div className="wa-root min-h-dvh overflow-x-hidden" data-festival-theme={promo && promo.theme !== "none" ? promo.theme : undefined}>
       <ScrollReveal />
+      <SiteTracker />
       {previewing ? (
         <div className="fixed bottom-4 left-1/2 z-[70] -translate-x-1/2 rounded-full bg-black/85 px-4 py-2 text-center text-xs font-semibold text-white shadow-lg">
           {promo ? `Preview: ${promo.festival.name} (${promo.phase === "pre" ? "days before" : "festival day"}). Only you can see this.` : "Preview: festival not found. Save it first."}{" "}
@@ -132,7 +134,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
               WhatsApp, Instagram, Messenger, email and website chat land in one inbox. Your team replies together, campaigns stay compliant and an AI agent helps after hours.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <a href={wa("Hi MECGURA, I would like a demo of the platform.")} className="wa-btn"><MessageCircle className="size-5" aria-hidden="true" /> Book a demo on WhatsApp</a>
+              <a href={wa("Hi MECGURA, I would like a demo of the platform.")} data-track="demo_hero" className="wa-btn"><MessageCircle className="size-5" aria-hidden="true" /> Book a demo on WhatsApp</a>
               <Link href={appHref} className="wa-btn wa-btn-ghost">{signedIn ? "Open workspace" : "Client sign in"}</Link>
             </div>
           </div>
@@ -283,7 +285,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
                     </p>
                   )}
                   <p className="wa-muted mt-1 text-small">{p.description}</p>
-                  <a href={wa(`Hi MECGURA, I am interested in the ${p.name} plan${planDiscount && festival ? ` with the ${festival.name} offer${festival.offerCode ? ` (${festival.offerCode})` : ""}` : ""}.`)} className="wa-btn wa-btn-ghost mt-5 !min-h-11 w-full text-small">
+                  <a href={wa(`Hi MECGURA, I am interested in the ${p.name} plan${planDiscount && festival ? ` with the ${festival.name} offer${festival.offerCode ? ` (${festival.offerCode})` : ""}` : ""}.`)} data-track="plan_whatsapp" className="wa-btn wa-btn-ghost mt-5 !min-h-11 w-full text-small">
                     {p.selfServe ? "Get started" : "Talk to us"}
                   </a>
                   <ul className="mt-5 space-y-2 text-small">
@@ -310,8 +312,8 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
             <h2 id="contact-title" className="font-display text-3xl font-bold sm:text-4xl">Let&apos;s talk</h2>
             <p className="wa-muted mx-auto mt-3 max-w-lg">Questions, a demo or setup help. We reply on WhatsApp and email.</p>
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
-              <a href={wa("Hi MECGURA, I would like to know more about the platform.")} className="wa-btn w-full"><MessageCircle className="size-5" aria-hidden="true" /> WhatsApp</a>
-              <a href={`tel:+${whatsappDigits}`} className="wa-btn wa-btn-ghost w-full"><Phone className="size-5" aria-hidden="true" /> {phoneLabel}</a>
+              <a href={wa("Hi MECGURA, I would like to know more about the platform.")} data-track="contact_whatsapp" className="wa-btn w-full"><MessageCircle className="size-5" aria-hidden="true" /> WhatsApp</a>
+              <a href={`tel:+${whatsappDigits}`} data-track="contact_call" className="wa-btn wa-btn-ghost w-full"><Phone className="size-5" aria-hidden="true" /> {phoneLabel}</a>
               <a href={`mailto:${siteConfig.contact.email}`} className="wa-btn wa-btn-ghost w-full !px-3 text-small"><Mail className="size-5 shrink-0" aria-hidden="true" /> {siteConfig.contact.email}</a>
             </div>
           </div>

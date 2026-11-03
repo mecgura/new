@@ -1733,3 +1733,79 @@ model LeaveRequest {
 
   @@index([organizationId, status])
 }
+
+// ---------------------------------------------------------------------------
+// MECGURA's own marketing (Super Admin): leads, website traffic and the content plan
+// ---------------------------------------------------------------------------
+
+/** A prospect for MECGURA itself: from the website chat, the MECGURA WhatsApp number, a tracked link or added by hand. */
+model MarketingLead {
+  id             String    @id @default(cuid())
+  name           String    @default("")
+  phone          String    @unique // E.164
+  email          String    @default("")
+  business       String    @default("")
+  city           String    @default("")
+  source         String    @default("manual") // website_chat | whatsapp | demo_click | festival | referral | manual
+  campaign       String    @default("") // utm_campaign
+  medium         String    @default("") // utm_source / referrer host
+  ref            String    @default("") // a client's referral code (their workspace slug)
+  stage          String    @default("new") // new | contacted | demo | proposal | won | lost
+  valuePaise     Int       @default(0) // expected or won monthly value
+  lostReason     String    @default("")
+  nextFollowUpAt DateTime?
+  lastContactAt  DateTime?
+  organizationId String? // the client workspace once onboarded
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  activities MarketingLeadActivity[]
+
+  @@index([stage, nextFollowUpAt])
+  @@index([createdAt])
+}
+
+model MarketingLeadActivity {
+  id        String   @id @default(cuid())
+  leadId    String
+  kind      String // created | stage | note | follow_up | whatsapp | seen_again
+  text      String   @default("")
+  actorId   String?
+  createdAt DateTime @default(now())
+
+  lead MarketingLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, createdAt])
+}
+
+/** Anonymous website analytics: a page view or a tracked click. No IP or personal data is stored. */
+model MarketingEvent {
+  id        String   @id @default(cuid())
+  kind      String // visit | click
+  name      String   @default("") // click name, e.g. demo_hero
+  path      String   @default("/")
+  source    String   @default("direct") // instagram | facebook | google | whatsapp | referral | direct | other host
+  campaign  String   @default("")
+  ref       String   @default("")
+  visitor   String   @default("") // random id kept in the visitor's browser
+  createdAt DateTime @default(now())
+
+  @@index([kind, createdAt])
+  @@index([createdAt])
+}
+
+/** MECGURA's own content calendar. */
+model MarketingPost {
+  id        String   @id @default(cuid())
+  date      String // YYYY-MM-DD (India)
+  channels  String   @default("[\"instagram\"]") // JSON list
+  title     String   @default("")
+  caption   String   @default("")
+  format    String   @default("post") // post | story | reel | status
+  status    String   @default("idea") // idea | ready | posted
+  festival  String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+}

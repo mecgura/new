@@ -100,6 +100,11 @@ export async function createClient(actorUserId: string, input: CreateClientInput
     const { setMetaBilling } = await import("@/services/billing/meta-billing");
     await setMetaBilling(orgId, { mode: input.metaBillingMode ?? "client_pays", markupRupees: input.markupRupees }, actorUserId, req);
   }
+  if (input.mobile) {
+    // A client who came in as a marketing lead is marked won and linked to the new workspace.
+    const { linkClientToLead } = await import("@/services/marketing/leads");
+    await linkClientToLead(input.mobile, orgId, plan?.priceMonthly ?? 0).catch((e) => console.error("[marketing] lead link failed:", e));
+  }
   await notify({ userId: ownerId, organizationId: orgId, type: "success", title: `Welcome to MECGURA, ${organization.name}`, body: "Your workspace is ready. Complete your profile and invite your team.", link: "/dashboard" });
   return { organization, ownerId, createdUser };
 }

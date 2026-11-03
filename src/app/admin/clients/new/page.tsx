@@ -33,6 +33,14 @@ export default function NewClientPage() {
   const [showPassword, setShowPassword] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [saving, setSaving] = React.useState(false);
+  // Opened from a marketing lead ("Onboard as client"): prefill what we already know.
+  React.useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const pick = (k: string, max: number) => (q.get(k) ?? "").slice(0, max);
+    if (!q.get("mobile")) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm((f) => ({ ...f, name: f.name || pick("name", 100), ownerName: f.ownerName || pick("owner", 100), mobile: f.mobile || pick("mobile", 20), ownerEmail: f.ownerEmail || pick("email", 200) }));
+  }, []);
 
   React.useEffect(() => {
     void apiFetch<{ plans: Plan[] }>("/api/admin/plans").then((r) => {

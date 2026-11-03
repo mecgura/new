@@ -4,11 +4,12 @@ import { ApiError, clientIp } from "@/lib/api";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { VISITOR_ID } from "@/services/channels/webchat";
 import { captureLead, siteChatAccount, siteChatConfig, visitorMessageWithBot } from "@/services/site/lead-chat";
+import { attributionSchema, recordLeadQuietly } from "@/services/marketing/leads";
 
 export const dynamic = "force-dynamic";
 
 const schema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("lead"), visitorId: z.string().regex(VISITOR_ID), name: z.string().trim().max(80).default(""), phone: z.string().trim().min(5).max(20) }).strict(),
+  z.object({ action: z.literal("lead"), visitorId: z.string().regex(VISITOR_ID), name: z.string().trim().max(80).default(""), phone: z.string().trim().min(5).max(20), attr: attributionSchema.partial().optional() }).strict(),
   z.object({ action: z.literal("message"), visitorId: z.string().regex(VISITOR_ID), text: z.string().trim().min(1).max(1000) }).strict(),
 ]);
 
@@ -35,7 +36,11 @@ export async function POST(req: Request) {
     const input = parsed.data;
     if (input.action === "lead") {
       enforceRateLimit(`site-lead:${clientIp(req)}`, 5, 10 * 60_000);
-      return NextResponse.json(await captureLead(account, input));
+      const { attr, ...lead } = input;
+      const result = await captureLead(account, lead);
+      // Also into MECGURA's own sales pipeline, with where the visitor came from.
+      await recordLeadQuietly({ phone: lead.phone, name: lead.name, source: attr?.ref ? "referral" : "website_chat", medium: attr?.medium ?? "", campaign: attr?.campaign ?? "", ref: attr?.ref ?? "" });
+      return NextResponse.json(result);
     }
     return NextResponse.json(await visitorMessageWithBot(account, input.visitorId, input.text));
   } catch (e) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { getAttribution } from "@/components/marketing/site-tracker";
 import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { MessageCircle, Send, X } from "lucide-react";
 
@@ -115,7 +116,7 @@ function ChatWidget({ digits }: { digits: string }) {
     setBusy(true);
     setError("");
     try {
-      const d = await post({ action: "lead", name, phone });
+      const d = await post({ action: "lead", name, phone, attr: getAttribution() });
       store.set("mgc_site_lead", "1");
       setKnown(true);
       if (d.greeting) {
