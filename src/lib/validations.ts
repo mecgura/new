@@ -272,7 +272,7 @@ export const whatsappSettingsSchema = z.object({
 const httpsUrl = z.string().trim().url().max(2000).refine((u) => u.startsWith("https://"), "Must be an https link");
 
 export const conversationListSchema = paginationSchema.extend({
-  tab: z.enum(["all", "unread", "assigned", "mine"]).default("all"),
+  tab: z.enum(["all", "unread", "waiting", "assigned", "mine"]).default("all"),
   q: z.string().trim().max(100).optional().default(""),
   status: z.enum(["open", "closed", "all"]).default("open"),
   accountId: z.string().max(64).optional().default(""),

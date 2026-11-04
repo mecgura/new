@@ -10,6 +10,7 @@ export type Conversation = {
   lastMessageAt: string;
   lastMessagePreview: string;
   lastInboundAt: string | null;
+  waitingSince?: string | null;
   windowOpen: boolean;
   channel: string;
   subject: string;

@@ -536,6 +536,8 @@ async function sendOutbound(r: RunCtx, conv: Conv, contact: { id: string; phone:
   publish(r.ex.organizationId, { type: "message.created", conversationId: conv.id, messageId: msg.id, assignedToUserId: conv.assignedToUserId });
   if (sent.status !== "sent") throw new StepError(`WhatsApp didn't accept the message: ${sent.error || "unknown error"}`, "retryable" in sent && Boolean(sent.retryable));
   if (acct.isDemo && acct.phoneRecordId) await db.phoneNumber.update({ where: { id: acct.phoneRecordId }, data: { messagesSent: { increment: 1 } } });
+  const { markAnswered } = await import("@/services/inbox/sla");
+  await markAnswered(r.ex.organizationId, conv.id, null);
   return msg.id;
 }
 

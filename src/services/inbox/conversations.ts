@@ -6,7 +6,7 @@ import { publish } from "@/lib/realtime/broker";
 import { roleHasPermission, type OrgPermission } from "@/lib/authz";
 import type { OrgAccess } from "@/lib/session";
 
-export const INBOX_TABS = ["all", "unread", "assigned", "mine"] as const;
+export const INBOX_TABS = ["all", "unread", "waiting", "assigned", "mine"] as const;
 export type InboxTab = (typeof INBOX_TABS)[number];
 
 export function can(access: OrgAccess, permission: OrgPermission) {
@@ -41,6 +41,7 @@ export function toConversationDto(c: ConvRow) {
     lastMessageAt: c.lastMessageAt,
     lastMessagePreview: c.lastMessagePreview,
     lastInboundAt: c.lastInboundAt,
+    waitingSince: c.waitingSince,
     windowOpen,
     windowExpiresAt: !windowed ? null : c.lastInboundAt ? new Date(c.lastInboundAt.getTime() + WINDOW_MS) : null,
     isDemo: c.isDemo,
@@ -60,6 +61,7 @@ function tabWhere(access: OrgAccess, tab: InboxTab) {
   if (tab === "unread") return { unreadCount: { gt: 0 } };
   if (tab === "assigned") return { assignedToUserId: { not: null } };
   if (tab === "mine") return { assignedToUserId: access.user.id };
+  if (tab === "waiting") return { status: "open", waitingSince: { not: null } };
   return {};
 }
 
@@ -229,7 +231,7 @@ export async function setConversationStatus(access: OrgAccess, id: string, statu
   if (!can(access, "inbox:view_all") && c.assignedToUserId !== access.user.id) {
     throw new ApiError("FORBIDDEN", "Take the chat before closing or reopening it.");
   }
-  await db.conversation.update({ where: { id }, data: { status, ...(status === "closed" ? { unreadCount: 0 } : {}) } });
+  await db.conversation.update({ where: { id }, data: { status, ...(status === "closed" ? { unreadCount: 0, waitingSince: null, slaAlertedAt: null } : {}) } });
   const actor = await db.user.findUnique({ where: { id: access.user.id }, select: { name: true, email: true } });
   await systemMessage(access.organizationId, id, `${displayName(actor)} ${status === "closed" ? "closed" : "reopened"} this chat`, access.user.id);
   await audit({ action: "conversation.status_changed", actorUserId: access.user.id, organizationId: access.organizationId, targetType: "conversation", targetId: id, metadata: { to: status }, req });
@@ -237,6 +239,8 @@ export async function setConversationStatus(access: OrgAccess, id: string, statu
   if (status === "closed") {
     const { onConversationClosed } = await import("@/services/ai/engine");
     await onConversationClosed(access.organizationId, id).catch((e) => console.error("[ai] close hook failed:", e));
+    const { sendCsat } = await import("@/services/inbox/sla");
+    await sendCsat(access.organizationId, id).catch((e) => console.error("[inbox] CSAT not sent:", e));
   }
   return reload(access.organizationId, id);
 }

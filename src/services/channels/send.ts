@@ -96,6 +96,10 @@ export async function sendChannelReply(access: OrgAccess, conversationId: string
   }
   publish(conv.organizationId, { type: "message.created", conversationId, messageId: msg.id, assignedToUserId: conv.assignedToUserId });
   const final = await db.message.findUniqueOrThrow({ where: { id: msg.id }, include });
+  if (final.status === "sent") {
+    const { markAnswered } = await import("@/services/inbox/sla");
+    await markAnswered(conv.organizationId, conversationId, opts.origin ? null : access.user.id);
+  }
   await emitMessageEvent(final.status === "sent" ? "message.sent" : "message.failed", msg.id);
   return toMessageDto(final);
 }

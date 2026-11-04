@@ -126,6 +126,8 @@ model Organization {
   landingPages            LandingPage[]
   landingImages           LandingImage[]
   supportTickets          SupportTicket[]
+  inboxResponses          InboxResponse[]
+  csatSurveys             CsatSurvey[]
 
   @@index([status])
   @@index([createdAt])
@@ -310,6 +312,7 @@ model OrganizationSettings {
   creditUtility      Int       @default(0)
   packageAlerts      String    @default("{}") // JSON: usage alerts already sent this month
   leadScoring        String    @default("") // JSON scoring rules for Hot/Warm/Cold ("" = defaults)
+  inboxSla           String    @default("") // JSON first-response target, escalation, CSAT
   loyalty            String    @default("") // JSON loyalty + referral programme settings ("" = defaults, off)
   reviews            String    @default("") // JSON review-request settings ("" = defaults)
   updatedAt          DateTime  @updatedAt
@@ -604,6 +607,8 @@ model Conversation {
   aiHandoffAt        DateTime?
   aiHandoffReason    String    @default("")
   aiResumeAt         DateTime?
+  waitingSince       DateTime? // customer wrote and nobody has answered yet
+  slaAlertedAt       DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -620,6 +625,7 @@ model Conversation {
   @@index([organizationId, lastMessageAt])
   @@index([organizationId, assignedToUserId])
   @@index([organizationId, status])
+  @@index([status, waitingSince])
 }
 
 model Message {
@@ -2179,4 +2185,52 @@ model SupportAttachment {
   message SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@index([messageId])
+}
+
+// ---------------------------------------------------------------------------
+// Inbox service levels: how long customers wait, CSAT after a chat, who is looking at a chat.
+// ---------------------------------------------------------------------------
+model InboxResponse {
+  id             String   @id @default(cuid())
+  organizationId String
+  conversationId String
+  userId         String? // null = AI agent / automation
+  kind           String // human | bot
+  waitedMs       Int
+  breached       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model CsatSurvey {
+  id             String    @id @default(cuid())
+  organizationId String
+  conversationId String
+  contactId      String
+  agentUserId    String?
+  rating         Int? // 1 poor · 2 okay · 3 great
+  comment        String    @default("")
+  sentAt         DateTime  @default(now())
+  ratedAt        DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, sentAt])
+  @@index([conversationId, sentAt])
+}
+
+model ConversationPresence {
+  conversationId String
+  userId         String
+  organizationId String
+  name           String
+  typing         Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+
+  @@id([conversationId, userId])
+  @@index([organizationId, updatedAt])
 }

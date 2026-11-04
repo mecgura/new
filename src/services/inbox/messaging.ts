@@ -240,6 +240,10 @@ export async function sendMessage(access: OrgAccess, conversationId: string, inp
     await db.phoneNumber.update({ where: { id: account.phoneRecordId }, data: { messagesSent: { increment: 1 } } });
   }
   publish(conv.organizationId, { type: "message.created", conversationId, messageId: msg.id, assignedToUserId: conv.assignedToUserId });
+  if (sent.status === "sent") {
+    const { markAnswered } = await import("@/services/inbox/sla");
+    await markAnswered(conv.organizationId, conversationId, opts.origin ? null : access.user.id);
+  }
   // A teammate is talking to the customer: the AI agent steps back.
   if (opts.origin) return loadDto(msg.id);
   const { onHumanReply } = await import("@/services/ai/engine");
@@ -358,6 +362,10 @@ export async function sendSystemText(organizationId: string, conversationId: str
   publish(organizationId, { type: "message.created", conversationId, messageId: msg.id, assignedToUserId: conv.assignedToUserId });
   if (sent.status !== "sent") throw new SystemSendError(sent.error || "Sending failed.", "retryable" in sent && Boolean(sent.retryable));
   if (acct.isDemo && acct.phoneRecordId) await db.phoneNumber.update({ where: { id: acct.phoneRecordId }, data: { messagesSent: { increment: 1 } } });
+  if (!origin.csat) {
+    const { markAnswered } = await import("@/services/inbox/sla");
+    await markAnswered(organizationId, conversationId, null);
+  }
   return msg.id;
 }
 
@@ -434,6 +442,8 @@ export async function receiveInbound(organizationId: string, whatsappAccountId: 
     : await db.conversation.create({
         data: { organizationId, contactId: contact.id, whatsappAccountId, isDemo: input.isDemo, unreadCount: 1, lastInboundAt: input.at, lastMessageAt: input.at, lastMessagePreview: prev },
       });
+  const { markWaiting, markAnswered, captureCsat } = await import("@/services/inbox/sla");
+  await markWaiting(conv.id, input.at);
   const replyTo = input.replyToExternalId ? await db.message.findFirst({ where: { externalId: input.replyToExternalId, conversationId: conv.id }, select: { id: true, type: true, payload: true } }) : null;
   const msg = await db.message.create({
     data: {
@@ -466,6 +476,12 @@ export async function receiveInbound(organizationId: string, whatsappAccountId: 
   publish(organizationId, { type: "message.created", conversationId: conv.id, messageId: msg.id, assignedToUserId: conv.assignedToUserId });
   publish(organizationId, { type: "conversation.updated", conversationId: conv.id, assignedToUserId: conv.assignedToUserId });
   if (!existing) await emitConversationCreated(organizationId, conv.id);
+  // A tap on the "How did we do?" buttons is a rating, not a new question: record it and stop here.
+  if (text && (await captureCsat(organizationId, conv.id, text).catch(() => false))) {
+    await markAnswered(organizationId, conv.id, null);
+    await emitMessageEvent("message.received", msg.id);
+    return { conversationId: conv.id, messageId: msg.id, contactId: contact.id };
+  }
   // First message carrying a referral code ("REF-K7M2QX"): record who referred this customer.
   if (!existing && text && /ref/i.test(text)) {
     const { captureReferral } = await import("@/services/loyalty/loyalty");

@@ -6,11 +6,12 @@ import { cn } from "@/lib/utils";
 import { Avatar, Badge, EmptyState, ErrorState, LoadingState, SearchBar, Select } from "@/components/ds";
 import { prettyId, shortTime, type Account, type Conversation } from "@/components/inbox/types";
 
-export type ListFilters = { tab: "all" | "unread" | "assigned" | "mine"; q: string; status: "open" | "closed" | "all"; accountId: string };
+export type ListFilters = { tab: "all" | "unread" | "waiting" | "assigned" | "mine"; q: string; status: "open" | "closed" | "all"; accountId: string };
 
 const TABS: { id: ListFilters["tab"]; label: string }[] = [
   { id: "all", label: "All" },
   { id: "unread", label: "Unread" },
+  { id: "waiting", label: "Waiting" },
   { id: "assigned", label: "Assigned" },
   { id: "mine", label: "Mine" },
 ];
@@ -119,6 +120,7 @@ export function ConversationList({
                       </span>
                       <span className="mt-1 flex flex-wrap items-center gap-1">
                         {c.assignedTo ? <Badge>{c.assignedTo.name}</Badge> : <Badge tone="warning">Unassigned</Badge>}
+                        {c.waitingSince && c.status === "open" ? <WaitBadge since={c.waitingSince} /> : null}
                         {c.isDemo ? <Badge tone="info">Demo</Badge> : null}
                         {c.status === "closed" ? <Badge>Closed</Badge> : null}
                         {c.contact.tags.slice(0, 2).map((t) => (
@@ -138,4 +140,16 @@ export function ConversationList({
       {footer}
     </div>
   );
+}
+
+/** How long the customer has been waiting for a reply (red after 15 minutes). */
+function WaitBadge({ since }: { since: string }) {
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const mins = Math.max(0, Math.round((now - new Date(since).getTime()) / 60_000));
+  const label = mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  return <Badge tone={mins >= 15 ? "danger" : "warning"} title="Waiting for a reply">⏱ {label}</Badge>;
 }

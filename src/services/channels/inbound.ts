@@ -59,6 +59,8 @@ export async function receiveChannelMessage(account: { id: string; organizationI
     : await db.conversation.create({
         data: { organizationId, contactId: contact.id, channel: account.kind, channelAccountId: account.id, subject: (input.subject ?? "").slice(0, 200), isDemo, unreadCount: 1, lastInboundAt: input.at, lastMessageAt: input.at, lastMessagePreview: prev },
       });
+  const { markWaiting } = await import("@/services/inbox/sla");
+  await markWaiting(conv.id, input.at);
   const msg = await db.message.create({
     data: {
       organizationId,

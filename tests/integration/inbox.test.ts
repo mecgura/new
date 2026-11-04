@@ -253,10 +253,10 @@ describe("assignment & team permissions", () => {
     await assign.POST(post({ toUserId: tt.agent1.id }), P(tt.orgId, { cid: a.conversationId }));
     actAs(tt.agent1);
     const res = await json(await convs.GET(req("/x"), P(tt.orgId)));
-    expect(res.body.counts).toEqual({ all: 2, unread: 2, assigned: 1, mine: 1 });
+    expect(res.body.counts).toEqual({ all: 2, unread: 2, waiting: 2, assigned: 1, mine: 1 });
     actAs(tt.agent2);
     const res2 = await json(await convs.GET(req("/x"), P(tt.orgId)));
-    expect(res2.body.counts).toEqual({ all: 1, unread: 1, assigned: 0, mine: 0 });
+    expect(res2.body.counts).toEqual({ all: 1, unread: 1, waiting: 1, assigned: 0, mine: 0 });
   });
 
   it("agent status, team list and closing chats", async () => {

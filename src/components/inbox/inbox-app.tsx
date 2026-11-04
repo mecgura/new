@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Bot, CheckCircle2, FileText, FolderPlus, FlaskConical, Info, Lock, Maximize2, MessageCirclePlus, Minimize2, Phone, PhoneCall, RotateCcw, UserPlus, Wifi, WifiOff } from "lucide-react";
+import { ArrowLeft, Bot, CheckCircle2, Download, Eye, FileText, FolderPlus, FlaskConical, Info, Lock, Maximize2, MessageCirclePlus, Minimize2, Phone, PhoneCall, RotateCcw, UserPlus, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Alert,
@@ -258,6 +258,7 @@ export function InboxApp(props: Props) {
               {focus ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
             </IconButton>
             <h1 className="text-h3 text-app-text">Inbox</h1>
+            {perms["inbox:view_all"] ? <Link href="/inbox/monitor" className="ml-1 rounded px-1.5 py-0.5 text-caption text-app-muted hover:bg-app-hover hover:text-app-text" title="Team monitor: waiting chats, reply times, CSAT">Monitor</Link> : null}
           </div>
           <div className="flex items-center gap-1">
             <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-caption", connected ? "text-green-300" : "text-amber-300")} title={connected ? "Live updates on" : "Reconnecting…"}>
@@ -346,6 +347,7 @@ export function InboxApp(props: Props) {
                   {prettyId(conv.contact.phone)} · via {conv.account.displayName}{conv.channel !== "whatsapp" ? ` (${conv.channel === "email" ? "Email" : conv.channel})` : ""}{conv.subject ? ` · ${conv.subject}` : ""}
                   {conv.isDemo ? " · Demo" : ""}
                 </p>
+                <Presence orgId={orgId} conversationId={conv.id} />
               </div>
               <CallButton orgId={orgId} conv={conv} calling={props.calling ?? { phone: false, ai: false }} />
               {conv.channel === "whatsapp" && perms["inbox:reply"] ? (
@@ -354,6 +356,11 @@ export function InboxApp(props: Props) {
                 </IconButton>
               ) : null}
               {perms["contacts:write"] ? <GroupButton orgId={orgId} contactId={conv.contact.id} onChanged={() => setPanelKey((k) => k + 1)} /> : null}
+              {perms["contacts:export"] ? (
+                <a href={`/api/organizations/${orgId}/inbox/conversations/${conv.id}/export`} className="hidden sm:inline-flex" aria-label="Download transcript" title="Download transcript">
+                  <span className="flex size-9 items-center justify-center rounded-[var(--radius-control)] border border-app-border text-app-text hover:bg-app-hover"><Download className="size-4" aria-hidden="true" /></span>
+                </a>
+              ) : null}
               <Dropdown
                 label="Assign conversation"
                 trigger={
@@ -666,5 +673,40 @@ function GroupButton({ orgId, contactId, onChanged }: { orgId: string; contactId
         </>
       )}
     </Dropdown>
+  );
+}
+
+/**
+ * Collision warning: tells you when a teammate has the same chat open or is typing a reply, so two people don't answer
+ * the same customer. Sends a heartbeat every 10 seconds while the chat is open.
+ */
+function Presence({ orgId, conversationId }: { orgId: string; conversationId: string }) {
+  const [others, setOthers] = React.useState<{ userId: string; name: string; typing: boolean }[]>([]);
+  const lastTyped = React.useRef(0);
+  React.useEffect(() => {
+    const onInput = (e: Event) => {
+      if (e.target instanceof HTMLTextAreaElement && e.target.closest('[aria-label="Conversation"]')) lastTyped.current = Date.now();
+    };
+    document.addEventListener("input", onInput);
+    let alive = true;
+    const beat = async () => {
+      const r = await apiFetch<{ others: { userId: string; name: string; typing: boolean }[] }>(`/api/organizations/${orgId}/inbox/conversations/${conversationId}/presence`, { method: "POST", body: { typing: Date.now() - lastTyped.current < 8000 } });
+      if (alive && r.ok) setOthers(r.data.others);
+    };
+    void beat();
+    const t = window.setInterval(() => void beat(), 10_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+      document.removeEventListener("input", onInput);
+    };
+  }, [orgId, conversationId]);
+  if (!others.length) return null;
+  const typing = others.filter((o) => o.typing);
+  return (
+    <p className={cn("flex items-center gap-1 truncate text-caption", typing.length ? "text-amber-300" : "text-app-subtle")} role="status">
+      <Eye className="size-3.5 shrink-0" aria-hidden="true" />
+      {typing.length ? `${typing.map((o) => o.name).join(", ")} ${typing.length === 1 ? "is" : "are"} typing a reply` : `${others.map((o) => o.name).join(", ")} also ${others.length === 1 ? "has" : "have"} this chat open`}
+    </p>
   );
 }

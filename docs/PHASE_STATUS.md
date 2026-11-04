@@ -170,3 +170,17 @@ _(newest last)_
 - API `/campaigns/[cid]/insights`, `/campaigns/performance`. UI: wizard A/B option (template step) and B variables,
   report insights panel (cost & ROI, A/B, failures, next time), `/campaigns/performance`.
 - Tests `tests/integration/campaign-ab.test.ts` (4). Suite 499/499, build OK, smoke OK.
+
+### Stage 8: Inbox SLA, CSAT, collision warning, monitor, export ✅ (2026-11-04)
+- Schema: `Conversation.waitingSince/slaAlertedAt` (+ index), `InboxResponse`, `CsatSurvey`, `ConversationPresence`,
+  `OrganizationSettings.inboxSla`. Migration `prisma/migrations/20261112090000_inbox_sla`.
+- `src/services/inbox/sla.ts`: a customer message starts the clock (first unanswered message only); any reply
+  (agent, automation, AI, other channels) stops it and logs the wait. Scheduler alerts the assignee and managers once
+  past the first-response target and can reassign to the least-busy online agent after N minutes (off by default).
+  Demo chats are skipped.
+- CSAT (off by default): closing a chat sends a 3-button "How did we do?" question; the tap is recorded against the
+  agent and never triggers automations or AI replies.
+- Collision warning: inbox heartbeat shows who else has the chat open or is typing.
+- Inbox "Waiting" tab with wait badges; `/inbox/monitor` for owners/managers (waiting chats, breaches, per-agent
+  response times and CSAT, SLA settings); transcript download (`contacts:export`, audited).
+- Tests `tests/integration/inbox-sla.test.ts` (4). Suite 503/503, build OK, smoke OK.
