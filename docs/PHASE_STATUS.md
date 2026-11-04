@@ -70,3 +70,20 @@ _(newest last)_
 - Tests: `tests/integration/deals.test.ts` (6) + security sweep auto-covers the new routes. Suite 471/471, build OK,
   browser smoke (desktop drag-drop + mobile) OK.
 - Not in this stage (next CRM pass): saved views, duplicate merge, sales targets, CLV/repeat purchase.
+
+### Stage 2: Referral & loyalty ✅ (2026-11-04)
+- New gated client service `LOYALTY` ("Referral & loyalty") in `src/lib/catalog.ts`; sidebar "Loyalty"; every API
+  route checks it (`src/services/loyalty/route-guard.ts`). Permissions `loyalty:read|write|manage`.
+- Schema: `Purchase`, `LoyaltyEntry` (ledger, approved/pending/rejected, expiry), `LoyaltyReward`, `ReferralCode`,
+  `Referral`, `OrganizationSettings.loyalty`. Migration `prisma/migrations/20261107090000_loyalty`.
+- Rules `src/lib/loyalty.ts`: points per ₹100, welcome points, expiry days with FIFO expiry, tiers by lifetime points,
+  referral code format `REF-XXXXXX`.
+- Service `src/services/loyalty/loyalty.ts`: record purchase (points, customer lifecycle, pays referral on the friend's
+  first qualifying purchase), redeem (serializable, can't overdraw), manual adjust with reason, rewards catalogue,
+  referral codes + public link `/r/<orgId>/<code>` → client's WhatsApp with the code typed, referral captured from the
+  customer's first message (`receiveInbound` hook), fraud flags (own code ignored, existing contact flagged, 10+/24h
+  flagged; flagged never auto-paid), manual/auto approval, customer card (CLV, orders, avg gap, history), overview
+  (members, 30-day sales, repeat rate, points given/redeemed/outstanding/expiring, lapsed 60+ days).
+- UI `/loyalty` (`src/components/loyalty/loyalty-app.tsx`): Overview, Customers, Referrals, Rewards, Settings.
+- Tests `tests/integration/loyalty.test.ts` (7). Suite 478/478, build OK, browser smoke OK.
+- Retention/win-back: uses the existing "Drip: win back" automation (tag "Win back"); lapsed count shown on Overview.

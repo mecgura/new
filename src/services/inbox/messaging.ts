@@ -466,6 +466,11 @@ export async function receiveInbound(organizationId: string, whatsappAccountId: 
   publish(organizationId, { type: "message.created", conversationId: conv.id, messageId: msg.id, assignedToUserId: conv.assignedToUserId });
   publish(organizationId, { type: "conversation.updated", conversationId: conv.id, assignedToUserId: conv.assignedToUserId });
   if (!existing) await emitConversationCreated(organizationId, conv.id);
+  // First message carrying a referral code ("REF-K7M2QX"): record who referred this customer.
+  if (!existing && text && /ref/i.test(text)) {
+    const { captureReferral } = await import("@/services/loyalty/loyalty");
+    await captureReferral(organizationId, contact.id, text);
+  }
   await emitMessageEvent("message.received", msg.id);
   if (input.type === "flow") {
     // WhatsApp Flow answers: store the submission and run the Flow's CRM action.

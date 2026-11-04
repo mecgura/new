@@ -114,6 +114,11 @@ model Organization {
   payments                Payment[]
   pipelineStages          PipelineStage[]
   deals                   Deal[]
+  purchases               Purchase[]
+  loyaltyEntries          LoyaltyEntry[]
+  loyaltyRewards          LoyaltyReward[]
+  referralCodes           ReferralCode[]
+  referrals               Referral[]
 
   @@index([status])
   @@index([createdAt])
@@ -298,6 +303,7 @@ model OrganizationSettings {
   creditUtility      Int       @default(0)
   packageAlerts      String    @default("{}") // JSON: usage alerts already sent this month
   leadScoring        String    @default("") // JSON scoring rules for Hot/Warm/Cold ("" = defaults)
+  loyalty            String    @default("") // JSON loyalty + referral programme settings ("" = defaults, off)
   updatedAt          DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -530,6 +536,11 @@ model Contact {
   flowSubmissions      FlowSubmission[]
   appointments         Appointment[]
   deals                Deal[]
+  purchases            Purchase[]
+  loyaltyEntries       LoyaltyEntry[]
+  referralCode         ReferralCode?
+  referralsMade        Referral[]            @relation("ReferralsMade")
+  referredBy           Referral[]            @relation("ReferredBy")
 
   @@unique([organizationId, phone])
   @@index([organizationId, lifecycle])
@@ -1895,4 +1906,92 @@ model DealActivity {
   deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
 
   @@index([dealId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Referral & loyalty (client service LOYALTY): purchases earn points, points buy rewards, customers refer friends.
+// ---------------------------------------------------------------------------
+model Purchase {
+  id             String   @id @default(cuid())
+  organizationId String
+  contactId      String
+  amountPaise    Int
+  note           String   @default("")
+  actorId        String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([contactId, createdAt])
+}
+
+model LoyaltyEntry {
+  id             String    @id @default(cuid())
+  organizationId String
+  contactId      String
+  points         Int // + earned, - redeemed / adjusted down
+  kind           String // purchase | referral | welcome | redeem | adjust
+  status         String    @default("approved") // approved | pending | rejected
+  note           String    @default("")
+  refType        String    @default("") // purchase | referral | reward
+  refId          String    @default("")
+  expiresAt      DateTime?
+  actorId        String?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([contactId, createdAt])
+  @@index([organizationId, status])
+}
+
+model LoyaltyReward {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String   @default("")
+  points         Int
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, active])
+}
+
+model ReferralCode {
+  id             String   @id @default(cuid())
+  organizationId String
+  contactId      String   @unique
+  code           String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, code])
+}
+
+model Referral {
+  id                String    @id @default(cuid())
+  organizationId    String
+  referrerContactId String
+  refereeContactId  String
+  code              String
+  status            String    @default("pending") // pending | qualified | rewarded | rejected
+  flag              String    @default("") // why it needs a human look (possible fraud)
+  qualifiedAt       DateTime?
+  createdAt         DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  referrer     Contact      @relation("ReferralsMade", fields: [referrerContactId], references: [id], onDelete: Cascade)
+  referee      Contact      @relation("ReferredBy", fields: [refereeContactId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, refereeContactId])
+  @@index([organizationId, status])
+  @@index([referrerContactId])
 }

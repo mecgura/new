@@ -60,6 +60,10 @@ export const ORG_PERMISSIONS = {
   "deals:read": ["CLIENT_OWNER", "MANAGER", "AGENT"],
   "deals:write": ["CLIENT_OWNER", "MANAGER", "AGENT"],
   "deals:manage": ["CLIENT_OWNER", "MANAGER"],
+  // Referral & loyalty. Anyone can record a purchase or redeem; owners and managers set rules, rewards and approvals.
+  "loyalty:read": ["CLIENT_OWNER", "MANAGER", "AGENT"],
+  "loyalty:write": ["CLIENT_OWNER", "MANAGER", "AGENT"],
+  "loyalty:manage": ["CLIENT_OWNER", "MANAGER"],
   // Team presence
   "team:status": ["CLIENT_OWNER", "MANAGER", "AGENT"],
   // Templates & campaigns (business-initiated messaging)
@@ -121,6 +125,8 @@ export const PERMISSION_LABELS: Partial<Record<OrgPermission, string>> = {
   "contacts:export": "Export CSV",
   "deals:write": "Create & move deals",
   "deals:manage": "Set up pipeline stages, scoring and delete deals",
+  "loyalty:write": "Record purchases and redeem points",
+  "loyalty:manage": "Set loyalty rules, rewards and approve referrals",
   "members:manage": "Manage team",
   "whatsapp:manage": "Connect WhatsApp numbers",
   "channels:manage": "Connect email, web chat and social inboxes",
