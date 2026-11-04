@@ -71,6 +71,8 @@ export const ORG_PERMISSIONS = {
   // Landing pages
   "pages:read": ["CLIENT_OWNER", "MANAGER", "AGENT"],
   "pages:manage": ["CLIENT_OWNER", "MANAGER"],
+  // Help & support: everyone in the workspace can ask MECGURA for help and follow the workspace's tickets.
+  "support:use": ["CLIENT_OWNER", "MANAGER", "AGENT"],
   // Team presence
   "team:status": ["CLIENT_OWNER", "MANAGER", "AGENT"],
   // Templates & campaigns (business-initiated messaging)

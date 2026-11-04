@@ -123,3 +123,19 @@ _(newest last)_
   list, desktop/phone preview (container queries), block editor, page settings + SEO, publish/unpublish, analytics.
 - 🔧 Custom domains per page need Vercel domain setup per client; not self-serve yet ("ask MECGURA").
 - Tests `tests/integration/landing.test.ts` (6). Suite 488/488, build OK, browser smoke OK.
+
+### Stage 5: Support desk + system health ✅ (2026-11-04)
+- Schema: `SupportTicket` (global number from #1001, category, priority, status open/waiting/resolved/closed,
+  SLA deadline, first response, escalation, assignee), `SupportMessage` (client/support, internal notes),
+  `SupportAttachment` (PNG/JPG/WebP/PDF ≤5 MB, file signature checked). Migration
+  `prisma/migrations/20261110090000_support`.
+- Service `src/services/support/tickets.ts`: create (all roles, `support:use`), client reply reopens, client resolve,
+  admin reply / internal note (first public reply stops the clock, client notified + emailed when email is set up),
+  status/priority/assignee (priority moves an unanswered deadline), SLA targets urgent 2 h / high 8 h / normal 24 h /
+  low 72 h, scheduler escalation once per breach to all Super Admins, 30-day report.
+- Health `src/services/admin/system-health.ts`: database, scheduler, Meta app + webhook, numbers + low quality,
+  messages/campaigns/automations/webhooks/API failure rates and p95, provider configuration (Claude, Gemini/OpenAI,
+  Resend, Razorpay, Maps, voice), support backlog; latest failures list; "down" alerts to admins at most hourly
+  (scheduler, every 15 min).
+- UI: client `/support` ("Help & support" in the sidebar), admin `/admin/support` and `/admin/health`.
+- Tests `tests/integration/support.test.ts` (5). Suite 493/493, build OK, browser smoke OK.

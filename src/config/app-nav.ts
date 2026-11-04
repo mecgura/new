@@ -1,4 +1,4 @@
-import { BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, LayoutTemplate, Mail, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, Users, UsersRound, Webhook, Workflow, type LucideIcon } from "lucide-react";
+import { Activity, BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, LayoutTemplate, LifeBuoy, Mail, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, Users, UsersRound, Webhook, Workflow, type LucideIcon } from "lucide-react";
 
 export type NavService = "WHATSAPP_AUTOMATION" | "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "SOCIAL_MEDIA" | "LOYALTY" | "REVIEWS" | "LANDING_PAGES";
 
@@ -54,6 +54,7 @@ export const CLIENT_NAV: NavSection[] = [
       { label: "API", icon: KeyRound, href: "/api" },
       { label: "Webhooks", icon: Webhook, href: "/webhooks" },
       { label: "Agreement & KYC", icon: FileSignature, href: "/onboarding" },
+      { label: "Help & support", icon: LifeBuoy, href: "/support" },
       { label: "Billing", icon: CreditCard, href: "/billing" },
       { label: "Settings", icon: Settings, href: "/settings" },
     ],
@@ -78,6 +79,8 @@ export const ADMIN_NAV: NavSection[] = [
       { label: "Usage", icon: Gauge, href: "/admin/usage" },
       { label: "Analytics", icon: BarChart3, href: "/admin/analytics" },
       { label: "Logs & Audit", icon: ScrollText, href: "/admin/audit-logs" },
+      { label: "Support", icon: LifeBuoy, href: "/admin/support" },
+      { label: "System health", icon: Activity, href: "/admin/health" },
       { label: "Marketing", icon: Megaphone, href: "/admin/marketing" },
       { label: "Website", icon: Globe, href: "/admin/site" },
       { label: "Festivals", icon: PartyPopper, href: "/admin/festivals" },

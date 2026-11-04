@@ -45,6 +45,9 @@ model User {
   apiKeys               ApiKey[]
   webhookEndpoints      WebhookEndpoint[]
   ownedDeals            Deal[]               @relation("DealOwner")
+  ticketsCreated        SupportTicket[]      @relation("TicketsCreated")
+  ticketsAssigned       SupportTicket[]      @relation("TicketsAssigned")
+  supportMessages       SupportMessage[]     @relation("SupportMessages")
 
   @@index([email])
   @@index([role])
@@ -122,6 +125,7 @@ model Organization {
   reviewRequests          ReviewRequest[]
   landingPages            LandingPage[]
   landingImages           LandingImage[]
+  supportTickets          SupportTicket[]
 
   @@index([status])
   @@index([createdAt])
@@ -2108,4 +2112,64 @@ model LandingImage {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Support desk: clients raise tickets with MECGURA; the Super Admin answers with SLA tracking.
+// ---------------------------------------------------------------------------
+model SupportTicket {
+  id              String    @id @default(cuid())
+  number          Int       @unique
+  organizationId  String
+  createdById     String?
+  assigneeId      String?
+  subject         String
+  category        String // whatsapp | billing | campaigns | automations | ai | landing | other
+  priority        String    @default("normal") // low | normal | high | urgent
+  status          String    @default("open") // open | waiting | resolved | closed
+  slaDueAt        DateTime
+  firstResponseAt DateTime?
+  escalatedAt     DateTime?
+  resolvedAt      DateTime?
+  lastActivityAt  DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?            @relation("TicketsCreated", fields: [createdById], references: [id], onDelete: SetNull)
+  assignee     User?            @relation("TicketsAssigned", fields: [assigneeId], references: [id], onDelete: SetNull)
+  messages     SupportMessage[]
+
+  @@index([organizationId, lastActivityAt])
+  @@index([status, slaDueAt])
+}
+
+model SupportMessage {
+  id          String   @id @default(cuid())
+  ticketId    String
+  authorId    String?
+  fromSupport Boolean  @default(false)
+  internal    Boolean  @default(false) // MECGURA-only note, never shown to the client
+  body        String
+  createdAt   DateTime @default(now())
+
+  ticket      SupportTicket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author      User?               @relation("SupportMessages", fields: [authorId], references: [id], onDelete: SetNull)
+  attachments SupportAttachment[]
+
+  @@index([ticketId, createdAt])
+}
+
+model SupportAttachment {
+  id        String   @id @default(cuid())
+  messageId String
+  filename  String
+  mimeType  String
+  size      Int
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  message SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
 }
