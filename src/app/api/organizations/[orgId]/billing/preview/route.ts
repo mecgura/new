@@ -9,6 +9,6 @@ type Ctx = { params: Promise<{ orgId: string }> };
 /** What would happen if you chose this plan — changes nothing. */
 export const GET = handle<Ctx>(async (req, { params }) => {
   const { access } = await orgRoute(req, params, "billing:read");
-  const { planId } = readQuery(req, z.object({ planId: idSchema }));
-  return ok({ preview: await previewChange(access.organizationId, planId) });
+  const { planId, interval } = readQuery(req, z.object({ planId: idSchema, interval: z.enum(["month", "year"]).default("month") }));
+  return ok({ preview: await previewChange(access.organizationId, planId, interval) });
 });

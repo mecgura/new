@@ -12,6 +12,8 @@ import { GatewayError, type CheckoutSession, type GatewayEvent } from "@/provide
 import { getBillingSettings } from "@/services/billing/settings";
 import { billingState } from "@/services/billing/entitlements";
 import { creditWallet } from "@/services/wallet";
+import { isEmailConfigured, sendMail } from "@/lib/mailer";
+import { siteConfig } from "@/config/site";
 
 const DAY = 86_400_000;
 
@@ -30,6 +32,17 @@ export function addMonth(d: Date, n = 1): Date {
   return r;
 }
 
+export type Interval = "month" | "year";
+/** One billing period later. */
+export const addPeriod = (d: Date, interval: string) => addMonth(d, interval === "year" ? 12 : 1);
+/** What the plan costs for one period of `interval` (paise). 0 = not offered. */
+export const planPrice = (p: Pick<Plan, "priceMonthly" | "priceYearly">, interval: string) => (interval === "year" ? p.priceYearly : p.priceMonthly);
+/** Monthly-equivalent price (MRR). */
+export const monthlyEquivalent = (p: Pick<Plan, "priceMonthly" | "priceYearly">, interval: string) => (interval === "year" ? Math.round(p.priceYearly / 12) : p.priceMonthly);
+/** What this subscription bills each period (older rows have no periodPrice: they are monthly). */
+export const periodAmount = (s: Pick<Subscription, "periodPrice" | "priceMonthly">) => s.periodPrice || s.priceMonthly;
+const per = (interval: string) => (interval === "year" ? "1 year" : "1 month");
+
 /** Tax on a paise amount, rounded to the nearest paisa. */
 export const taxOn = (subtotal: number, taxBps: number) => Math.round((subtotal * taxBps) / 10_000);
 
@@ -44,7 +57,7 @@ export function prorate(amount: number, start: Date, end: Date, now: Date): numb
 // Invoices
 // ---------------------------------------------------------------------------
 
-type InvoiceInput = { organizationId: string; subscriptionId?: string | null; kind: "subscription" | "upgrade" | "renewal" | "topup"; description: string; lines: { description: string; amount: number }[]; periodStart?: Date | null; periodEnd?: Date | null; targetPlanId?: string | null; dueAt?: Date };
+type InvoiceInput = { organizationId: string; subscriptionId?: string | null; kind: "subscription" | "upgrade" | "renewal" | "topup"; description: string; lines: { description: string; amount: number }[]; periodStart?: Date | null; periodEnd?: Date | null; targetPlanId?: string | null; targetInterval?: Interval | null; dueAt?: Date };
 
 async function nextNumber(tx: Prisma.TransactionClient, at: Date): Promise<string> {
   const year = at.getUTCFullYear();
@@ -76,6 +89,7 @@ export async function createInvoice(input: InvoiceInput) {
         periodStart: input.periodStart ?? null,
         periodEnd: input.periodEnd ?? null,
         targetPlanId: input.targetPlanId ?? null,
+        targetInterval: input.targetInterval ?? null,
         issuedAt: now,
         dueAt: input.dueAt ?? new Date(now.getTime() + settings.dueDays * DAY),
       },
@@ -150,14 +164,36 @@ async function tellOwners(organizationId: string, title: string, body = "", type
 }
 
 /** Ends the active subscription and starts a new one on `plan`. History is kept (one row per plan period). */
-async function switchPlan(organizationId: string, plan: Plan, opts: { billingMode: "invoiced" | "complimentary"; periodStart: Date; periodEnd: Date | null; reason: string }) {
+async function switchPlan(organizationId: string, plan: Plan, opts: { billingMode: "invoiced" | "complimentary" | "trial"; periodStart: Date; periodEnd: Date | null; reason: string; interval?: Interval; trialEndsAt?: Date | null }) {
   const now = new Date();
+  const interval = opts.interval ?? "month";
   return db.$transaction(async (tx) => {
     await tx.subscription.updateMany({ where: { organizationId, status: "active" }, data: { status: "ended", endedAt: now, endReason: opts.reason } });
     return tx.subscription.create({
-      data: { organizationId, planId: plan.id, priceMonthly: plan.priceMonthly, startedAt: now, billingMode: opts.billingMode, currentPeriodStart: opts.periodStart, currentPeriodEnd: opts.periodEnd },
+      data: {
+        organizationId,
+        planId: plan.id,
+        // A trial earns nothing: it is 0 in MRR until it converts (the paid period is a new row).
+        priceMonthly: opts.billingMode === "trial" ? 0 : monthlyEquivalent(plan, interval),
+        interval,
+        periodPrice: planPrice(plan, interval),
+        trialEndsAt: opts.trialEndsAt ?? null,
+        startedAt: now,
+        billingMode: opts.billingMode,
+        currentPeriodStart: opts.periodStart,
+        currentPeriodEnd: opts.periodEnd,
+      },
     });
   });
+}
+
+/** One free trial per workspace: never trialled before and never paid for a plan. */
+export async function trialEligible(organizationId: string) {
+  const [trialled, paid] = await Promise.all([
+    db.subscription.count({ where: { organizationId, trialEndsAt: { not: null } } }),
+    db.invoice.count({ where: { organizationId, status: "paid", kind: { in: ["subscription", "upgrade", "renewal"] } } }),
+  ]);
+  return trialled === 0 && paid === 0;
 }
 
 /** Does the workspace's current usage fit inside `plan`? Returns the reasons it doesn't. */
@@ -178,18 +214,19 @@ export async function fitProblems(organizationId: string, plan: Plan): Promise<s
 // Overview (client)
 // ---------------------------------------------------------------------------
 
-const planDto = (p: Plan) => ({ selfServe: p.selfServe, id: p.id, name: p.name, slug: p.slug, description: p.description, priceMonthly: p.priceMonthly, currency: p.currency, limits: limitsOf(p), features: parseFeatures(p.features).map((k) => ({ key: k, label: FEATURES[k] })) });
+const planDto = (p: Plan) => ({ selfServe: p.selfServe, id: p.id, name: p.name, slug: p.slug, description: p.description, priceMonthly: p.priceMonthly, priceYearly: p.priceYearly, trialDays: p.trialDays, yearlySavingPct: p.priceYearly > 0 && p.priceMonthly > 0 ? Math.max(0, Math.round((1 - p.priceYearly / (p.priceMonthly * 12)) * 100)) : 0, currency: p.currency, limits: limitsOf(p), features: parseFeatures(p.features).map((k) => ({ key: k, label: FEATURES[k] })) });
 
 type PaymentStatus = "not_billed" | "none" | "paid" | "pending" | "past_due" | "failed";
 
 export async function getBillingOverview(organizationId: string) {
-  const [sub, state, gateways, settings, openInvoices, lastPaid] = await Promise.all([
+  const [sub, state, gateways, settings, openInvoices, lastPaid, canTrial] = await Promise.all([
     currentPlan(organizationId),
     billingState(organizationId),
     availableGateways(),
     getBillingSettings(),
     db.invoice.findMany({ where: { organizationId, status: "open" }, orderBy: { dueAt: "asc" }, include: invoiceInclude }),
     db.invoice.findFirst({ where: { organizationId, status: "paid" }, orderBy: { paidAt: "desc" } }),
+    trialEligible(organizationId),
   ]);
   const plans = await db.plan.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { priceMonthly: "asc" }] });
   const pending = sub?.pendingPlanId ? await db.plan.findUnique({ where: { id: sub.pendingPlanId } }) : null;
@@ -198,7 +235,8 @@ export async function getBillingOverview(organizationId: string) {
   if (openInvoices.length) {
     const first = openInvoices[0];
     paymentStatus = first.dueAt.getTime() < Date.now() ? "past_due" : first.payments[0]?.status === "failed" ? "failed" : "pending";
-  } else if (sub && sub.billingMode !== "invoiced") paymentStatus = "not_billed";
+  } else if (sub && sub.billingMode === "trial") paymentStatus = "not_billed";
+  else if (sub && sub.billingMode !== "invoiced") paymentStatus = "not_billed";
   else if (lastPaid) paymentStatus = "paid";
 
   const canceled = !sub ? await db.subscription.findFirst({ where: { organizationId, status: "ended", endReason: "canceled" }, orderBy: { endedAt: "desc" }, include: { plan: true } }) : null;
@@ -208,13 +246,16 @@ export async function getBillingOverview(organizationId: string) {
       ? {
           plan: planDto(sub.plan),
           priceMonthly: sub.priceMonthly,
+          interval: sub.interval,
+          periodPrice: periodAmount(sub),
+          trialEndsAt: sub.billingMode === "trial" ? sub.trialEndsAt : null,
           billingMode: sub.billingMode,
           startedAt: sub.startedAt,
           currentPeriodStart: sub.currentPeriodStart,
-          nextBillingDate: sub.billingMode === "invoiced" && !sub.cancelAtPeriodEnd ? sub.currentPeriodEnd : null,
+          nextBillingDate: (sub.billingMode === "invoiced" || sub.billingMode === "trial") && !sub.cancelAtPeriodEnd ? sub.currentPeriodEnd : null,
           endsAt: sub.cancelAtPeriodEnd ? sub.currentPeriodEnd : null,
           cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
-          pendingPlan: pending ? { id: pending.id, name: pending.name, takesEffectAt: sub.currentPeriodEnd } : null,
+          pendingPlan: pending ? { id: pending.id, name: pending.name, interval: sub.pendingInterval ?? sub.interval, takesEffectAt: sub.currentPeriodEnd } : null,
         }
       : null,
     canceledPlan: canceled ? { name: canceled.plan.name, endedAt: canceled.endedAt } : null,
@@ -223,6 +264,7 @@ export async function getBillingOverview(organizationId: string) {
     paymentStatus,
     openInvoices: openInvoices.map(invoiceDto),
     plans: plans.map((p) => ({ ...planDto(p), relation: sub && p.id === sub.planId ? "current" : !p.selfServe ? "contact" : !sub ? "new" : rank(p) > rank(sub.plan) ? "upgrade" : "downgrade" })),
+    trialAvailable: canTrial,
     gateways,
     onlinePaymentsConnected: gateways.length > 0,
     tax: { percent: settings.taxPercent },
@@ -236,83 +278,119 @@ export async function getBillingOverview(organizationId: string) {
 // ---------------------------------------------------------------------------
 
 /** Preview what choosing `planId` would do — nothing is changed. */
-export async function previewChange(organizationId: string, planId: string) {
+export async function previewChange(organizationId: string, planId: string, interval: Interval = "month") {
   const [sub, plan, settings] = await Promise.all([currentPlan(organizationId), db.plan.findUnique({ where: { id: planId } }), getBillingSettings()]);
   if (!plan || !plan.isActive) throw new ApiError("VALIDATION_ERROR", "Choose an available plan.", { details: { planId: ["Not available"] } });
-  if (sub?.planId === plan.id) throw new ApiError("CONFLICT", "You're already on this plan.");
+  if (interval === "year" && plan.priceYearly <= 0) throw new ApiError("VALIDATION_ERROR", `${plan.name} isn't offered with yearly billing.`, { details: { interval: ["Not offered"] } });
+  if (sub?.planId === plan.id && sub.interval === interval) throw new ApiError("CONFLICT", "You're already on this plan.");
   if (!plan.selfServe) throw new ApiError("CONFLICT", `${plan.name} is arranged with our team. Contact MECGURA to move to it.`);
   const problems = await fitProblems(organizationId, plan);
   const now = new Date();
-  const upgrade = !sub || plan.priceMonthly > sub.plan.priceMonthly;
+  const price = planPrice(plan, interval);
+  // Free trial: first plan of a workspace that never trialled or paid, while not on a paid period.
+  const onPaid = sub && sub.billingMode === "invoiced" && periodAmount(sub) > 0;
+  if (plan.trialDays > 0 && price > 0 && !onPaid && sub?.billingMode !== "trial" && (await trialEligible(organizationId))) {
+    const trialEndsAt = new Date(now.getTime() + plan.trialDays * DAY);
+    return { plan: planDto(plan), interval, direction: "trial" as const, amount: 0, tax: 0, total: 0, effective: "now" as const, effectiveAt: null, trialEndsAt, firstCharge: price, problems, blocked: false };
+  }
+  const subInterval = sub?.interval ?? "month";
+  const currentMonthly = sub ? (sub.billingMode === "trial" ? monthlyEquivalent(sub.plan, subInterval) : sub.priceMonthly) : 0;
+  const longer = sub && interval === "year" && subInterval === "month";
+  // Yearly → monthly always waits for the end of the paid year.
+  const shorter = Boolean(sub && sub.billingMode === "invoiced" && subInterval === "year" && interval === "month");
+  const upgrade = !shorter && (!sub || sub.billingMode === "trial" || monthlyEquivalent(plan, interval) > currentMonthly || Boolean(longer && monthlyEquivalent(plan, interval) >= Math.round(currentMonthly * 0.7)));
   let amount = 0;
   let effective: "now" | "on_payment" | "period_end" = "now";
   if (upgrade) {
-    if (!sub || sub.billingMode !== "invoiced" || !sub.currentPeriodEnd || !sub.currentPeriodStart) amount = plan.priceMonthly;
-    else amount = prorate(plan.priceMonthly, sub.currentPeriodStart, sub.currentPeriodEnd, now) - prorate(sub.priceMonthly, sub.currentPeriodStart, sub.currentPeriodEnd, now);
+    if (!sub || sub.billingMode !== "invoiced" || !sub.currentPeriodEnd || !sub.currentPeriodStart) amount = price;
+    else if (interval !== subInterval) amount = price - prorate(periodAmount(sub), sub.currentPeriodStart, sub.currentPeriodEnd, now); // a fresh year, less the unused part of this month
+    else amount = prorate(price, sub.currentPeriodStart, sub.currentPeriodEnd, now) - prorate(periodAmount(sub), sub.currentPeriodStart, sub.currentPeriodEnd, now);
     amount = Math.max(0, amount);
     effective = amount > 0 ? "on_payment" : "now";
   } else {
     effective = sub && sub.billingMode === "invoiced" && sub.currentPeriodEnd ? "period_end" : "now";
   }
   const tax = taxOn(amount, Math.round(settings.taxPercent * 100));
-  return { plan: planDto(plan), direction: upgrade ? (sub ? "upgrade" : "new") : "downgrade", amount, tax, total: amount + tax, effective, effectiveAt: effective === "period_end" ? sub?.currentPeriodEnd ?? null : null, problems, blocked: !upgrade && problems.length > 0 };
+  return { plan: planDto(plan), interval, direction: upgrade ? (sub ? ("upgrade" as const) : ("new" as const)) : ("downgrade" as const), amount, tax, total: amount + tax, effective, effectiveAt: effective === "period_end" ? (sub?.currentPeriodEnd ?? null) : null, trialEndsAt: null, firstCharge: null, problems, blocked: !upgrade && problems.length > 0 };
 }
 
-export async function changePlan(access: OrgAccess, planId: string, req?: Request) {
+export async function changePlan(access: OrgAccess, planId: string, req?: Request, interval: Interval = "month") {
   const orgId = access.organizationId;
-  const pv = await previewChange(orgId, planId);
+  const pv = await previewChange(orgId, planId, interval);
   const plan = await db.plan.findUniqueOrThrow({ where: { id: planId } });
   const sub = await currentPlan(orgId);
   if (pv.direction === "downgrade" && pv.problems.length) throw new ApiError("CONFLICT", `You can't move to ${plan.name} yet. ${pv.problems.join(" ")}`, { details: { plan: pv.problems } });
   const now = new Date();
 
+  // ---- Free trial: no invoice now; the first one is created when the trial ends.
+  if (pv.direction === "trial") {
+    if (pv.problems.length) throw new ApiError("CONFLICT", `You can't move to ${plan.name} yet. ${pv.problems.join(" ")}`, { details: { plan: pv.problems } });
+    await switchPlan(orgId, plan, { billingMode: "trial", periodStart: now, periodEnd: pv.trialEndsAt, trialEndsAt: pv.trialEndsAt, interval, reason: "replaced" });
+    await audit({ action: "billing.trial_started", actorUserId: access.user.id, organizationId: orgId, targetType: "plan", targetId: plan.id, metadata: { plan: plan.slug, interval, endsAt: pv.trialEndsAt }, req });
+    await tellOwners(orgId, `Your ${plan.trialDays}-day free trial of ${plan.name} has started`, "No payment needed until it ends. You can cancel any time in Billing.", "success");
+    return { result: "trial" as const, trialEndsAt: pv.trialEndsAt, plan: planDto(plan) };
+  }
+
   // ---- Downgrade
   if (pv.direction === "downgrade" && sub) {
     if (pv.effective === "period_end") {
-      await db.subscription.update({ where: { id: sub.id }, data: { pendingPlanId: plan.id, cancelAtPeriodEnd: false, canceledAt: null } });
+      await db.subscription.update({ where: { id: sub.id }, data: { pendingPlanId: plan.id, pendingInterval: interval, cancelAtPeriodEnd: false, canceledAt: null } });
       await audit({ action: "billing.downgrade_scheduled", actorUserId: access.user.id, organizationId: orgId, targetType: "plan", targetId: plan.id, metadata: { from: sub.plan.slug, to: plan.slug, at: sub.currentPeriodEnd }, req });
       return { result: "scheduled" as const, effectiveAt: sub.currentPeriodEnd, plan: planDto(plan) };
     }
-    await switchPlan(orgId, plan, { billingMode: sub.billingMode === "invoiced" ? "invoiced" : "complimentary", periodStart: now, periodEnd: sub.billingMode === "invoiced" ? addMonth(now) : null, reason: "replaced" });
+    await switchPlan(orgId, plan, { billingMode: sub.billingMode === "invoiced" ? "invoiced" : "complimentary", periodStart: now, periodEnd: sub.billingMode === "invoiced" ? addPeriod(now, interval) : null, reason: "replaced", interval });
     await audit({ action: "plan.changed", actorUserId: access.user.id, organizationId: orgId, targetType: "plan", targetId: plan.id, metadata: { from: sub.plan.slug, to: plan.slug, self_service: true }, req });
     return { result: "changed" as const, plan: planDto(plan) };
   }
 
   // ---- Upgrade / first plan
   if (pv.amount === 0) {
-    await activateUpgrade(orgId, plan.id, access.user.id, req);
+    await activateUpgrade(orgId, plan.id, access.user.id, req, interval);
     return { result: "changed" as const, plan: planDto(plan) };
   }
-  const existing = await db.invoice.findFirst({ where: { organizationId: orgId, status: "open", targetPlanId: plan.id } });
+  const existing = await db.invoice.findFirst({ where: { organizationId: orgId, status: "open", targetPlanId: plan.id, targetInterval: interval } });
   if (existing) return { result: "invoice" as const, invoice: invoiceDto(existing), plan: planDto(plan) };
   const invoicedPeriod = sub && sub.billingMode === "invoiced" && sub.currentPeriodEnd && sub.currentPeriodStart;
+  const samePeriod = invoicedPeriod && sub.interval === interval;
+  const yearly = interval === "year";
   const inv = await createInvoice({
     organizationId: orgId,
     subscriptionId: sub?.id ?? null,
     kind: sub ? "upgrade" : "subscription",
-    description: sub ? `Upgrade to ${plan.name} (prorated)` : `${plan.name} plan — first month`,
-    lines: [{ description: invoicedPeriod ? `${plan.name} plan, remainder of current period (prorated, less unused ${sub.plan.name})` : `${plan.name} plan — 1 month`, amount: pv.amount }],
-    periodStart: invoicedPeriod ? now : now,
-    periodEnd: invoicedPeriod ? sub.currentPeriodEnd : addMonth(now),
+    description: samePeriod ? `Upgrade to ${plan.name} (prorated)` : `${plan.name} plan — ${yearly ? "1 year" : "first month"}`,
+    lines: [
+      {
+        description: samePeriod
+          ? `${plan.name} plan, remainder of current period (prorated, less unused ${sub.plan.name})`
+          : invoicedPeriod
+            ? `${plan.name} plan — ${per(interval)} (less unused part of current ${sub.plan.name} period)`
+            : `${plan.name} plan — ${per(interval)}`,
+        amount: pv.amount,
+      },
+    ],
+    periodStart: now,
+    periodEnd: samePeriod ? sub.currentPeriodEnd : addPeriod(now, interval),
     targetPlanId: plan.id,
+    targetInterval: interval,
   });
   await audit({ action: "billing.invoice_created", actorUserId: access.user.id, organizationId: orgId, targetType: "invoice", targetId: inv.id, metadata: { number: inv.number, total: inv.total, kind: inv.kind }, req });
   return { result: "invoice" as const, invoice: invoiceDto(inv), plan: planDto(plan) };
 }
 
 /** Puts the workspace on `planId` now. Called when an upgrade invoice is paid, or when the amount due is zero. */
-async function activateUpgrade(organizationId: string, planId: string, actorUserId: string | null, req?: Request) {
+async function activateUpgrade(organizationId: string, planId: string, actorUserId: string | null, req?: Request, interval: Interval = "month") {
   const plan = await db.plan.findUniqueOrThrow({ where: { id: planId } });
   const sub = await currentPlan(organizationId);
   const now = new Date();
-  // Mid-period upgrades keep the renewal date; a first plan or a re-subscription starts a fresh month.
-  const keep = sub && sub.billingMode === "invoiced" && sub.currentPeriodEnd && sub.currentPeriodEnd > now;
-  const billed = plan.priceMonthly > 0;
+  // Mid-period upgrades on the same interval keep the renewal date; a first plan, a new interval or a re-subscription starts a fresh period.
+  const keep = sub && sub.billingMode === "invoiced" && sub.interval === interval && sub.currentPeriodEnd && sub.currentPeriodEnd > now;
+  const billed = planPrice(plan, interval) > 0;
   await switchPlan(organizationId, plan, {
     billingMode: billed ? "invoiced" : "complimentary",
     periodStart: keep ? sub.currentPeriodStart! : now,
-    periodEnd: billed ? (keep ? sub.currentPeriodEnd! : addMonth(now)) : null,
+    periodEnd: billed ? (keep ? sub.currentPeriodEnd! : addPeriod(now, interval)) : null,
     reason: "replaced",
+    interval,
   });
   await audit({ action: "plan.changed", actorUserId, organizationId, targetType: "plan", targetId: plan.id, metadata: { from: sub?.plan.slug ?? null, to: plan.slug, self_service: true }, req });
   await tellOwners(organizationId, `Your plan is now ${plan.name}`, "", "success");
@@ -323,8 +401,8 @@ export async function cancelSubscription(access: OrgAccess, req?: Request) {
   if (!sub) throw new ApiError("CONFLICT", "There's no active plan to cancel.");
   if (sub.cancelAtPeriodEnd) throw new ApiError("CONFLICT", "This plan is already set to end.");
   const now = new Date();
-  if (sub.billingMode === "invoiced" && sub.currentPeriodEnd && sub.currentPeriodEnd > now) {
-    await db.subscription.update({ where: { id: sub.id }, data: { cancelAtPeriodEnd: true, canceledAt: now, pendingPlanId: null } });
+  if ((sub.billingMode === "invoiced" || sub.billingMode === "trial") && sub.currentPeriodEnd && sub.currentPeriodEnd > now) {
+    await db.subscription.update({ where: { id: sub.id }, data: { cancelAtPeriodEnd: true, canceledAt: now, pendingPlanId: null, pendingInterval: null } });
     await audit({ action: "billing.canceled", actorUserId: access.user.id, organizationId: access.organizationId, targetType: "subscription", targetId: sub.id, metadata: { plan: sub.plan.slug, endsAt: sub.currentPeriodEnd }, req });
     return { result: "scheduled" as const, endsAt: sub.currentPeriodEnd };
   }
@@ -338,7 +416,7 @@ export async function cancelSubscription(access: OrgAccess, req?: Request) {
 export async function resumeSubscription(access: OrgAccess, req?: Request) {
   const sub = await currentPlan(access.organizationId);
   if (!sub || (!sub.cancelAtPeriodEnd && !sub.pendingPlanId)) throw new ApiError("CONFLICT", "Nothing is scheduled to change.");
-  await db.subscription.update({ where: { id: sub.id }, data: { cancelAtPeriodEnd: false, canceledAt: null, pendingPlanId: null } });
+  await db.subscription.update({ where: { id: sub.id }, data: { cancelAtPeriodEnd: false, canceledAt: null, pendingPlanId: null, pendingInterval: null } });
   await audit({ action: "billing.resumed", actorUserId: access.user.id, organizationId: access.organizationId, targetType: "subscription", targetId: sub.id, req });
 }
 
@@ -355,7 +433,7 @@ async function markPaid(invoiceId: string, via: string, note: string, actorUserI
   const flipped = await db.invoice.updateMany({ where: { id: invoiceId, status: "open" }, data: { status: "paid", paidAt: now, paidVia: via, paymentNote: note.slice(0, 300) } });
   if (!flipped.count) return false; // already paid or void — never applied twice
   const inv = await db.invoice.findUniqueOrThrow({ where: { id: invoiceId } });
-  if (inv.targetPlanId) await activateUpgrade(inv.organizationId, inv.targetPlanId, actorUserId, req);
+  if (inv.targetPlanId) await activateUpgrade(inv.organizationId, inv.targetPlanId, actorUserId, req, inv.targetInterval === "year" ? "year" : "month");
   // Prepaid credit: the wallet gets the pre-tax amount. The key makes a repeated webhook add it only once.
   if (inv.kind === "topup") {
     await creditWallet(inv.organizationId, { actorUserId, req }, { amount: inv.subtotal, reason: "topup", reference: inv.number, note: `Online payment (${via})`, idempotencyKey: `topup:${inv.id}` });
@@ -468,7 +546,7 @@ export async function voidInvoice(adminUserId: string, invoiceId: string, req?: 
 export async function startBilling(sub: Subscription, plan: Plan, billingMode: "invoiced" | "complimentary") {
   const now = new Date();
   const invoiced = billingMode === "invoiced" && plan.priceMonthly > 0;
-  await db.subscription.update({ where: { id: sub.id }, data: { billingMode: invoiced ? "invoiced" : "complimentary", currentPeriodStart: now, currentPeriodEnd: invoiced ? addMonth(now) : null } });
+  await db.subscription.update({ where: { id: sub.id }, data: { billingMode: invoiced ? "invoiced" : "complimentary", interval: "month", periodPrice: plan.priceMonthly, currentPeriodStart: now, currentPeriodEnd: invoiced ? addMonth(now) : null } });
   if (!invoiced) return null;
   return createInvoice({ organizationId: sub.organizationId, subscriptionId: sub.id, kind: "subscription", description: `${plan.name} plan — first month`, lines: [{ description: `${plan.name} plan — 1 month`, amount: plan.priceMonthly }], periodStart: now, periodEnd: addMonth(now) });
 }
@@ -478,63 +556,128 @@ export async function startBilling(sub: Subscription, plan: Plan, billingMode: "
 // ---------------------------------------------------------------------------
 
 /**
- * Idempotent. Per active subscription whose period has ended: honour a scheduled cancellation, apply a
- * scheduled downgrade (if usage still fits), otherwise renew — invoiced plans get the next invoice.
- * Also flags overdue invoices once, so owners hear about it before sending is blocked.
+ * Idempotent. Per active subscription whose period has ended: honour a scheduled cancellation, convert a free
+ * trial into its first paid period, apply a scheduled downgrade (if usage still fits), otherwise renew —
+ * invoiced plans get the next invoice (monthly or yearly). Also sends trial-ending and payment reminders.
  */
 export async function runBillingCycle(now = new Date()) {
-  const out = { initialized: 0, renewed: 0, invoices: 0, canceled: 0, downgraded: 0, overdueNotices: 0 };
+  const out = { initialized: 0, renewed: 0, invoices: 0, canceled: 0, downgraded: 0, overdueNotices: 0, trialsConverted: 0, trialReminders: 0, reminders: 0 };
   const subs = await db.subscription.findMany({ where: { status: "active" }, include: { plan: true } });
   const settings = await getBillingSettings();
+  const due = (from: Date) => new Date(from.getTime() + settings.dueDays * DAY);
   for (const sub of subs) {
-    if (!sub.currentPeriodStart || (!sub.currentPeriodEnd && sub.billingMode === "invoiced")) {
-      await db.subscription.update({ where: { id: sub.id }, data: { currentPeriodStart: sub.currentPeriodStart ?? now, currentPeriodEnd: sub.billingMode === "invoiced" ? addMonth(now) : null } });
+    if (!sub.currentPeriodStart || (!sub.currentPeriodEnd && sub.billingMode !== "complimentary")) {
+      await db.subscription.update({ where: { id: sub.id }, data: { currentPeriodStart: sub.currentPeriodStart ?? now, currentPeriodEnd: sub.billingMode === "complimentary" ? null : addPeriod(now, sub.interval) } });
       out.initialized++; // legacy rows start counting from now — nobody is billed for the past
       continue;
+    }
+    // Trial ending in 3 days: tell the owners once, with the first charge.
+    if (sub.billingMode === "trial" && sub.currentPeriodEnd && !sub.trialReminderAt && !sub.cancelAtPeriodEnd && sub.currentPeriodEnd.getTime() - now.getTime() <= 3 * DAY && sub.currentPeriodEnd > now) {
+      await db.subscription.update({ where: { id: sub.id }, data: { trialReminderAt: now } });
+      const amount = planPrice(sub.plan, sub.interval);
+      await tellOwners(sub.organizationId, `Your free trial of ${sub.plan.name} ends on ${fmtDay(sub.currentPeriodEnd)}`, `Then ${fmtInr(amount)} ${sub.interval === "year" ? "per year" : "per month"} (+ tax). Cancel any time in Billing before then to pay nothing.`, "info");
+      out.trialReminders++;
     }
     if (!sub.currentPeriodEnd || sub.currentPeriodEnd > now) continue;
 
     if (sub.cancelAtPeriodEnd) {
       await db.subscription.update({ where: { id: sub.id }, data: { status: "ended", endedAt: now, endReason: "canceled" } });
       await db.invoice.updateMany({ where: { organizationId: sub.organizationId, status: "open", dueAt: { gt: now } }, data: { status: "void", voidedAt: now } });
-      await tellOwners(sub.organizationId, "Your subscription has ended", "Choose a plan in Billing to keep sending.", "warning");
+      await tellOwners(sub.organizationId, sub.billingMode === "trial" ? "Your free trial has ended" : "Your subscription has ended", "Choose a plan in Billing to keep sending.", "warning");
       out.canceled++;
       continue;
     }
+
+    // Trial over: the first paid period starts now (a new row, so MRR history stays true).
+    if (sub.billingMode === "trial") {
+      const start = sub.currentPeriodEnd;
+      const price = planPrice(sub.plan, sub.interval);
+      const interval: Interval = sub.interval === "year" ? "year" : "month";
+      const fresh = await switchPlan(sub.organizationId, sub.plan, { billingMode: price > 0 ? "invoiced" : "complimentary", periodStart: start, periodEnd: price > 0 ? addPeriod(start, interval) : null, reason: "trial_converted", interval });
+      if (price > 0) {
+        await createInvoice({ organizationId: sub.organizationId, subscriptionId: fresh.id, kind: "subscription", description: `${sub.plan.name} plan — ${interval === "year" ? "1 year" : fmtMonth(start)}`, lines: [{ description: `${sub.plan.name} plan — ${per(interval)} (after free trial)`, amount: price }], periodStart: start, periodEnd: addPeriod(start, interval), dueAt: due(start) });
+        out.invoices++;
+      }
+      await audit({ action: "billing.trial_converted", organizationId: sub.organizationId, targetType: "subscription", targetId: fresh.id, metadata: { plan: sub.plan.slug, interval } });
+      await tellOwners(sub.organizationId, `Your free trial ended — ${sub.plan.name} continues`, price > 0 ? "Your first invoice is in Billing." : "", "info");
+      out.trialsConverted++;
+      continue;
+    }
+
     let plan = sub.plan;
     if (sub.pendingPlanId) {
       const next = await db.plan.findUnique({ where: { id: sub.pendingPlanId } });
-      if (next && (await fitProblems(sub.organizationId, next)).length === 0) {
-        const fresh = await switchPlan(sub.organizationId, next, { billingMode: "invoiced", periodStart: sub.currentPeriodEnd, periodEnd: addMonth(sub.currentPeriodEnd), reason: "replaced" });
+      const nextInterval: Interval = (sub.pendingInterval ?? sub.interval) === "year" ? "year" : "month";
+      if (next && planPrice(next, nextInterval) >= 0 && (await fitProblems(sub.organizationId, next)).length === 0) {
+        const nextPrice = planPrice(next, nextInterval);
+        const fresh = await switchPlan(sub.organizationId, next, { billingMode: "invoiced", periodStart: sub.currentPeriodEnd, periodEnd: addPeriod(sub.currentPeriodEnd, nextInterval), reason: "replaced", interval: nextInterval });
         plan = next;
         out.downgraded++;
         await tellOwners(sub.organizationId, `Your plan is now ${next.name}`, "The scheduled change took effect.");
-        if (next.priceMonthly > 0) {
-          await createInvoice({ organizationId: sub.organizationId, subscriptionId: fresh.id, kind: "renewal", description: `${next.name} plan — ${fmtMonth(sub.currentPeriodEnd)}`, lines: [{ description: `${next.name} plan — 1 month`, amount: next.priceMonthly }], periodStart: sub.currentPeriodEnd, periodEnd: addMonth(sub.currentPeriodEnd), dueAt: new Date(sub.currentPeriodEnd.getTime() + settings.dueDays * DAY) });
+        if (nextPrice > 0) {
+          await createInvoice({ organizationId: sub.organizationId, subscriptionId: fresh.id, kind: "renewal", description: `${next.name} plan — ${nextInterval === "year" ? "1 year" : fmtMonth(sub.currentPeriodEnd)}`, lines: [{ description: `${next.name} plan — ${per(nextInterval)}`, amount: nextPrice }], periodStart: sub.currentPeriodEnd, periodEnd: addPeriod(sub.currentPeriodEnd, nextInterval), dueAt: due(sub.currentPeriodEnd) });
           out.invoices++;
         }
         continue;
       }
-      await db.subscription.update({ where: { id: sub.id }, data: { pendingPlanId: null } });
+      await db.subscription.update({ where: { id: sub.id }, data: { pendingPlanId: null, pendingInterval: null } });
       await tellOwners(sub.organizationId, "Your scheduled plan change was cancelled", "Your usage no longer fits the lower plan, so you stay on your current plan.", "warning");
     }
-    const end = addMonth(sub.currentPeriodEnd);
+    const end = addPeriod(sub.currentPeriodEnd, sub.interval);
     await db.subscription.update({ where: { id: sub.id }, data: { currentPeriodStart: sub.currentPeriodEnd, currentPeriodEnd: sub.billingMode === "invoiced" ? end : null } });
     out.renewed++;
-    if (sub.billingMode === "invoiced" && plan.priceMonthly > 0) {
-      await createInvoice({ organizationId: sub.organizationId, subscriptionId: sub.id, kind: "renewal", description: `${plan.name} plan — ${fmtMonth(sub.currentPeriodEnd)}`, lines: [{ description: `${plan.name} plan — 1 month`, amount: sub.priceMonthly }], periodStart: sub.currentPeriodEnd, periodEnd: end, dueAt: new Date(sub.currentPeriodEnd.getTime() + settings.dueDays * DAY) });
+    const amount = periodAmount(sub);
+    if (sub.billingMode === "invoiced" && amount > 0) {
+      await createInvoice({ organizationId: sub.organizationId, subscriptionId: sub.id, kind: "renewal", description: `${plan.name} plan — ${sub.interval === "year" ? `1 year from ${fmtDay(sub.currentPeriodEnd)}` : fmtMonth(sub.currentPeriodEnd)}`, lines: [{ description: `${plan.name} plan — ${per(sub.interval)}`, amount }], periodStart: sub.currentPeriodEnd, periodEnd: end, dueAt: due(sub.currentPeriodEnd) });
       out.invoices++;
     }
   }
-  const overdue = await db.invoice.findMany({ where: { status: "open", dueAt: { lt: now }, overdueNotifiedAt: null } });
-  for (const inv of overdue) {
-    await db.invoice.update({ where: { id: inv.id }, data: { overdueNotifiedAt: now } });
-    await tellOwners(inv.organizationId, `Invoice ${inv.number} is overdue`, `Pay within ${settings.graceDays} days to avoid your sending being paused.`, "warning");
-    out.overdueNotices++;
-  }
+  const r = await sendPaymentReminders(now);
+  out.reminders = r.sent;
+  out.overdueNotices = r.overdue;
   return out;
 }
 
+/**
+ * Payment reminders for open plan invoices, each sent once: 3 days before the due date, on/after it,
+ * 3 days late and 7 days late (final). In-app for owners, plus email when email is configured.
+ * Online card/UPI auto-debit needs a payment mandate (not set up), so these are reminders with a pay link.
+ */
+export async function sendPaymentReminders(now = new Date()) {
+  const settings = await getBillingSettings();
+  const open = await db.invoice.findMany({ where: { status: "open", kind: { not: "topup" }, remindersSent: { lt: 4 }, dueAt: { lte: new Date(now.getTime() + 3 * DAY) } } });
+  let sent = 0;
+  let overdue = 0;
+  for (const inv of open) {
+    const late = now.getTime() - inv.dueAt.getTime();
+    let level = late >= 7 * DAY ? 4 : late >= 3 * DAY ? 3 : late >= 0 ? 2 : 1;
+    if (level === 3 && inv.remindersSent < 2) level = 2; // the first notice after the due date is always "overdue"
+    if (level <= inv.remindersSent) continue;
+    // Claim the level so two scheduler runs never send the same reminder.
+    const claimed = await db.invoice.updateMany({ where: { id: inv.id, remindersSent: inv.remindersSent }, data: { remindersSent: level, lastReminderAt: now, ...(level >= 2 && !inv.overdueNotifiedAt ? { overdueNotifiedAt: now } : {}) } });
+    if (!claimed.count) continue;
+    const amount = fmtInr(inv.total);
+    const msg =
+      level === 1
+        ? { title: `Invoice ${inv.number} is due on ${fmtDay(inv.dueAt)}`, body: `${amount}. Pay online in Billing to avoid any interruption.`, type: "info" as const }
+        : level === 2
+          ? { title: `Invoice ${inv.number} is overdue`, body: `${amount}. Pay within ${settings.graceDays} days to avoid your sending being paused.`, type: "warning" as const }
+          : level === 3
+            ? { title: `Reminder: invoice ${inv.number} is still unpaid`, body: `${amount} was due on ${fmtDay(inv.dueAt)}. Pay in Billing, or reply to us if something's wrong.`, type: "warning" as const }
+            : { title: `Final reminder: invoice ${inv.number}`, body: `${amount} is 7 days overdue. Sending is paused after ${settings.graceDays} days overdue until it's paid.`, type: "warning" as const };
+    await tellOwners(inv.organizationId, msg.title, msg.body, msg.type);
+    if (isEmailConfigured()) {
+      const owners = await db.organizationMember.findMany({ where: { organizationId: inv.organizationId, role: "CLIENT_OWNER" }, select: { user: { select: { email: true } } } });
+      for (const o of owners) await sendMail(o.user.email, msg.title, `${msg.body}\n\nPay here: ${siteConfig.url}/billing\n\n— MECGURA`).catch(() => null);
+    }
+    sent++;
+    if (level === 2) overdue++;
+  }
+  return { sent, overdue };
+}
+
+const fmtDay = (d: Date) => new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }).format(d);
+const fmtInr = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const fmtMonth = (d: Date) => new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" }).format(d);
 
 

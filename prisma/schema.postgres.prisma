@@ -228,6 +228,8 @@ model Plan {
   slug               String   @unique
   description        String   @default("")
   priceMonthly       Int      @default(0)
+  priceYearly        Int      @default(0) // 0 = yearly billing not offered for this plan
+  trialDays          Int      @default(0) // free trial for a workspace's first plan (0 = no trial)
   currency           String   @default("INR")
   maxUsers           Int      @default(3)
   maxWhatsAppNumbers Int      @default(1)
@@ -260,11 +262,16 @@ model Subscription {
   organizationId     String
   planId             String
   status             String    @default("active") // active | ended
-  priceMonthly       Int // snapshot of the plan price at assignment
+  priceMonthly       Int // monthly-equivalent price snapshot (MRR); a trial is 0
+  interval           String    @default("month") // month | year
+  periodPrice        Int       @default(0) // amount billed each period (0 on older rows = priceMonthly)
+  trialEndsAt        DateTime? // set while (and after) this row was a free trial
+  trialReminderAt    DateTime?
+  pendingInterval    String? // interval for a change scheduled at period end
   startedAt          DateTime  @default(now())
   endedAt            DateTime?
   endReason          String    @default("") // replaced | canceled
-  // "complimentary" = contracted by MECGURA, no automatic invoices. "invoiced" = billed every period.
+  // "complimentary" = contracted by MECGURA, no automatic invoices. "invoiced" = billed every period. "trial" = free trial, invoiced when it ends.
   billingMode        String    @default("complimentary")
   currentPeriodStart DateTime?
   currentPeriodEnd   DateTime? // next billing date
@@ -1317,11 +1324,14 @@ model Invoice {
   periodStart       DateTime?
   periodEnd         DateTime?
   targetPlanId      String? // plan to activate when this invoice is paid (upgrades)
+  targetInterval    String? // month | year for that plan
   issuedAt          DateTime  @default(now())
   dueAt             DateTime
   paidAt            DateTime?
   voidedAt          DateTime?
   overdueNotifiedAt DateTime?
+  remindersSent     Int       @default(0) // payment reminders: 1 = 3 days before due, 2 = due day, 3 = +3 days, 4 = +7 days
+  lastReminderAt    DateTime?
   paidVia           String    @default("") // gateway id, or "manual"
   paymentNote       String    @default("") // reference entered by the admin for a manual payment
   createdAt         DateTime  @default(now())

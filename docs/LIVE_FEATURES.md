@@ -27,6 +27,8 @@ Clients & services, plans & billing, revenue analytics (MRR/ARR/churn/movements,
 with alerts, WhatsApp accounts, marketing (leads, calendar, AI creatives), outreach (Maps finder, email finder,
 one-by-one WhatsApp), site editor.
 
+- **Billing**: monthly or yearly plans, free trials, payment reminders before and after the due date.
+
 ## Not built yet (on the list)
-Annual plans, free trials, automatic failed-payment retries; reusable automation sub-flows; multi-page website
-crawling for AI; OpenAI as an alternative AI-agent model.
+Automatic card/UPI re-charging (needs a Razorpay recurring mandate); reusable automation sub-flows; multi-page
+website crawling for AI; OpenAI as an alternative AI-agent model.

@@ -21,7 +21,7 @@ export const PATCH = handle<Ctx>(async (req, { params }) => {
   }
   const plan = await db.plan.update({
     where: { id },
-    data: { ...input, features: input.features ? JSON.stringify(input.features) : undefined, ...(input.priceMonthly !== undefined ? { priceMonthly: Math.round(input.priceMonthly * 100) } : {}) },
+    data: { ...input, features: input.features ? JSON.stringify(input.features) : undefined, ...(input.priceMonthly !== undefined ? { priceMonthly: Math.round(input.priceMonthly * 100) } : {}), ...(input.priceYearly !== undefined ? { priceYearly: Math.round(input.priceYearly * 100) } : {}) },
   });
   await audit({ action: "plan.updated", actorUserId: admin.id, targetType: "plan", targetId: id, metadata: { fields: Object.keys(input) }, req });
   return ok({ plan });

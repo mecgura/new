@@ -23,7 +23,7 @@ export const POST = handle(async (req) => {
   const admin = await requireSuperAdmin(req);
   const input = await readJson(req, planSchema);
   if (await db.plan.findUnique({ where: { slug: input.slug } })) throw new ApiError("CONFLICT", "A plan with this slug already exists.", { details: { slug: ["Already used"] } });
-  const plan = await db.plan.create({ data: { ...input, features: JSON.stringify(input.features), priceMonthly: Math.round(input.priceMonthly * 100) } });
+  const plan = await db.plan.create({ data: { ...input, features: JSON.stringify(input.features), priceMonthly: Math.round(input.priceMonthly * 100), priceYearly: Math.round(input.priceYearly * 100) } });
   await audit({ action: "plan.created", actorUserId: admin.id, targetType: "plan", targetId: plan.id, metadata: { slug: plan.slug, priceMonthly: plan.priceMonthly }, req });
   return ok({ plan }, { status: 201 });
 });

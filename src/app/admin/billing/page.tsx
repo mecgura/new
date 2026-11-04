@@ -48,6 +48,8 @@ type Plan = {
   slug: string;
   description: string;
   priceMonthly: number;
+  priceYearly: number;
+  trialDays: number;
   maxUsers: number;
   maxWhatsAppNumbers: number;
   maxMonthlyMessages: number;
@@ -342,7 +344,11 @@ function PlansTab() {
                     <p className="font-medium">{p.name}</p>
                     <p className="text-caption text-app-subtle">{p.slug}{!p.selfServe ? " · contact sales" : ""}</p>
                   </TD>
-                  <TD className="tabular-nums">{formatINR(p.priceMonthly)}</TD>
+                  <TD className="tabular-nums">
+                    {formatINR(p.priceMonthly)}
+                    {p.priceYearly ? <p className="text-caption text-app-subtle">{formatINR(p.priceYearly)} / year</p> : null}
+                    {p.trialDays ? <p className="text-caption text-app-subtle">{p.trialDays}-day trial</p> : null}
+                  </TD>
                   {LIMIT_FIELDS.map((f) => (
                     <TD key={f} className="tabular-nums">{limitLabel(p[f] as number)}</TD>
                   ))}
@@ -366,8 +372,8 @@ function PlansTab() {
   );
 }
 
-type Form = { name: string; slug: string; description: string; priceMonthly: string; sortOrder: string; isActive: boolean; selfServe: boolean; features: FeatureKey[] } & Record<string, string | boolean | FeatureKey[]>;
-const EMPTY: Form = { name: "", slug: "", description: "", priceMonthly: "0", sortOrder: "0", isActive: true, selfServe: true, features: [...FEATURE_KEYS], maxUsers: "3", maxWhatsAppNumbers: "1", maxMonthlyMessages: "1000", maxContacts: "1000", maxCampaigns: "5", maxAutomations: "3", maxAiReplies: "0", maxApiRequests: "0", includedMarketing: "0", includedUtility: "0" };
+type Form = { name: string; slug: string; description: string; priceMonthly: string; priceYearly: string; trialDays: string; sortOrder: string; isActive: boolean; selfServe: boolean; features: FeatureKey[] } & Record<string, string | boolean | FeatureKey[]>;
+const EMPTY: Form = { name: "", slug: "", description: "", priceMonthly: "0", priceYearly: "0", trialDays: "0", sortOrder: "0", isActive: true, selfServe: true, features: [...FEATURE_KEYS], maxUsers: "3", maxWhatsAppNumbers: "1", maxMonthlyMessages: "1000", maxContacts: "1000", maxCampaigns: "5", maxAutomations: "3", maxAiReplies: "0", maxApiRequests: "0", includedMarketing: "0", includedUtility: "0" };
 
 function PlanModal({ plan, onClose, onSaved }: { plan: Plan | "new" | null; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
@@ -381,7 +387,7 @@ function PlanModal({ plan, onClose, onSaved }: { plan: Plan | "new" | null; onCl
     setErrors({});
     setForm(
       plan && plan !== "new"
-        ? { ...EMPTY, name: plan.name, slug: plan.slug, description: plan.description, priceMonthly: String(plan.priceMonthly / 100), sortOrder: String(plan.sortOrder), isActive: plan.isActive, selfServe: plan.selfServe, features: parseFeatures(plan.features), ...Object.fromEntries(LIMIT_FIELDS.map((f) => [f, String(plan[f])])), includedMarketing: String(plan.includedMarketing ?? 0), includedUtility: String(plan.includedUtility ?? 0) }
+        ? { ...EMPTY, name: plan.name, slug: plan.slug, description: plan.description, priceMonthly: String(plan.priceMonthly / 100), priceYearly: String((plan.priceYearly ?? 0) / 100), trialDays: String(plan.trialDays ?? 0), sortOrder: String(plan.sortOrder), isActive: plan.isActive, selfServe: plan.selfServe, features: parseFeatures(plan.features), ...Object.fromEntries(LIMIT_FIELDS.map((f) => [f, String(plan[f])])), includedMarketing: String(plan.includedMarketing ?? 0), includedUtility: String(plan.includedUtility ?? 0) }
         : EMPTY
     );
   }
@@ -422,6 +428,12 @@ function PlanModal({ plan, onClose, onSaved }: { plan: Plan | "new" | null; onCl
         <div className="grid gap-4 sm:grid-cols-3">
           <Field id="plan-priceMonthly" label="Price / month (₹)" error={errors.priceMonthly}>
             <Input type="number" min={0} value={form.priceMonthly} onChange={set("priceMonthly")} />
+          </Field>
+          <Field id="plan-priceYearly" label="Price / year (₹)" hint={Number(form.priceMonthly) > 0 && Number(form.priceYearly) > 0 ? `${Math.max(0, Math.round((1 - Number(form.priceYearly) / (Number(form.priceMonthly) * 12)) * 100))}% less than monthly · 0 = no yearly option` : "0 = no yearly option. Tip: 10 × monthly = 2 months free."} error={errors.priceYearly}>
+            <Input type="number" min={0} value={form.priceYearly} onChange={set("priceYearly")} />
+          </Field>
+          <Field id="plan-trialDays" label="Free trial (days)" hint="For a workspace's first plan, once. 0 = no trial." error={errors.trialDays}>
+            <Input type="number" min={0} max={60} value={form.trialDays} onChange={set("trialDays")} />
           </Field>
           {num("sortOrder", "Sort order")}
         </div>

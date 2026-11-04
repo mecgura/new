@@ -38,23 +38,24 @@ import { MiniBars } from "@/components/app/mini-bars";
 import { openCheckout, type Checkout } from "@/components/billing/checkout";
 import { ClientWallet } from "@/components/wallet/client-wallet";
 
-type PlanView = { id: string; name: string; slug: string; description: string; priceMonthly: number; selfServe: boolean; limits: PlanLimits; features: { key: string; label: string }[]; relation: "current" | "upgrade" | "downgrade" | "new" | "contact" };
+type PlanView = { id: string; name: string; slug: string; description: string; priceMonthly: number; priceYearly: number; trialDays: number; yearlySavingPct: number; selfServe: boolean; limits: PlanLimits; features: { key: string; label: string }[]; relation: "current" | "upgrade" | "downgrade" | "new" | "contact" };
 type InvoiceView = { id: string; number: string; kind: string; status: string; displayStatus: string; description: string; total: number; issuedAt: string; dueAt: string; paidAt: string | null; paidVia: string; lastPaymentFailure: string | null };
 type Overview = {
-  subscription: { plan: Omit<PlanView, "relation">; priceMonthly: number; billingMode: string; currentPeriodStart: string | null; nextBillingDate: string | null; endsAt: string | null; cancelAtPeriodEnd: boolean; pendingPlan: { id: string; name: string; takesEffectAt: string | null } | null } | null;
+  subscription: { plan: Omit<PlanView, "relation">; priceMonthly: number; interval: "month" | "year"; periodPrice: number; trialEndsAt: string | null; billingMode: string; currentPeriodStart: string | null; nextBillingDate: string | null; endsAt: string | null; cancelAtPeriodEnd: boolean; pendingPlan: { id: string; name: string; takesEffectAt: string | null } | null } | null;
   canceledPlan: { name: string; endedAt: string | null } | null;
   state: "none" | "ok" | "past_due" | "blocked";
   stateMessage: string;
   paymentStatus: "not_billed" | "none" | "paid" | "pending" | "past_due" | "failed";
   openInvoices: InvoiceView[];
   plans: PlanView[];
+  trialAvailable: boolean;
   gateways: { id: string; label: string }[];
   onlinePaymentsConnected: boolean;
   tax: { percent: number };
   supportEmail: string;
   paymentInstructions: string;
 };
-type Preview = { plan: Omit<PlanView, "relation">; direction: "upgrade" | "downgrade" | "new"; amount: number; tax: number; total: number; effective: "now" | "on_payment" | "period_end"; effectiveAt: string | null; problems: string[]; blocked: boolean };
+type Preview = { plan: Omit<PlanView, "relation">; interval: "month" | "year"; trialEndsAt: string | null; firstCharge: number | null; direction: "upgrade" | "downgrade" | "new" | "trial"; amount: number; tax: number; total: number; effective: "now" | "on_payment" | "period_end"; effectiveAt: string | null; problems: string[]; blocked: boolean };
 
 const PAYMENT: Record<Overview["paymentStatus"], { label: string; tone: BadgeTone }> = {
   not_billed: { label: "Not billed (contracted)", tone: "neutral" },
@@ -190,6 +191,7 @@ function PlanTab({ base, data, canManage, reload, onOpenInvoices }: { base: stri
   const toast = useToast();
   const sub = data.subscription;
   const [pick, setPick] = React.useState<PlanView | null>(null);
+  const [interval, setBillingInterval] = React.useState<"month" | "year">("month");
   const [cancel, setCancel] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const { pay, busy: paying } = usePay(base, data, reload);
@@ -235,10 +237,13 @@ function PlanTab({ base, data, canManage, reload, onOpenInvoices }: { base: stri
                   {sub.plan.name}
                   <Badge tone={data.state === "blocked" ? "danger" : data.state === "past_due" ? "warning" : "success"} dot>{data.state === "blocked" ? "Paused" : data.state === "past_due" ? "Overdue" : "Active"}</Badge>
                   {sub.cancelAtPeriodEnd ? <Badge tone="warning">Ends {when(sub.endsAt)}</Badge> : null}
+                  {sub.billingMode === "trial" ? <Badge tone="info">Free trial until {when(sub.trialEndsAt)}</Badge> : null}
                 </p>
                 <p className="mt-1 text-body text-app-muted">
-                  {formatINR(sub.priceMonthly)} / month{data.tax.percent ? ` + ${data.tax.percent}% tax` : ""}
+                  {sub.billingMode === "trial" ? "Then " : ""}
+                  {formatINR(sub.periodPrice)} / {sub.interval === "year" ? "year" : "month"}{data.tax.percent ? ` + ${data.tax.percent}% tax` : ""}
                   {sub.billingMode === "complimentary" ? " · contracted with MECGURA" : ""}
+                  {sub.billingMode === "trial" ? " · cancel any time before the trial ends to pay nothing" : ""}
                 </p>
                 <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-small">
                   <div>
@@ -266,42 +271,62 @@ function PlanTab({ base, data, canManage, reload, onOpenInvoices }: { base: stri
         </CardBody>
       </Card>
 
+      {data.plans.some((p) => p.priceYearly > 0) ? (
+        <div role="group" aria-label="Billing period" className="flex w-fit gap-1 rounded-full border border-app-border p-1">
+          {(["month", "year"] as const).map((i) => (
+            <button key={i} type="button" aria-pressed={interval === i} onClick={() => setBillingInterval(i)} className={cn("rounded-full px-4 py-1.5 text-small font-medium", interval === i ? "bg-app-primary text-app-on-primary" : "text-app-muted hover:text-app-text")}>
+              {i === "month" ? "Monthly" : `Yearly${Math.max(...data.plans.map((p) => p.yearlySavingPct)) > 0 ? ` · save up to ${Math.max(...data.plans.map((p) => p.yearlySavingPct))}%` : ""}`}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <section aria-label="Plans" className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {data.plans.map((p) => (
-          <Card key={p.id} className={cn("flex flex-col", p.relation === "current" && "border-app-primary")}>
+        {data.plans.map((p) => {
+          const yearly = interval === "year" && p.priceYearly > 0;
+          const isCurrent = p.relation === "current" && (!sub || sub.interval === (yearly ? "year" : "month"));
+          const switchInterval = p.relation === "current" && !isCurrent;
+          const trial = data.trialAvailable && p.trialDays > 0 && p.selfServe && !isCurrent && (p.relation === "new" || p.relation === "upgrade") && (!sub || sub.billingMode !== "invoiced");
+          return (
+          <Card key={p.id} className={cn("flex flex-col", isCurrent && "border-app-primary")}>
             <div className="border-b border-app-border p-5">
               <p className="flex items-center justify-between gap-2 text-h4 font-semibold text-app-text">
                 {p.name}
-                {p.relation === "current" ? <Badge tone="primary">Current</Badge> : null}
+                {isCurrent ? <Badge tone="primary">Current</Badge> : null}
               </p>
               <p className="mt-1 text-h2 tabular-nums text-app-text">
-                {p.selfServe ? formatINR(p.priceMonthly) : "Custom"}
-                {p.selfServe ? <span className="text-small font-normal text-app-muted"> / month</span> : null}
+                {p.selfServe ? formatINR(yearly ? p.priceYearly : p.priceMonthly) : "Custom"}
+                {p.selfServe ? <span className="text-small font-normal text-app-muted"> / {yearly ? "year" : "month"}</span> : null}
               </p>
+              {p.selfServe && yearly ? <p className="text-caption text-emerald-300">{formatINR(Math.round(p.priceYearly / 12))} / month{p.yearlySavingPct ? ` · save ${p.yearlySavingPct}%` : ""}</p> : null}
+              {p.selfServe && interval === "year" && !p.priceYearly ? <p className="text-caption text-app-subtle">Monthly billing only</p> : null}
+              {trial ? <p className="text-caption text-sky-300">{p.trialDays}-day free trial</p> : null}
               <p className="mt-1 min-h-8 text-caption text-app-muted">{p.description}</p>
             </div>
             <div className="flex-1 p-5">
               <PlanFacts limits={p.limits} features={p.features} compact />
             </div>
             <div className="p-5 pt-0">
-              {p.relation === "current" ? (
+              {isCurrent ? (
                 <Button variant="secondary" className="w-full" disabled>Your plan</Button>
+              ) : switchInterval && canManage ? (
+                <Button variant="secondary" className="w-full" onClick={() => setPick(p)}>Switch to {yearly ? "yearly" : "monthly"} billing</Button>
               ) : p.relation === "contact" ? (
                 <Button variant="secondary" className="w-full" disabled>{data.supportEmail ? `Contact ${data.supportEmail}` : "Contact MECGURA"}</Button>
               ) : canManage ? (
                 <Button className="w-full" variant={p.relation === "downgrade" ? "secondary" : "primary"} onClick={() => setPick(p)}>
                   {p.relation === "upgrade" ? <ArrowUpRight aria-hidden="true" /> : p.relation === "downgrade" ? <ArrowDownRight aria-hidden="true" /> : null}
-                  {p.relation === "upgrade" ? "Upgrade" : p.relation === "downgrade" ? "Downgrade" : "Choose plan"}
+                  {trial ? `Start ${p.trialDays}-day free trial` : p.relation === "upgrade" ? "Upgrade" : p.relation === "downgrade" ? "Downgrade" : "Choose plan"}
                 </Button>
               ) : (
                 <p className="text-center text-caption text-app-subtle">Only owners can change the plan</p>
               )}
             </div>
           </Card>
-        ))}
+          );
+        })}
       </section>
 
-      {pick ? <ChangeModal base={base} data={data} plan={pick} onClose={() => setPick(null)} onDone={() => { setPick(null); void reload(); }} /> : null}
+      {pick ? <ChangeModal base={base} data={data} plan={pick} interval={interval === "year" && pick.priceYearly > 0 ? "year" : "month"} onClose={() => setPick(null)} onDone={() => { setPick(null); void reload(); }} /> : null}
       <ConfirmationDialog
         open={cancel}
         onClose={() => setCancel(false)}
@@ -338,7 +363,7 @@ function PlanFacts({ limits, features, compact = false }: { limits: PlanLimits; 
   );
 }
 
-function ChangeModal({ base, data, plan, onClose, onDone }: { base: string; data: Overview; plan: PlanView; onClose: () => void; onDone: () => void }) {
+function ChangeModal({ base, data, plan, interval, onClose, onDone }: { base: string; data: Overview; plan: PlanView; interval: "month" | "year"; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const [pv, setPv] = React.useState<Preview | null>(null);
   const [error, setError] = React.useState("");
@@ -347,7 +372,7 @@ function ChangeModal({ base, data, plan, onClose, onDone }: { base: string; data
   const { pay, busy: paying } = usePay(base, data, async () => onDone());
   React.useEffect(() => {
     let alive = true;
-    void apiFetch<{ preview: Preview }>(`${base}/preview?planId=${plan.id}`).then((r) => {
+    void apiFetch<{ preview: Preview }>(`${base}/preview?planId=${plan.id}&interval=${interval}`).then((r) => {
       if (!alive) return;
       if (!r.ok) return setError(r.error);
       setPv(r.data.preview);
@@ -355,20 +380,20 @@ function ChangeModal({ base, data, plan, onClose, onDone }: { base: string; data
     return () => {
       alive = false;
     };
-  }, [base, plan.id]);
+  }, [base, plan.id, interval]);
 
   async function confirm() {
     setBusy(true);
-    const r = await apiFetch<{ result: "changed" | "scheduled" | "invoice"; invoice?: InvoiceView }>(`${base}/change`, { method: "POST", body: { planId: plan.id } });
+    const r = await apiFetch<{ result: "changed" | "scheduled" | "invoice" | "trial"; invoice?: InvoiceView }>(`${base}/change`, { method: "POST", body: { planId: plan.id, interval } });
     setBusy(false);
     if (!r.ok) return setError(r.error);
     if (r.data.result === "invoice" && r.data.invoice) return setInvoice(r.data.invoice);
-    toast(r.data.result === "scheduled" ? `Scheduled — ${plan.name} starts at the end of your period` : `You're now on ${plan.name}`);
+    toast(r.data.result === "trial" ? `Your free trial of ${plan.name} has started` : r.data.result === "scheduled" ? `Scheduled — ${plan.name} starts at the end of your period` : `You're now on ${plan.name}`);
     onDone();
   }
 
   return (
-    <Modal open onClose={invoice ? onDone : onClose} title={invoice ? "Invoice created" : `${plan.relation === "downgrade" ? "Downgrade" : plan.relation === "upgrade" ? "Upgrade" : "Choose"} ${plan.name}`} size="lg">
+    <Modal open onClose={invoice ? onDone : onClose} title={invoice ? "Invoice created" : `${plan.relation === "downgrade" ? "Downgrade" : plan.relation === "upgrade" ? "Upgrade" : plan.relation === "current" ? "Change billing for" : "Choose"} ${plan.name}${interval === "year" ? " (yearly)" : ""}`} size="lg">
       {invoice ? (
         <div className="space-y-4">
           <Alert tone="info" title={`${invoice.number} — ${formatINR(invoice.total)}`}>
@@ -398,11 +423,15 @@ function ChangeModal({ base, data, plan, onClose, onDone }: { base: string; data
               {pv.blocked ? <p className="mt-1">Reduce these first, then try again.</p> : null}
             </Alert>
           ) : null}
-          {pv.direction === "downgrade" ? (
+          {pv.direction === "trial" ? (
+            <Alert tone="success" title={`${plan.trialDays} days free`}>
+              Nothing to pay now. On {when(pv.trialEndsAt)} your first invoice of {formatINR(pv.firstCharge ?? 0)} / {interval === "year" ? "year" : "month"}{data.tax.percent ? ` + ${data.tax.percent}% tax` : ""} is created. Cancel any time before then in Billing and you pay nothing. We remind you 3 days before.
+            </Alert>
+          ) : pv.direction === "downgrade" ? (
             <Alert tone="info">{pv.effective === "period_end" ? `The change happens on ${when(pv.effectiveAt)}, when your current period ends. No refund for the current period.` : "The change happens right away."}</Alert>
           ) : pv.amount > 0 ? (
             <dl className="space-y-1 rounded-xl border border-app-border p-4 text-small">
-              <div className="flex justify-between"><dt className="text-app-muted">{pv.direction === "new" ? "First month" : "Prorated difference for the rest of this period"}</dt><dd className="tabular-nums">{formatINR(pv.amount)}</dd></div>
+              <div className="flex justify-between"><dt className="text-app-muted">{pv.direction === "new" ? (interval === "year" ? "First year" : "First month") : data.subscription && data.subscription.interval !== interval ? `${interval === "year" ? "1 year" : "1 month"}, less the unused part of your current period` : "Prorated difference for the rest of this period"}</dt><dd className="tabular-nums">{formatINR(pv.amount)}</dd></div>
               {pv.tax ? <div className="flex justify-between"><dt className="text-app-muted">Tax ({data.tax.percent}%)</dt><dd className="tabular-nums">{formatINR(pv.tax)}</dd></div> : null}
               <div className="flex justify-between border-t border-app-border pt-1 font-semibold text-app-text"><dt>Due now</dt><dd className="tabular-nums">{formatINR(pv.total)}</dd></div>
               <p className="pt-1 text-caption text-app-subtle">An invoice is created; the new plan starts once it&apos;s paid.</p>
@@ -412,7 +441,7 @@ function ChangeModal({ base, data, plan, onClose, onDone }: { base: string; data
           )}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={onClose}>Not now</Button>
-            <Button onClick={confirm} loading={busy} disabled={pv.blocked}>{pv.amount > 0 ? "Create invoice" : pv.direction === "downgrade" ? "Confirm downgrade" : "Confirm"}</Button>
+            <Button onClick={confirm} loading={busy} disabled={pv.blocked}>{pv.direction === "trial" ? "Start free trial" : pv.amount > 0 ? "Create invoice" : pv.direction === "downgrade" ? "Confirm downgrade" : "Confirm"}</Button>
           </div>
         </div>
       )}

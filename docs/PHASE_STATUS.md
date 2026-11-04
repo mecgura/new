@@ -277,3 +277,20 @@ _(newest last)_
 | — | Integrations | ✅ Shopify, WooCommerce, Zapier/Make/n8n; Google 🔧 |
 
 See `docs/LIVE_FEATURES.md` and `docs/CONFIGURATION_REQUIRED.md`.
+
+### Stage 13: Annual plans, free trials, payment reminders ✅ (2026-11-04)
+- Schema: `Plan.priceYearly/trialDays`, `Subscription.interval/periodPrice/trialEndsAt/trialReminderAt/pendingInterval`,
+  `Invoice.remindersSent/lastReminderAt/targetInterval`. Migration `prisma/migrations/20261117090000_billing_annual_trials`.
+  Defaults keep every existing plan and client exactly as before (monthly, no trial) until the admin sets them.
+- **Yearly billing**: admin sets a yearly price per plan (hint shows the % saved). Clients toggle Monthly / Yearly.
+  First plan → one invoice for the year; monthly → yearly charges the year less the unused part of the month;
+  yearly → monthly waits for the end of the paid year. Renewals bill the period price. MRR uses the monthly
+  equivalent (yearly ÷ 12).
+- **Free trial**: admin sets trial days per plan. One trial per workspace (never trialled, never paid for a plan).
+  No invoice during the trial; owners are told 3 days before it ends; at the end a new paid row starts with the
+  first invoice (trial rows are 0 in MRR). Cancelling during the trial ends it with nothing to pay.
+- **Payment reminders** (dunning): each sent once — 3 days before due, overdue, +3 days, final at +7 days — in-app
+  for owners plus email when Resend is configured; a run that jumps ahead sends only the latest stage (no burst).
+  Immediate "payment failed" notice was already there. True automatic card/UPI re-charging needs a Razorpay recurring
+  mandate (🔧 not set up), so reminders carry the pay link instead.
+- Tests `tests/integration/billing-annual-trial.test.ts` (7). Suite 535/535, build OK, browser smoke OK.

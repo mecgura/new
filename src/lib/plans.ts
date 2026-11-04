@@ -68,6 +68,10 @@ const planBase = z.object({
   description: z.string().trim().max(300).optional(),
   /** Rupees in the API; stored as paise. */
   priceMonthly: z.coerce.number().min(0).max(10_000_000),
+  /** Rupees for a full year (0 = yearly billing not offered). */
+  priceYearly: z.coerce.number().min(0).max(100_000_000).optional(),
+  /** Free trial days for a workspace's first plan (0 = none). */
+  trialDays: z.coerce.number().int().min(0).max(60).optional(),
   maxUsers: limit(1),
   maxWhatsAppNumbers: limit(0),
   maxMonthlyMessages: limit(0),
@@ -89,6 +93,8 @@ const planBase = z.object({
 export const planSchema = planBase.transform((v) => ({
   ...v,
   description: v.description ?? "",
+  priceYearly: v.priceYearly ?? 0,
+  trialDays: v.trialDays ?? 0,
   maxCampaigns: v.maxCampaigns ?? UNLIMITED,
   maxAutomations: v.maxAutomations ?? UNLIMITED,
   maxAiReplies: v.maxAiReplies ?? UNLIMITED,

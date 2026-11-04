@@ -11,6 +11,6 @@ type Ctx = { params: Promise<{ orgId: string }> };
 export const POST = handle<Ctx>(async (req, { params }) => {
   const { access } = await orgRoute(req, params, "billing:manage");
   enforceRateLimit(`billing-change:${access.user.id}`, 20, 60 * 60_000);
-  const { planId } = await readJson(req, z.object({ planId: idSchema }));
-  return ok(await changePlan(access, planId, req));
+  const { planId, interval } = await readJson(req, z.object({ planId: idSchema, interval: z.enum(["month", "year"]).default("month") }));
+  return ok(await changePlan(access, planId, req, interval));
 });
