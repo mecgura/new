@@ -4,8 +4,12 @@ import Anthropic from "@anthropic-ai/sdk";
 export const AI_MODEL = process.env.AI_MODEL?.trim() || "claude-haiku-5-5";
 
 /** Names (never values) of what the AI Response step needs. */
+export function anthropicConfigured(): boolean {
+  return Boolean(process.env.ANTHROPIC_API_KEY?.trim());
+}
+/** Any live AI provider (Anthropic or OpenAI) has a key on the server. */
 export function aiConfigured(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+  return anthropicConfigured() || Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
 export class AiError extends Error {
@@ -31,8 +35,8 @@ export type ChatTurn = { role: "customer" | "business"; text: string };
  * Drafts a short WhatsApp reply from the business's instructions and the
  * recent conversation. Low effort keeps chat replies fast and inexpensive.
  */
-export async function generateReply(input: { instructions: string; businessName: string; history: ChatTurn[] }): Promise<string> {
-  if (!aiConfigured()) throw new AiError("AI isn't configured on this installation (ANTHROPIC_API_KEY is not set).", false);
+export async function generateReply(input: { instructions: string; businessName: string; history: ChatTurn[] }, useModel: string = AI_MODEL): Promise<string> {
+  if (!anthropicConfigured()) throw new AiError("Anthropic isn't configured on this installation (ANTHROPIC_API_KEY is not set).", false);
   // Collapse into alternating user/assistant turns that start with the customer.
   const messages: Anthropic.Beta.BetaMessageParam[] = [];
   for (const t of input.history) {
@@ -45,7 +49,7 @@ export async function generateReply(input: { instructions: string; businessName:
 
   try {
     const res = await getClient().beta.messages.create({
-      model: AI_MODEL,
+      model: useModel,
       max_tokens: 2000,
       output_config: { effort: "low" },
       betas: ["server-side-fallback-2026-07-01"],

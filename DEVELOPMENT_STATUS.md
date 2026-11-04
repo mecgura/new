@@ -28,3 +28,31 @@ Nothing listed was found missing or broken. The real gaps were the two "not buil
 - Audit actions `billing.autopay_*`.
 - Tests: `tests/integration/billing-autopay.test.ts` (11).
 - **Needs:** Razorpay Subscriptions enabled on the account, plus subscription.* events on the webhook. Never simulated.
+
+### P2 – OpenAI as an alternative AI provider ✅ built
+- `src/providers/openai/chat.ts`: official Chat Completions API.
+  - Same system prompt, knowledge base and relevant passages as Claude.
+  - Same strict tool schemas (save contact, qualify, book, transfer), tool round-trips and handoff.
+  - Summaries, automation AI step and social captions (strict JSON schema).
+  - Errors mapped: 429/5xx/network are retryable; 4xx are not.
+- `src/providers/ai/router.ts`: one entry point for every AI feature.
+  - Provider (auto / Anthropic / OpenAI) and model per provider are set in Admin → Integrations readiness.
+  - Optional fallback only when switched on, only for outages/auth errors, and never after the agent already ran an action.
+  - Per-provider health (last success/failure) and a real test call.
+- Anthropic integration preserved: the same functions, now with a model parameter; shared helpers `agentTools`, `toAction`, `knownLine`.
+- Usage/tokens/cost: the existing `AiInteraction` logs model + tokens; OpenAI list prices were added to `src/lib/ai-cost.ts` (estimates).
+- Keys only from env (`OPENAI_API_KEY`, optional `OPENAI_MODEL`); the settings API refuses unknown fields such as an api key.
+- Tests: `tests/integration/ai-providers.test.ts` (11, covering P2 + P4).
+
+### P4 – Integration readiness dashboard ✅ built
+- Admin → Integrations readiness (`/admin/readiness`): 14 services, with statuses LIVE / CONFIGURATION REQUIRED / APPROVAL REQUIRED / PRACTICE MODE / COMING SOON / NOT IMPLEMENTED.
+- **LIVE only after a real verification request succeeded within 7 days.** Checks used:
+  - Anthropic/OpenAI: a tiny completion
+  - Resend: GET /domains
+  - Gemini: list models
+  - Maps: Places searchText with an ids-only field mask
+  - Meta: Graph app lookup with the app token
+  - Razorpay: orders list
+  - Razorpay Subscriptions: subscriptions list; a refusal shows APPROVAL REQUIRED
+- Results are stored in `SiteSetting` `readiness:*` and audited as `integration.verified`.
+- The System health "AI provider" check now uses real call/verification results.

@@ -2,6 +2,7 @@
 
 Features that are built and tested but need an outside account, key or approval before they work for real.
 Until then the app says so on screen ("Configuration required") — nothing pretends to work.
+Admin → **Integrations readiness** shows the live status of each one (LIVE only after a real verification).
 Checked against the production project's environment variable **names** on 2026-11-04 (values never read).
 
 ## Keys you can add yourself (Vercel → mecgura-wa → Settings → Environment Variables → redeploy)
@@ -10,7 +11,8 @@ Checked against the production project's environment variable **names** on 2026-
 |---|---|---|
 | `ANTHROPIC_API_KEY` | ❌ not set | Live AI agent replies, AI step in automations, AI summaries, AI social captions. Without it: demo AI on demo numbers only, captions show "Configuration required". Optional `AI_MODEL` (default `claude-haiku-5-5`), `AI_USD_INR` (cost estimates, default 88). |
 | `RESEND_API_KEY` + `EMAIL_FROM` | ❌ not set | Sending email: password reset, invoices by email, outreach email, email channel replies. **Recommended soon** — without it, forgotten-password emails can't go out. |
-| `GEMINI_API_KEY` and/or `OPENAI_API_KEY` | ❌ not set | Admin AI studio images and ad copy (marketing). |
+| `OPENAI_API_KEY` (optional `OPENAI_MODEL`, default `gpt-5-mini`) | ❌ not set | Alternative live AI provider (agent, summaries, automation AI step, captions) — choose it in Admin → Integrations readiness; also admin AI studio images/ad copy. |
+| `GEMINI_API_KEY` | ❌ not set | Admin AI studio images and ad copy (marketing). |
 | `GOOGLE_MAPS_API_KEY` | ❌ not set | Admin outreach: Google Maps prospect finder. |
 | `META_APP_ID`, `META_APP_SECRET`, `META_EMBEDDED_SIGNUP_CONFIG_ID`, `META_WEBHOOK_VERIFY_TOKEN` | ✅ set | WhatsApp Cloud API, embedded signup, Messenger/Instagram. |
 | `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | ✅ set | Payments and wallet top-ups. |

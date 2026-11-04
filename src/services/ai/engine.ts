@@ -10,7 +10,7 @@ import { incrementUsage } from "@/lib/services/usage";
 import type { OrgAccess } from "@/lib/session";
 import { DEMO_LABEL, demoRespond, demoSummary, type AgentConfig, type AiAction, type AiTurn, type ChatTurn, type KnownContact } from "@/lib/ai";
 import { AiError, aiConfigured } from "@/providers/anthropic/reply";
-import { liveRespond, liveSummary } from "@/providers/anthropic/agent";
+import { aiRespond as liveRespond, aiSummary as liveSummary } from "@/providers/ai/router";
 import { agentConfig, agentParts } from "@/services/ai/agents";
 import { updateContact } from "@/services/inbox/contacts";
 import { pickLeastBusyMember, systemAssign } from "@/services/inbox/routing";
@@ -28,7 +28,7 @@ export async function agentForAccount(organizationId: string, whatsappAccountId:
 }
 
 /**
- * Which engine may answer: live (Claude) whenever ANTHROPIC_API_KEY is set;
+ * Which engine may answer: live (Claude or OpenAI) whenever ANTHROPIC_API_KEY or OPENAI_API_KEY is set;
  * otherwise the rule-based demo engine, and only on demo numbers — real
  * customers never get rule-based replies presented as AI.
  */
@@ -227,7 +227,7 @@ export async function handleInboundForAi(organizationId: string, ev: InboundForA
     return { status: "quota_reached" };
   }
   if (!mode) {
-    await log(agent, { conversationId: conv.id, contactId: ev.contactId, mode: "live", kind: "skipped", input: ev.text, error: "Live AI isn't configured (ANTHROPIC_API_KEY is not set), so the agent can't answer on a live number. Demo AI only runs on demo numbers." });
+    await log(agent, { conversationId: conv.id, contactId: ev.contactId, mode: "live", kind: "skipped", input: ev.text, error: "Live AI isn't configured (no ANTHROPIC_API_KEY or OPENAI_API_KEY), so the agent can't answer on a live number. Demo AI only runs on demo numbers." });
     return { status: "not_configured" };
   }
 
@@ -360,7 +360,7 @@ export async function testChat(access: OrgAccess, agentId: string, input: { hist
   await assertServiceEnabled(access.organizationId, "AI_ASSISTANT");
   const agent = await db.aiAgent.findFirst({ where: { id: agentId, organizationId: access.organizationId } });
   if (!agent) throw new ApiError("NOT_FOUND", "AI agent not found.");
-  if (input.mode === "live" && !aiConfigured()) throw new ApiError("CONFLICT", "Live AI isn't configured on this installation (ANTHROPIC_API_KEY is not set). Use demo mode.");
+  if (input.mode === "live" && !aiConfigured()) throw new ApiError("CONFLICT", "Live AI isn't configured on this installation (set ANTHROPIC_API_KEY or OPENAI_API_KEY). Use demo mode.");
   const cfg = await agentConfig(agent);
   const known: KnownContact = { name: "", email: "", customFields: {} };
   let turn: AiTurn;

@@ -83,6 +83,7 @@ export const ADMIN_NAV: NavSection[] = [
       { label: "Logs & Audit", icon: ScrollText, href: "/admin/audit-logs" },
       { label: "Support", icon: LifeBuoy, href: "/admin/support" },
       { label: "System health", icon: Activity, href: "/admin/health" },
+      { label: "Integrations readiness", icon: Plug, href: "/admin/readiness" },
       { label: "Marketing", icon: Megaphone, href: "/admin/marketing" },
       { label: "Website", icon: Globe, href: "/admin/site" },
       { label: "Festivals", icon: PartyPopper, href: "/admin/festivals" },

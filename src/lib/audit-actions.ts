@@ -105,6 +105,8 @@ export const AUDIT_ACTIONS = [
   "billing.trial_started",
   "billing.trial_converted",
   "billing.autopay_started",
+  "integration.verified",
+  "ai.settings_updated",
   "billing.autopay_failed",
   "billing.autopay_cancelled",
   "billing.autopay_halted",

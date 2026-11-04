@@ -15,7 +15,7 @@ Full build notes per stage: `docs/PHASE_STATUS.md`. What still needs keys/approv
   decides), drip templates, versions, test runs, retries, logs, analytics with branch split.
 - **AI Agent** (gated): knowledge from FAQs, PDF/Word/TXT/CSV/HTML files, single website pages or a whole website (up to 15 pages), relevant-passage search
   for big documents, versions with restore, 👍/👎 on replies, usage & estimated cost. *Live AI needs
-  `ANTHROPIC_API_KEY`.*
+  `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.*
 - **Loyalty & referrals** (gated), **Reviews** (gated), **Landing pages** (gated, forms → CRM, QR, UTM, analytics).
 - **Social media** (gated): calendar, Facebook/Instagram publishing, owner approval workflow, AI captions in
   English/Hinglish/Punjabi/Hindi, media library.
@@ -35,6 +35,9 @@ one-by-one WhatsApp), site editor.
 - **Blog (mecgura.tech/blog)**: write, preview and publish SEO articles (Admin → Blog); sitemap.xml, robots.txt,
   Google article/organisation data, homepage “From the blog”. 4 starter articles published.
 
-## Not built yet (on the list)
+- **AI provider**: Claude (Anthropic) or OpenAI for agent replies, summaries, automation AI step and captions; provider, model
+  and optional fallback in Admin → Integrations readiness.
+- **Integrations readiness** (Admin): every outside service with a verified status — LIVE only after a real check.
 
-OpenAI as an alternative AI-agent model.
+## Not built yet (on the list)
+See `DEVELOPMENT_STATUS.md`.

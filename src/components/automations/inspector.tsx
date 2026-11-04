@@ -139,7 +139,7 @@ export function NodeInspector({ node, onChange, onDelete, lists, readOnly, webho
             <Input value={String(d.saveToField ?? "")} onChange={(e) => set({ saveToField: e.target.value })} placeholder="ai_summary" maxLength={40} />
           </Field>
           <OnErrorField value={String(d.onError)} onChange={(v) => set({ onError: v })} id={fid("err")} />
-          <Alert tone="info">Uses Claude (Anthropic). Needs <code>ANTHROPIC_API_KEY</code> on the server; without it this step fails with a clear message in the logs.</Alert>
+          <Alert tone="info">Uses the live AI provider chosen by MECGURA (Claude or OpenAI). Needs <code>ANTHROPIC_API_KEY</code> or <code>OPENAI_API_KEY</code> on the server; without one this step fails with a clear message in the logs.</Alert>
         </>
       ) : null}
       {node.type === "end" ? <p className="text-small text-app-muted">The run finishes here.</p> : null}

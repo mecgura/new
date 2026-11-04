@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { AI_MODEL, AiError, aiConfigured } from "@/providers/anthropic/reply";
+import { AI_MODEL, AiError, anthropicConfigured } from "@/providers/anthropic/reply";
 
 export const CAPTION_LANGUAGES = { en: "English", hinglish: "Hinglish (Hindi in Roman letters mixed with English)", hi: "Hindi (Devanagari)", pa: "Punjabi (Gurmukhi)", "pa-roman": "Punjabi in Roman letters" } as const;
 export type CaptionLanguage = keyof typeof CAPTION_LANGUAGES;
@@ -22,8 +22,8 @@ let client: Anthropic | null = null;
 const getClient = () => (client ??= new Anthropic({ maxRetries: 1, timeout: 45_000 }));
 
 /** Three caption options with hashtags. Never invents offers, prices or dates that aren't in the brief. */
-export async function generateCaptions(r: CaptionRequest): Promise<{ options: CaptionOption[]; model: string; inputTokens: number; outputTokens: number }> {
-  if (!aiConfigured()) throw new AiError("AI captions need ANTHROPIC_API_KEY on the server (Configuration required).", false);
+export async function generateCaptions(r: CaptionRequest, useModel: string = AI_MODEL): Promise<{ options: CaptionOption[]; model: string; inputTokens: number; outputTokens: number }> {
+  if (!anthropicConfigured()) throw new AiError("AI captions need ANTHROPIC_API_KEY or OPENAI_API_KEY on the server (Configuration required).", false);
   const system = [
     `You write social media captions for ${r.businessName || "a small Indian business"}.`,
     `Platform: ${r.platform === "both" ? "Instagram and Facebook" : r.platform}. Tone: ${r.tone}. Language: ${CAPTION_LANGUAGES[r.language]}.`,
@@ -36,7 +36,7 @@ export async function generateCaptions(r: CaptionRequest): Promise<{ options: Ca
   let res: Anthropic.Beta.BetaMessage;
   try {
     res = await getClient().beta.messages.create({
-      model: AI_MODEL,
+      model: useModel,
       max_tokens: 4000,
       output_config: {
         effort: "low",
@@ -70,7 +70,7 @@ export async function generateCaptions(r: CaptionRequest): Promise<{ options: Ca
   const tidy = (h: string) => "#" + h.replace(/^#+/, "").replace(/\s+/g, "");
   return {
     options: parsed.options.slice(0, 3).map((o) => ({ caption: o.caption.trim(), hashtags: [...new Set(o.hashtags.map(tidy).filter((h) => h.length > 1))].slice(0, 10) })),
-    model: res.model || AI_MODEL,
+    model: res.model || useModel,
     inputTokens: res.usage.input_tokens ?? 0,
     outputTokens: res.usage.output_tokens ?? 0,
   };

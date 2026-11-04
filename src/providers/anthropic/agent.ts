@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { AI_MODEL, AiError, aiConfigured } from "@/providers/anthropic/reply";
+import { AI_MODEL, AiError, anthropicConfigured } from "@/providers/anthropic/reply";
 import { relevantPassages, systemPrompt, type AgentConfig, type AiAction, type AiTurn, type ChatTurn, type KnownContact } from "@/lib/ai";
 
 /** Most tool rounds per customer message — the loop always ends. */
@@ -13,7 +13,8 @@ function getClient() {
 
 type Tool = Anthropic.Beta.BetaTool;
 
-function tools(cfg: AgentConfig): Tool[] {
+/** The agent's enabled actions as tool definitions (JSON Schema) — shared with the OpenAI provider. */
+export function agentTools(cfg: AgentConfig): Tool[] {
   const a = cfg.actions;
   const out: Tool[] = [];
   if (a.collect && a.collectFields.length) {
@@ -84,6 +85,25 @@ function tools(cfg: AgentConfig): Tool[] {
   return out;
 }
 
+/** A tool call (name + JSON input) → the action MECGURA performs. Unknown tools → null. */
+export function toAction(name: string, input: Record<string, unknown>): AiAction | null {
+  if (name === "save_contact_info") {
+    const fields = Object.fromEntries(((input.fields as { field: string; value: string }[]) ?? []).filter((f) => f.value?.trim()).map((f) => [f.field, f.value.trim().slice(0, 200)]));
+    return { type: "collect", fields };
+  }
+  if (name === "qualify_lead") return { type: "qualify", status: (input.status as "contacted" | "qualified" | "lost") ?? "contacted", interest: String(input.interest ?? "").slice(0, 200), reason: String(input.reason ?? "").slice(0, 300) };
+  if (name === "book_appointment") return { type: "book", service: String(input.service ?? "").slice(0, 120), requestedFor: String(input.preferred_time ?? "").slice(0, 120), notes: String(input.notes ?? "").slice(0, 500) };
+  if (name === "transfer_to_human") return { type: "transfer", reason: String(input.reason ?? "Customer needs a person.").slice(0, 300) };
+  return null;
+}
+
+/** The "known about this customer" line both providers add to the system prompt. */
+export const knownLine = (known: KnownContact) =>
+  `Known about this customer: name ${known.name || "unknown"}, email ${known.email || "unknown"}${Object.entries(known.customFields)
+    .slice(0, 8)
+    .map(([k, v]) => `, ${k} ${v}`)
+    .join("")}.`;
+
 function toMessages(history: ChatTurn[]): Anthropic.Beta.BetaMessageParam[] {
   const messages: Anthropic.Beta.BetaMessageParam[] = [];
   for (const t of history) {
@@ -114,34 +134,31 @@ export async function liveRespond(
   cfg: AgentConfig,
   history: ChatTurn[],
   known: KnownContact,
-  onAction: (a: AiAction) => Promise<string>
+  onAction: (a: AiAction) => Promise<string>,
+  useModel: string = AI_MODEL
 ): Promise<AiTurn> {
-  if (!aiConfigured()) throw new AiError("AI isn't configured (ANTHROPIC_API_KEY is not set).", false);
+  if (!anthropicConfigured()) throw new AiError("Anthropic isn't configured (ANTHROPIC_API_KEY is not set).", false);
   const messages = toMessages(history);
   if (!messages.length || messages.at(-1)!.role !== "user") throw new AiError("There's no customer message to reply to.", false);
-  const knownLine = `Known about this customer: name ${known.name || "unknown"}, email ${known.email || "unknown"}${Object.entries(known.customFields)
-    .slice(0, 8)
-    .map(([k, v]) => `, ${k} ${v}`)
-    .join("")}.`;
   const system: Anthropic.Beta.BetaTextBlockParam[] = [
     // The agent's prompt + knowledge base is stable across messages → cached.
     { type: "text", text: systemPrompt(cfg), cache_control: { type: "ephemeral" } },
-    { type: "text", text: knownLine },
+    { type: "text", text: knownLine(known) },
   ];
   const recent = history.filter((h) => h.role === "customer").slice(-3).map((h) => h.text).join("\n");
   const extra = relevantPassages(cfg, recent);
   if (extra) system.push({ type: "text", text: extra });
-  const toolDefs = tools(cfg);
+  const toolDefs = agentTools(cfg);
   const actions: AiAction[] = [];
   let inputTokens = 0;
   let outputTokens = 0;
-  let model = AI_MODEL;
+  let model = useModel;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     let res: Anthropic.Beta.BetaMessage;
     try {
       res = await getClient().beta.messages.create({
-        model: AI_MODEL,
+        model: useModel,
         max_tokens: 2000,
         output_config: { effort: "low" },
         betas: ["server-side-fallback-2026-07-01"],
@@ -174,17 +191,7 @@ export async function liveRespond(
     let transfer: AiAction | null = null;
     for (const c of calls) {
       const input = (c.input ?? {}) as Record<string, unknown>;
-      let action: AiAction | null = null;
-      if (c.name === "save_contact_info") {
-        const fields = Object.fromEntries(((input.fields as { field: string; value: string }[]) ?? []).filter((f) => f.value?.trim()).map((f) => [f.field, f.value.trim().slice(0, 200)]));
-        action = { type: "collect", fields };
-      } else if (c.name === "qualify_lead") {
-        action = { type: "qualify", status: (input.status as "contacted" | "qualified" | "lost") ?? "contacted", interest: String(input.interest ?? "").slice(0, 200), reason: String(input.reason ?? "").slice(0, 300) };
-      } else if (c.name === "book_appointment") {
-        action = { type: "book", service: String(input.service ?? "").slice(0, 120), requestedFor: String(input.preferred_time ?? "").slice(0, 120), notes: String(input.notes ?? "").slice(0, 500) };
-      } else if (c.name === "transfer_to_human") {
-        action = { type: "transfer", reason: String(input.reason ?? "Customer needs a person.").slice(0, 300) };
-      }
+      const action = toAction(c.name, input);
       if (!action) {
         results.push({ type: "tool_result", tool_use_id: c.id, content: "Unknown tool.", is_error: true });
         continue;
@@ -210,12 +217,12 @@ export async function liveRespond(
 }
 
 /** Short internal summary of a conversation for the team (live mode). */
-export async function liveSummary(cfg: AgentConfig, history: ChatTurn[]): Promise<{ text: string; model: string; inputTokens: number; outputTokens: number }> {
-  if (!aiConfigured()) throw new AiError("AI isn't configured (ANTHROPIC_API_KEY is not set).", false);
+export async function liveSummary(cfg: AgentConfig, history: ChatTurn[], useModel: string = AI_MODEL): Promise<{ text: string; model: string; inputTokens: number; outputTokens: number }> {
+  if (!anthropicConfigured()) throw new AiError("Anthropic isn't configured (ANTHROPIC_API_KEY is not set).", false);
   const transcript = history.map((t) => `${t.role === "customer" ? "Customer" : "Business"}: ${t.text}`).join("\n").slice(-30_000);
   try {
     const res = await getClient().beta.messages.create({
-      model: AI_MODEL,
+      model: useModel,
       max_tokens: 1500,
       output_config: { effort: "low" },
       betas: ["server-side-fallback-2026-07-01"],
@@ -230,7 +237,7 @@ export async function liveSummary(cfg: AgentConfig, history: ChatTurn[]): Promis
       .join("")
       .trim();
     if (!text) throw new AiError("The AI returned an empty summary.", true);
-    return { text: text.slice(0, 3000), model: res.model || AI_MODEL, inputTokens: res.usage.input_tokens ?? 0, outputTokens: res.usage.output_tokens ?? 0 };
+    return { text: text.slice(0, 3000), model: res.model || useModel, inputTokens: res.usage.input_tokens ?? 0, outputTokens: res.usage.output_tokens ?? 0 };
   } catch (e) {
     wrap(e);
   }

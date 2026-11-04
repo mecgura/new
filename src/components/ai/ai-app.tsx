@@ -269,7 +269,7 @@ function ModeBanner({ live, accounts }: { live: boolean; accounts: Account[] }) 
   }
   return (
     <Alert tone="warning" className="mb-4" title={`Demo mode — ${DEMO_LABEL}`}>
-      ANTHROPIC_API_KEY isn&apos;t set on this installation, so there is no real AI. The demo engine only matches keywords against your FAQs, products, services and pricing. It answers on demo numbers and in the test chat only{liveNumbers ? ` — your ${liveNumbers} live number(s) will not get automatic replies` : ""}. Messages it sends are labelled “Demo AI”.
+      No AI key (ANTHROPIC_API_KEY or OPENAI_API_KEY) is set on this installation, so there is no real AI. The demo engine only matches keywords against your FAQs, products, services and pricing. It answers on demo numbers and in the test chat only{liveNumbers ? ` — your ${liveNumbers} live number(s) will not get automatic replies` : ""}. Messages it sends are labelled “Demo AI”.
     </Alert>
   );
 }

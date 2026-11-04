@@ -4,7 +4,8 @@ import { db } from "@/lib/db";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { orgRoute } from "@/lib/route-helpers";
 import { AiError } from "@/providers/anthropic/reply";
-import { CAPTION_LANGUAGES, generateCaptions } from "@/providers/anthropic/social";
+import { CAPTION_LANGUAGES } from "@/providers/anthropic/social";
+import { aiCaptions as generateCaptions } from "@/providers/ai/router";
 import { getSocialSettings } from "@/services/social/workflow";
 import { assertServiceEnabled } from "@/services/whatsapp/guards";
 

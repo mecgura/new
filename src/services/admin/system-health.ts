@@ -1,3 +1,4 @@
+import { providerHealth } from "@/providers/ai/router";
 import { db } from "@/lib/db";
 import { notify } from "@/lib/notifications";
 import { getSetting, setSetting } from "@/lib/settings";
@@ -49,6 +50,10 @@ export async function systemHealth(now = new Date()) {
   const metaAge = ago(lastMeta?.receivedAt, t);
   const count = (s: string) => numbers.find((n) => n.status === s)?._count._all ?? 0;
   const p95 = durations.length ? durations[Math.floor(durations.length * 0.05)]?.durationMs ?? 0 : 0;
+  const aiHealth = await Promise.all([providerHealth("anthropic"), providerHealth("openai")]);
+  const aiKeys = [has("ANTHROPIC_API_KEY") ? "Anthropic" : "", has("OPENAI_API_KEY") ? "OpenAI" : ""].filter(Boolean);
+  const aiOk = aiHealth.some((h) => h?.ok);
+  const aiFailed = aiHealth.find((h) => h && !h.ok);
   const checks: Check[] = [
     { key: "database", group: "Platform", label: "Database", status: dbMs < 500 ? "ok" : dbMs < 2000 ? "warn" : "down", detail: `Answered in ${dbMs} ms` },
     { key: "scheduler", group: "Platform", label: "Scheduler (campaigns, automations, retries)", status: tickAge === null ? "down" : tickAge <= 15 ? "ok" : tickAge <= 60 ? "warn" : "down", detail: `Last run ${mins(tickAge)}${tickAge !== null && tickAge > 15 ? ". Check the cron-job.org job or GitHub workflow." : ""}` },
@@ -60,7 +65,7 @@ export async function systemHealth(now = new Date()) {
     { key: "automations", group: "Automation", label: "Automations (24 h)", status: autoStuck ? "warn" : autoFailed > 50 ? "warn" : "ok", detail: `${autoFailed} failed runs · ${autoStuck} stuck` },
     { key: "webhooks_out", group: "Automation", label: "Client webhooks (outgoing)", status: hooksBacklog > 50 ? "down" : hooksFailed || hooksBacklog ? "warn" : "ok", detail: `${hooksFailed} failed in 24 h · ${hooksBacklog} overdue retries` },
     { key: "api", group: "Automation", label: "Public API (24 h)", status: api >= 50 && pct(api5xx, api) > 5 ? "down" : api5xx ? "warn" : p95 > 3000 ? "warn" : "ok", detail: `${api} requests · ${api5xx} server errors · p95 ${p95} ms` },
-    { key: "ai_claude", group: "Providers", label: "Claude (AI agent replies)", status: has("ANTHROPIC_API_KEY") ? "ok" : "config", detail: has("ANTHROPIC_API_KEY") ? "Key set" : "Add ANTHROPIC_API_KEY to switch on AI replies" },
+    { key: "ai_claude", group: "Providers", label: "AI provider (Claude / OpenAI)", status: !aiKeys.length ? "config" : aiOk ? "ok" : aiFailed ? "down" : "warn", detail: !aiKeys.length ? "Add ANTHROPIC_API_KEY or OPENAI_API_KEY to switch on AI replies" : aiOk ? `${aiKeys.join(" + ")} · answered recently` : aiFailed ? `Last call failed: ${aiFailed.error}` : `${aiKeys.join(" + ")} key set · not verified yet (Admin → Integrations readiness)` },
     { key: "ai_images", group: "Providers", label: "Gemini / OpenAI (images & ad copy)", status: has("GEMINI_API_KEY") || has("OPENAI_API_KEY") ? "ok" : "config", detail: [has("GEMINI_API_KEY") ? "Gemini set" : "", has("OPENAI_API_KEY") ? "OpenAI set" : ""].filter(Boolean).join(" · ") || "Add GEMINI_API_KEY or OPENAI_API_KEY" },
     { key: "email", group: "Providers", label: "Email (Resend)", status: has("RESEND_API_KEY", "EMAIL_FROM") ? "ok" : "config", detail: has("RESEND_API_KEY", "EMAIL_FROM") ? "Sending from " + process.env.EMAIL_FROM : "Add RESEND_API_KEY and EMAIL_FROM" },
     { key: "payments", group: "Providers", label: "Payments (Razorpay)", status: has("RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET") ? "ok" : "config", detail: has("RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET") ? "Keys set" : "Add RAZORPAY_KEY_SECRET and RAZORPAY_WEBHOOK_SECRET for online payments" },
