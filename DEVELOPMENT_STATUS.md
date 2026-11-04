@@ -56,3 +56,55 @@ Nothing listed was found missing or broken. The real gaps were the two "not buil
   - Razorpay Subscriptions: subscriptions list; a refusal shows APPROVAL REQUIRED
 - Results are stored in `SiteSetting` `readiness:*` and audited as `integration.verified`.
 - The System health "AI provider" check now uses real call/verification results.
+
+### P3 – Advanced product improvements
+Audit first — these already existed and were **not rebuilt**:
+- Workflow visual debugging / execution tracing: automation Logs + execution drawer with every step, attempt, output and error, highlighting the node on the canvas.
+- Client onboarding: the dashboard "Getting started" checklist plus Agreement & KYC onboarding.
+- Integration health: System health (and now Integrations readiness).
+- Subscription dunning & reconciliation: payment reminders, grace period, plus the new auto-pay reconciliation (P1).
+
+Built in this run:
+- **AI agent automated tests (evaluation playground)**
+  - Model `AiTestCase`; `src/services/ai/evals.ts`; AI Agent → "Automated tests" tab.
+  - Each case: customer message + must include / must not include / expected action.
+  - Runs in demo or live mode against the saved agent; nothing is sent and the CRM is untouched. Results are stored and logged as test interactions.
+  - Rate-limited; audited as `ai.tests_run`.
+- **Customer journey**
+  - `src/services/crm/journey.ts` + a card on the contact page.
+  - Stages: acquired → engaged → qualified → opportunity → customer → advocate.
+  - Timeline built from real records: ads, landing forms, consent, conversations, flows, campaigns, automations, appointments, deals, purchases, loyalty, reviews, CSAT.
+- **Sales forecast**
+  - `salesForecast()`; Deals → "Sales forecast" panel.
+  - Next 3 months by expected close date: best case, stage-weighted, and history-based (real 180-day win rate, only after 5+ closed deals).
+  - Also: overdue deals, deals with no date, 6-month won history and run rate.
+- **Security monitoring**
+  - Admin → Security: failed sign-ins (24 h / 7 d / 14-day chart).
+  - IPs flagged at 10+ failures in 24 h; accounts with failures; permission denials.
+  - Sensitive actions (role changes, deletions, exports, key changes) and Super Admin sign-ins with a new-IP flag. All counted from the audit log.
+- **Data export & workspace deletion**
+  - Model `DataRequest`.
+  - The owner downloads a full JSON export from Settings → Organization (secrets excluded, rate-limited, audited).
+  - The owner requests deletion (exact name confirmation) with a 7-day cooling-off and can cancel.
+  - A Super Admin executes it (via the existing `deleteClient`) or rejects it in Admin → Security. All steps are audited.
+- Migration `20261119120000_ai_tests_data_requests`.
+- Tests: `tests/integration/p3-features.test.ts` (7).
+
+## 3. Pending external dependencies (nothing simulated)
+| Item | Needed from Guri |
+|---|---|
+| Live AI (Claude or OpenAI) | `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in Vercel, then Verify in Admin → Integrations readiness |
+| Auto-pay | Razorpay Subscriptions enabled + `subscription.*` webhook events |
+| Email | `RESEND_API_KEY` + `EMAIL_FROM` |
+| Gemini / Maps | `GEMINI_API_KEY`, `GOOGLE_MAPS_API_KEY` |
+| Meta Marketing API, Google Business Profile, Google Ads | Provider approvals |
+| Voice calling | Voice provider + DLT/consent (practice mode until then) |
+| SMS | DLT registration (not implemented by design) |
+| RCS | Google RBM approval (coming soon) |
+
+## 4. Test results (this run)
+- `npx tsc --noEmit`: pass
+- `npx eslint src tests --quiet`: pass
+- `npx vitest run`: **68 files, 578 tests passed** (was 65 files / 549 tests before this run)
+- `next build`: compiled successfully
+- Browser smoke: Integrations readiness, Admin auto-pay tab, contact journey, deals forecast, AI tests tab, data card and Admin security all render with no page errors and no mobile overflow.

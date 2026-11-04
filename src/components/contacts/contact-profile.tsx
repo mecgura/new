@@ -1,5 +1,6 @@
 "use client";
 
+import { JourneyCard } from "@/components/contacts/journey-card";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { MessageCircle, Trash2 } from "lucide-react";
@@ -109,6 +110,7 @@ export function ContactProfile({ orgId, contactId, perms, accounts }: { orgId: s
               {c.optInStatus !== "opted_in" ? <p className="mt-2 text-caption text-app-subtle">Outside a customer-started 24-hour window, only approved templates can be sent — and only to contacts who opted in.</p> : null}
             </CardBody>
           </Card>
+          <JourneyCard orgId={orgId} contactId={contactId} />
           <Card>
             <CardHeader title="Details" />
             <CardBody>

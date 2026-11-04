@@ -334,3 +334,55 @@ export async function contactDeals(organizationId: string, contactId: string) {
   const rows = await db.deal.findMany({ where: { organizationId, contactId }, include: dealInclude, orderBy: { createdAt: "desc" }, take: 50 });
   return rows.map((d) => dto(d));
 }
+
+/**
+ * Sales forecast for the next 3 months, by expected close date. Three honest views per month:
+ * - best case: every open deal closes;
+ * - weighted: value × the stage's win chance (set by the team);
+ * - history-based: value × the workspace's real win rate over the last 180 days (only when ≥5 deals were closed).
+ * Plus the last 6 months of actual wins, deals without a close date and overdue deals.
+ */
+export async function salesForecast(organizationId: string, now = new Date()) {
+  const IST = 5.5 * 3_600_000;
+  const ist = new Date(now.getTime() + IST);
+  const monthStart = (offset: number) => new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth() + offset, 1) - IST);
+  const label = (d: Date) => new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric", timeZone: "Asia/Kolkata" }).format(d);
+  const since = new Date(now.getTime() - 180 * 86_400_000);
+  const [open, closed, wonHistory] = await Promise.all([
+    db.deal.findMany({ where: { organizationId, status: "open" }, select: { valuePaise: true, expectedCloseAt: true, stage: { select: { probability: true } } } }),
+    db.deal.groupBy({ by: ["status"], where: { organizationId, status: { in: ["won", "lost"] }, closedAt: { gte: since } }, _count: { _all: true } }),
+    db.deal.findMany({ where: { organizationId, status: "won", closedAt: { gte: monthStart(-5) } }, select: { valuePaise: true, closedAt: true } }),
+  ]);
+  const won = closed.find((c) => c.status === "won")?._count._all ?? 0;
+  const lost = closed.find((c) => c.status === "lost")?._count._all ?? 0;
+  const winRate = won + lost >= 5 ? won / (won + lost) : null;
+  const r = (p: number) => Math.round(p) / 100;
+  const bucket = (list: typeof open) => ({
+    deals: list.length,
+    bestCaseRupees: r(list.reduce((a, d) => a + d.valuePaise, 0)),
+    weightedRupees: r(list.reduce((a, d) => a + (d.valuePaise * d.stage.probability) / 100, 0)),
+    historyRupees: winRate === null ? null : r(list.reduce((a, d) => a + d.valuePaise * winRate, 0)),
+  });
+  const months = [0, 1, 2].map((i) => {
+    const from = monthStart(i);
+    const to = monthStart(i + 1);
+    return { month: label(from), ...bucket(open.filter((d) => d.expectedCloseAt && d.expectedCloseAt >= (i === 0 ? now : from) && d.expectedCloseAt < to)) };
+  });
+  const history = [-5, -4, -3, -2, -1, 0].map((i) => {
+    const from = monthStart(i);
+    const to = monthStart(i + 1);
+    const list = wonHistory.filter((d) => d.closedAt && d.closedAt >= from && d.closedAt < to);
+    return { month: label(from), wonDeals: list.length, wonRupees: r(list.reduce((a, d) => a + d.valuePaise, 0)) };
+  });
+  const lastThree = history.slice(2, 5); // three full months before this one
+  return {
+    months,
+    later: bucket(open.filter((d) => d.expectedCloseAt && d.expectedCloseAt >= monthStart(3))),
+    overdue: bucket(open.filter((d) => d.expectedCloseAt && d.expectedCloseAt < now)),
+    noDate: bucket(open.filter((d) => !d.expectedCloseAt)),
+    history,
+    runRateRupees: Math.round((lastThree.reduce((a, m) => a + m.wonRupees, 0) / 3) * 100) / 100,
+    winRate180: winRate === null ? null : Math.round(winRate * 100),
+    closedSample: won + lost,
+  };
+}

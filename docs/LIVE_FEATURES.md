@@ -20,6 +20,9 @@ Full build notes per stage: `docs/PHASE_STATUS.md`. What still needs keys/approv
 - **Social media** (gated): calendar, Facebook/Instagram publishing, owner approval workflow, AI captions in
   English/Hinglish/Punjabi/Hindi, media library.
 - **Integrations**: Shopify & WooCommerce (orders, purchases, abandoned carts), Zapier/Make/n8n via API + webhooks.
+- **AI agent automated tests**: questions + rules (must include / must not include / expected action), run in one click.
+- **Customer journey** on every contact (stages + timeline) and a **3-month sales forecast** in Deals.
+- **Your data** (owner): full JSON export and workspace deletion request with a 7-day cooling-off.
 - **Help & support** tickets with SLA; API keys; outbound webhooks; billing, wallet, invoices; agreements & KYC.
 
 ## Super Admin
@@ -38,6 +41,7 @@ one-by-one WhatsApp), site editor.
 - **AI provider**: Claude (Anthropic) or OpenAI for agent replies, summaries, automation AI step and captions; provider, model
   and optional fallback in Admin → Integrations readiness.
 - **Integrations readiness** (Admin): every outside service with a verified status — LIVE only after a real check.
+- **Security** (Admin): failed sign-ins, flagged IPs, permission denials, sensitive actions, admin sign-ins, workspace deletion requests.
 
 ## Not built yet (on the list)
 See `DEVELOPMENT_STATUS.md`.

@@ -1132,6 +1132,7 @@ model AiAgent {
   documents    AiDocument[]
   interactions AiInteraction[]
   versions     AiAgentVersion[]
+  testCases    AiTestCase[]
 
   @@index([organizationId, status])
 }
@@ -2399,4 +2400,47 @@ model Autopay {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, status])
+}
+
+// Automated test for an AI agent: a customer message and what a good answer must (not) contain or do.
+model AiTestCase {
+  id             String    @id @default(cuid())
+  organizationId String
+  agentId        String
+  name           String
+  message        String
+  mustInclude    String    @default("") // one phrase per line, all required (case-insensitive)
+  mustNotInclude String    @default("") // one phrase per line, none allowed
+  expectAction   String    @default("") // "" (any) | none | collect | qualify | book | transfer
+  lastStatus     String    @default("") // "" | pass | fail | error
+  lastReply      String    @default("")
+  lastReasons    String    @default("[]") // JSON: why it failed
+  lastMode       String    @default("") // live | demo
+  lastModel      String    @default("")
+  lastRunAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  agent AiAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+}
+
+// A workspace owner's request to delete the whole workspace. Kept after deletion as a record (organizationId is not a relation).
+model DataRequest {
+  id               String    @id @default(cuid())
+  organizationId   String
+  organizationName String
+  kind             String    @default("delete_workspace")
+  status           String    @default("pending") // pending | cancelled | completed | rejected
+  requestedById    String
+  requestedByEmail String
+  reason           String    @default("")
+  earliestAt       DateTime // cooling-off: can't be executed before this
+  decidedById      String?
+  decidedAt        DateTime?
+  note             String    @default("")
+  createdAt        DateTime  @default(now())
+
+  @@index([status, createdAt])
+  @@index([organizationId])
 }

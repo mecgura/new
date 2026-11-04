@@ -1,5 +1,6 @@
 "use client";
 
+import { ForecastCard } from "@/components/crm/forecast-card";
 import * as React from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, Flame, Gauge, IndianRupee, Plus, Settings2, SlidersHorizontal, Target, Trash2, TrendingUp, Trophy } from "lucide-react";
@@ -142,6 +143,8 @@ export function DealsApp({ orgId, meId, canWrite, canManage, members }: { orgId:
           {[stats.stuck ? `${stats.stuck} deal${stats.stuck === 1 ? " hasn't" : "s haven't"} moved in 14+ days` : "", stats.overdue ? `${stats.overdue} past the expected close date` : ""].filter(Boolean).join(" · ")}
         </Alert>
       ) : null}
+
+      <ForecastCard base={base} />
 
       <FilterBar className="mb-3">
         <SearchBar label="Search deals" placeholder="Search deal, name or phone" value={q} onChange={(e) => setQ(e.target.value)} className="w-full sm:w-72" />

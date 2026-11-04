@@ -1,7 +1,8 @@
 "use client";
 
+import { AiTestsTab } from "@/components/ai/ai-tests-tab";
 import * as React from "react";
-import { Bot, CalendarCheck, FileText, FlaskConical, Globe, History, IndianRupee, ListChecks, Pause, Play, Plus, RefreshCw, RotateCcw, Save, Send, Settings2, ThumbsDown, ThumbsUp, Trash2, Upload, UserRound, Undo2, X } from "lucide-react";
+import { ClipboardCheck, Bot, CalendarCheck, FileText, FlaskConical, Globe, History, IndianRupee, ListChecks, Pause, Play, Plus, RefreshCw, RotateCcw, Save, Send, Settings2, ThumbsDown, ThumbsUp, Trash2, Upload, UserRound, Undo2, X } from "lucide-react";
 import {
   Alert,
   Badge,
@@ -67,6 +68,7 @@ const TABS = [
   { id: "knowledge", label: "Knowledge", icon: FileText },
   { id: "actions", label: "Actions & handoff", icon: ListChecks },
   { id: "test", label: "Test chat", icon: FlaskConical },
+  { id: "tests", label: "Automated tests", icon: ClipboardCheck, manage: true },
   { id: "activity", label: "Activity", icon: History },
   { id: "versions", label: "Versions", icon: Undo2, manage: true },
   { id: "usage", label: "Usage & cost", icon: IndianRupee, manage: true },
@@ -245,6 +247,7 @@ export function AiApp({ orgId, canManage, initialTab }: { orgId: string; canMana
           {tab === "knowledge" ? <KnowledgeTab key={agent.id} draft={draft} setDraft={setDraft} agent={agent} base={`${base}/agents/${agent.id}`} disabled={!canManage} onDocs={(documents) => replace({ ...agent, documents })} /> : null}
           {tab === "actions" ? <ActionsTab key={agent.id} draft={draft} setDraft={setDraft} members={data.members} disabled={!canManage} /> : null}
           {tab === "test" ? <TestTab key={agent.id} url={`${base}/agents/${agent.id}/test`} live={data.liveConfigured} dirty={dirty} canManage={canManage} /> : null}
+          {tab === "tests" && canManage ? <AiTestsTab key={agent.id} url={`${base}/agents/${agent.id}/tests`} dirty={dirty} /> : null}
           {tab === "activity" ? <ActivityTab key={agent.id} url={`${base}/agents/${agent.id}/interactions`} /> : null}
           {tab === "versions" && canManage ? <VersionsTab<Agent> key={agent.id} url={`${base}/agents/${agent.id}/versions`} dirty={dirty} onRestored={(a) => { replace(a); setDraft(editable(a)); setSaved(JSON.stringify(editable(a))); }} /> : null}
           {tab === "usage" && canManage ? <UsageTab url={`${base}/usage`} /> : null}
