@@ -7,7 +7,7 @@ export const SERVICES = [
   { key: "AI_ASSISTANT", label: "AI Assistant", description: "AI Agent: automatic replies, lead qualification and appointment requests (also needs a plan that includes it)" },
   { key: "OMNICHANNEL", label: "Omnichannel inbox", description: "Email, website chat, Messenger and Instagram in the shared inbox" },
   { key: "ADS_MANAGER", label: "Ads Manager", description: "Create and run click-to-WhatsApp ads from MECGURA and see chats and cost per chat (needs Meta approval for other businesses' ad accounts)" },
-  { key: "AUTOMATION_PACK", label: "Ready-made automations", description: "Long, editable WhatsApp conversation flows: lead qualification, appointment booking, product enquiry and feedback" },
+  { key: "AUTOMATION_PACK", label: "Ready-made automations", description: "Long, editable WhatsApp flows and drip campaigns: lead qualification, appointment booking, product enquiry, feedback, lead nurture, quote follow-up, win back and festival drips" },
   { key: "SMS", label: "SMS", description: "Coming soon: SMS inbox and campaigns (needs DLT registration and an SMS provider)" },
   { key: "RCS", label: "RCS", description: "Coming soon: rich messages on Android (needs an RCS provider and brand verification)" },
   { key: "AI_CALLING", label: "AI Calling", description: "AI phone calls with transcripts and summaries (practice mode until a voice provider is connected)" },
