@@ -8,7 +8,8 @@ import { limitLabel, limitsOf, parseFeatures, wouldExceed, FEATURES } from "@/li
 import { currentPlan } from "@/lib/services/usage";
 import type { OrgAccess } from "@/lib/session";
 import { getGateway, availableGateways } from "@/providers/payments/registry";
-import { GatewayError, type CheckoutSession, type GatewayEvent } from "@/providers/payments/types";
+import { GatewayError, type CheckoutSession, type GatewayEvent, type SubscriptionEvent } from "@/providers/payments/types";
+import { applySubscriptionEvent, autopayAfterPlanChange, autopayOnCancel, autopayOverview, liveAutopay } from "@/services/billing/autopay";
 import { getBillingSettings } from "@/services/billing/settings";
 import { billingState } from "@/services/billing/entitlements";
 import { creditWallet } from "@/services/wallet";
@@ -165,6 +166,12 @@ async function tellOwners(organizationId: string, title: string, body = "", type
 
 /** Ends the active subscription and starts a new one on `plan`. History is kept (one row per plan period). */
 async function switchPlan(organizationId: string, plan: Plan, opts: { billingMode: "invoiced" | "complimentary" | "trial"; periodStart: Date; periodEnd: Date | null; reason: string; interval?: Interval; trialEndsAt?: Date | null }) {
+  const fresh = await replaceSubscription(organizationId, plan, opts);
+  await autopayAfterPlanChange(organizationId); // the mandate follows the new row if the charge is the same, else it's cancelled
+  return fresh;
+}
+
+async function replaceSubscription(organizationId: string, plan: Plan, opts: { billingMode: "invoiced" | "complimentary" | "trial"; periodStart: Date; periodEnd: Date | null; reason: string; interval?: Interval; trialEndsAt?: Date | null }) {
   const now = new Date();
   const interval = opts.interval ?? "month";
   return db.$transaction(async (tx) => {
@@ -219,7 +226,7 @@ const planDto = (p: Plan) => ({ selfServe: p.selfServe, id: p.id, name: p.name, 
 type PaymentStatus = "not_billed" | "none" | "paid" | "pending" | "past_due" | "failed";
 
 export async function getBillingOverview(organizationId: string) {
-  const [sub, state, gateways, settings, openInvoices, lastPaid, canTrial] = await Promise.all([
+  const [sub, state, gateways, settings, openInvoices, lastPaid, canTrial, autopay] = await Promise.all([
     currentPlan(organizationId),
     billingState(organizationId),
     availableGateways(),
@@ -227,6 +234,7 @@ export async function getBillingOverview(organizationId: string) {
     db.invoice.findMany({ where: { organizationId, status: "open" }, orderBy: { dueAt: "asc" }, include: invoiceInclude }),
     db.invoice.findFirst({ where: { organizationId, status: "paid" }, orderBy: { paidAt: "desc" } }),
     trialEligible(organizationId),
+    autopayOverview(organizationId),
   ]);
   const plans = await db.plan.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { priceMonthly: "asc" }] });
   const pending = sub?.pendingPlanId ? await db.plan.findUnique({ where: { id: sub.pendingPlanId } }) : null;
@@ -268,6 +276,7 @@ export async function getBillingOverview(organizationId: string) {
     gateways,
     onlinePaymentsConnected: gateways.length > 0,
     tax: { percent: settings.taxPercent },
+    autopay,
     supportEmail: settings.supportEmail,
     paymentInstructions: settings.paymentInstructions,
   };
@@ -403,11 +412,13 @@ export async function cancelSubscription(access: OrgAccess, req?: Request) {
   const now = new Date();
   if ((sub.billingMode === "invoiced" || sub.billingMode === "trial") && sub.currentPeriodEnd && sub.currentPeriodEnd > now) {
     await db.subscription.update({ where: { id: sub.id }, data: { cancelAtPeriodEnd: true, canceledAt: now, pendingPlanId: null, pendingInterval: null } });
+    await autopayOnCancel(access.organizationId); // nothing is charged at period end
     await audit({ action: "billing.canceled", actorUserId: access.user.id, organizationId: access.organizationId, targetType: "subscription", targetId: sub.id, metadata: { plan: sub.plan.slug, endsAt: sub.currentPeriodEnd }, req });
     return { result: "scheduled" as const, endsAt: sub.currentPeriodEnd };
   }
   await db.subscription.update({ where: { id: sub.id }, data: { status: "ended", endedAt: now, endReason: "canceled", canceledAt: now, cancelAtPeriodEnd: false } });
   await db.invoice.updateMany({ where: { organizationId: access.organizationId, status: "open" }, data: { status: "void", voidedAt: now } });
+  await autopayOnCancel(access.organizationId);
   await audit({ action: "billing.canceled", actorUserId: access.user.id, organizationId: access.organizationId, targetType: "subscription", targetId: sub.id, metadata: { plan: sub.plan.slug, immediate: true }, req });
   return { result: "ended" as const, endsAt: now };
 }
@@ -428,7 +439,7 @@ export async function resumeSubscription(access: OrgAccess, req?: Request) {
  * Marks an invoice paid and applies what it was for. The ONLY places that call this are a verified gateway
  * confirmation and an admin recording money actually received — there is no "pay" shortcut.
  */
-async function markPaid(invoiceId: string, via: string, note: string, actorUserId: string | null, req?: Request) {
+export async function markInvoicePaid(invoiceId: string, via: string, note: string, actorUserId: string | null, req?: Request) {
   const now = new Date();
   const flipped = await db.invoice.updateMany({ where: { id: invoiceId, status: "open" }, data: { status: "paid", paidAt: now, paidVia: via, paymentNote: note.slice(0, 300) } });
   if (!flipped.count) return false; // already paid or void — never applied twice
@@ -483,7 +494,9 @@ export async function completeClientPayment(access: OrgAccess, paymentId: string
  * Applies provider events. Each (gateway, eventId) is processed once. A success only counts when the
  * reference is a payment we created and the reported amount (if any) matches the invoice.
  */
-export async function applyGatewayEvents(gatewayId: string, events: GatewayEvent[]) {
+const isSubscriptionEvent = (e: GatewayEvent | SubscriptionEvent): e is SubscriptionEvent => e.type === "subscription.status" || e.type === "subscription.charged";
+
+export async function applyGatewayEvents(gatewayId: string, events: (GatewayEvent | SubscriptionEvent)[]) {
   const results: { eventId: string; outcome: string }[] = [];
   for (const ev of events) {
     const seen = await db.paymentEvent.create({ data: { gateway: gatewayId, eventId: ev.eventId, type: ev.type } }).catch(() => null);
@@ -491,7 +504,7 @@ export async function applyGatewayEvents(gatewayId: string, events: GatewayEvent
       results.push({ eventId: ev.eventId, outcome: "duplicate" });
       continue;
     }
-    const outcome = await applyOne(gatewayId, ev);
+    const outcome = isSubscriptionEvent(ev) ? await applySubscriptionEvent(ev) : await applyOne(gatewayId, ev);
     await db.paymentEvent.update({ where: { id: seen.id }, data: { processedAt: new Date(), outcome } });
     results.push({ eventId: ev.eventId, outcome });
   }
@@ -516,7 +529,7 @@ async function applyOne(gatewayId: string, ev: GatewayEvent): Promise<string> {
     return "amount_mismatch";
   }
   await db.payment.update({ where: { id: p.id }, data: { status: "succeeded", gatewayPaymentId: ev.paymentId, failureCode: "", failureReason: "", completedAt: now } });
-  const applied = await markPaid(inv.id, gatewayId, ev.paymentId, null);
+  const applied = await markInvoicePaid(inv.id, gatewayId, ev.paymentId, null);
   return applied ? "paid" : "invoice_not_open";
 }
 
@@ -526,7 +539,7 @@ export async function recordManualPayment(adminUserId: string, invoiceId: string
   if (!inv) throw new ApiError("NOT_FOUND", "Invoice not found.");
   if (inv.status !== "open") throw new ApiError("CONFLICT", inv.status === "paid" ? "This invoice is already paid." : "This invoice is void.");
   await db.payment.create({ data: { organizationId: inv.organizationId, invoiceId: inv.id, gateway: "manual", gatewayRef: input.reference.slice(0, 100), amount: inv.total, currency: inv.currency, status: "succeeded", completedAt: new Date() } });
-  await markPaid(inv.id, "manual", input.reference, adminUserId, req);
+  await markInvoicePaid(inv.id, "manual", input.reference, adminUserId, req);
   return invoiceDto(await db.invoice.findUniqueOrThrow({ where: { id: inv.id }, include: invoiceInclude }));
 }
 
@@ -641,7 +654,8 @@ export async function runBillingCycle(now = new Date()) {
 /**
  * Payment reminders for open plan invoices, each sent once: 3 days before the due date, on/after it,
  * 3 days late and 7 days late (final). In-app for owners, plus email when email is configured.
- * Online card/UPI auto-debit needs a payment mandate (not set up), so these are reminders with a pay link.
+ * When auto-pay (Razorpay Subscriptions) is on, the before-due reminder says it will be charged automatically;
+ * the overdue reminders still go out if a charge didn't arrive.
  */
 export async function sendPaymentReminders(now = new Date()) {
   const settings = await getBillingSettings();
@@ -657,8 +671,11 @@ export async function sendPaymentReminders(now = new Date()) {
     const claimed = await db.invoice.updateMany({ where: { id: inv.id, remindersSent: inv.remindersSent }, data: { remindersSent: level, lastReminderAt: now, ...(level >= 2 && !inv.overdueNotifiedAt ? { overdueNotifiedAt: now } : {}) } });
     if (!claimed.count) continue;
     const amount = fmtInr(inv.total);
+    const auto = level === 1 && inv.kind !== "upgrade" ? await liveAutopay(inv.organizationId) : null;
     const msg =
-      level === 1
+      auto && (auto.status === "active" || auto.status === "authenticated")
+        ? { title: `Invoice ${inv.number} will be paid by auto-pay`, body: `${amount} will be charged automatically on the billing date. Nothing to do.`, type: "info" as const }
+        : level === 1
         ? { title: `Invoice ${inv.number} is due on ${fmtDay(inv.dueAt)}`, body: `${amount}. Pay online in Billing to avoid any interruption.`, type: "info" as const }
         : level === 2
           ? { title: `Invoice ${inv.number} is overdue`, body: `${amount}. Pay within ${settings.graceDays} days to avoid your sending being paused.`, type: "warning" as const }

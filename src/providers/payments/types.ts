@@ -32,6 +32,21 @@ export type GatewayEvent = {
   failureReason?: string;
 };
 
+/** Razorpay Subscriptions (auto-pay) events, normalised. */
+export type SubscriptionEvent = {
+  eventId: string;
+  type: "subscription.status" | "subscription.charged";
+  event: string; // raw Razorpay event name, e.g. subscription.halted
+  subscriptionRef: string;
+  status: string;
+  method: string;
+  paidCount: number | null;
+  paymentId: string;
+  amount: number | null;
+  currency: string | null;
+  failureReason: string;
+};
+
 export class GatewayError extends Error {
   constructor(
     message: string,
@@ -49,7 +64,7 @@ export interface PaymentGateway {
   isConfigured(): Promise<boolean>;
   createCheckout(req: CheckoutRequest): Promise<CheckoutSession>;
   /** Verifies the provider's signature over the RAW body and returns normalised events. Throws GatewayError when invalid. */
-  parseWebhook(rawBody: string, headers: Headers): Promise<GatewayEvent[]>;
+  parseWebhook(rawBody: string, headers: Headers): Promise<(GatewayEvent | SubscriptionEvent)[]>;
   /** For widgets that return proof to the browser: verify that proof server-side. Throws GatewayError when invalid. */
   verifyClientReturn?(data: Record<string, string>, reference: string): Promise<GatewayEvent>;
 }

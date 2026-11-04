@@ -1,4 +1,5 @@
 import { startBilling } from "@/services/billing/billing";
+import { autopayAfterPlanChange } from "@/services/billing/autopay";
 import { limitLabel, wouldExceed } from "@/lib/plans";
 import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
@@ -155,6 +156,7 @@ export async function assignPlan(actorUserId: string, organizationId: string, pl
     return tx.subscription.create({ data: { organizationId, planId, priceMonthly: plan.priceMonthly, startedAt: now }, include: { plan: true } });
   });
   await startBilling(sub, plan, billingMode);
+  await autopayAfterPlanChange(organizationId);
   await audit({ action: "plan.changed", actorUserId, organizationId, targetType: "plan", targetId: planId, metadata: { from: current?.plan.slug ?? null, to: plan.slug }, req });
   const owners = await db.organizationMember.findMany({ where: { organizationId, role: "CLIENT_OWNER" }, select: { userId: true } });
   for (const o of owners) await notify({ userId: o.userId, organizationId, title: `Your plan is now ${plan.name}`, link: "/dashboard" });

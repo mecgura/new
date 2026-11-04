@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { getRazorpay } from "@/lib/razorpay";
-import { GatewayError, type CheckoutRequest, type CheckoutSession, type GatewayEvent, type PaymentGateway } from "@/providers/payments/types";
+import { GatewayError, type CheckoutRequest, type CheckoutSession, type GatewayEvent, type PaymentGateway, type SubscriptionEvent } from "@/providers/payments/types";
 
 function safeEqual(a: string, b: string) {
   const x = Buffer.from(a);
@@ -8,12 +8,14 @@ function safeEqual(a: string, b: string) {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
-type RzpPayment = { id?: string; order_id?: string; amount?: number; currency?: string; error_code?: string; error_description?: string };
+type RzpPayment = { id?: string; order_id?: string; amount?: number; currency?: string; method?: string; error_code?: string; error_description?: string };
+type RzpSubscription = { id?: string; status?: string; payment_method?: string; paid_count?: number };
 
 /**
  * Razorpay adapter. Needs: key id (Admin → Settings → Razorpay), RAZORPAY_KEY_SECRET and, for webhooks,
  * RAZORPAY_WEBHOOK_SECRET (set the same value on the webhook in the Razorpay dashboard, URL
- * /api/webhooks/payments/razorpay, events payment.captured and payment.failed).
+ * /api/webhooks/payments/razorpay, events payment.captured and payment.failed — and for auto-pay the
+ * subscription.* events: authenticated, activated, charged, pending, halted, cancelled, completed, paused, resumed).
  */
 export const razorpayGateway: PaymentGateway = {
   id: "razorpay",
@@ -30,12 +32,12 @@ export const razorpayGateway: PaymentGateway = {
     return { kind: "client_sdk", gateway: "razorpay", reference: order.id, publicKey: rz.keyId, amount: req.amount, currency: req.currency, name: "MECGURA", description: req.description, prefill: req.customer, mode: rz.mode };
   },
 
-  async parseWebhook(rawBody: string, headers: Headers): Promise<GatewayEvent[]> {
+  async parseWebhook(rawBody: string, headers: Headers): Promise<(GatewayEvent | SubscriptionEvent)[]> {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim();
     if (!secret) throw new GatewayError("Razorpay webhooks aren't configured (RAZORPAY_WEBHOOK_SECRET).", 503);
     const given = headers.get("x-razorpay-signature") ?? "";
     if (!given || !safeEqual(createHmac("sha256", secret).update(rawBody).digest("hex"), given)) throw new GatewayError("Invalid signature.", 401);
-    let body: { event?: string; payload?: { payment?: { entity?: RzpPayment } } };
+    let body: { event?: string; payload?: { payment?: { entity?: RzpPayment }; subscription?: { entity?: RzpSubscription } } };
     try {
       body = JSON.parse(rawBody);
     } catch {
@@ -43,6 +45,25 @@ export const razorpayGateway: PaymentGateway = {
     }
     const p = body.payload?.payment?.entity;
     const eventId = headers.get("x-razorpay-event-id") ?? "";
+    const s = body.payload?.subscription?.entity;
+    if (body.event?.startsWith("subscription.")) {
+      if (!s?.id || !eventId) return [];
+      return [
+        {
+          eventId,
+          type: body.event === "subscription.charged" ? "subscription.charged" : "subscription.status",
+          event: body.event,
+          subscriptionRef: s.id,
+          status: s.status ?? "",
+          method: s.payment_method || p?.method || "",
+          paidCount: typeof s.paid_count === "number" ? s.paid_count : null,
+          paymentId: p?.id ?? "",
+          amount: typeof p?.amount === "number" ? p.amount : null,
+          currency: p?.currency ?? null,
+          failureReason: (p?.error_description ?? "").slice(0, 200),
+        },
+      ];
+    }
     if (!p?.id || !p.order_id || !eventId) return []; // an event type this integration doesn't use
     const base = { eventId, reference: p.order_id, paymentId: p.id, amount: typeof p.amount === "number" ? p.amount : null, currency: p.currency ?? null };
     if (body.event === "payment.captured") return [{ ...base, type: "payment.succeeded" }];

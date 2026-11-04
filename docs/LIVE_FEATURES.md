@@ -28,9 +28,13 @@ with alerts, WhatsApp accounts, marketing (leads, calendar, AI creatives), outre
 one-by-one WhatsApp), site editor.
 
 - **Billing**: monthly or yearly plans, free trials, payment reminders before and after the due date.
+- **Auto-pay** (card / UPI AutoPay via Razorpay Subscriptions): client turns it on in Billing, authorises on Razorpay; charges pay
+  renewal invoices automatically (signed webhooks, once only, amount-checked); failures/halts notify owners and fall back to
+  reminders; plan change/cancel cancels or carries the mandate; Admin → Billing → Auto-pay reconciles against Razorpay.
+  *Needs Subscriptions enabled on the Razorpay account.*
 - **Blog (mecgura.tech/blog)**: write, preview and publish SEO articles (Admin → Blog); sitemap.xml, robots.txt,
   Google article/organisation data, homepage “From the blog”. 4 starter articles published.
 
 ## Not built yet (on the list)
-Automatic card/UPI re-charging (needs a Razorpay recurring mandate);
+
 OpenAI as an alternative AI-agent model.

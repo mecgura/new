@@ -70,6 +70,7 @@ model Organization {
   services                OrganizationService[]
   settings                OrganizationSettings?
   subscriptions           Subscription[]
+  autopays                Autopay[]
   whatsappAccounts        WhatsAppAccount[]
   channelAccounts         ChannelAccount[]
   voiceCalls              VoiceCall[]
@@ -2368,4 +2369,34 @@ model ConversationPresence {
 
   @@id([conversationId, userId])
   @@index([organizationId, updatedAt])
+}
+
+// Card / UPI AutoPay mandate for a workspace's plan (Razorpay Subscriptions). One row per mandate; history is kept.
+// Status mirrors Razorpay: created (link sent, not yet authorised) | authenticated | active | pending (a charge failed,
+// Razorpay is retrying) | halted (retries exhausted) | cancelled | completed | expired.
+model Autopay {
+  id                String    @id @default(cuid())
+  organizationId    String
+  subscriptionId    String? // the MECGURA Subscription row this mandate pays
+  gateway           String    @default("razorpay")
+  gatewaySubId      String    @unique // Razorpay subscription id (sub_…)
+  gatewayPlanId     String    @default("")
+  status            String    @default("created")
+  method            String    @default("") // card | upi | emandate | nach (reported by Razorpay after authorisation)
+  amount            Int // paise charged per period (incl. tax)
+  interval          String    @default("month")
+  shortUrl          String    @default("")
+  startAt           DateTime?
+  chargedCount      Int       @default(0)
+  lastChargedAt     DateTime?
+  lastFailureReason String    @default("")
+  endReason         String    @default("") // customer | plan_changed | subscription_ended | admin | provider
+  cancelledAt       DateTime?
+  syncedAt          DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
 }

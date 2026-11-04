@@ -1,8 +1,9 @@
 "use client";
 
+import { AutopayAdmin } from "@/components/admin/autopay-admin";
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, CreditCard, FileText, IndianRupee, Pencil, Plus, Receipt, Settings2, Trash2, Users, Wallet, Package } from "lucide-react";
+import { AlertTriangle, Repeat, CreditCard, FileText, IndianRupee, Pencil, Plus, Receipt, Settings2, Trash2, Users, Wallet, Package } from "lucide-react";
 import {
   Alert,
   Badge,
@@ -83,6 +84,7 @@ const TABS = [
   { id: "plans", label: "Plans", icon: CreditCard },
   { id: "invoices", label: "Invoices", icon: Receipt },
   { id: "payments", label: "Payments", icon: AlertTriangle },
+  { id: "autopay", label: "Auto-pay", icon: Repeat },
   { id: "fees", label: "Message fees", icon: IndianRupee },
   { id: "packages", label: "Message packages", icon: Package },
   { id: "settings", label: "Settings", icon: Settings2 },
@@ -105,6 +107,7 @@ export default function AdminBillingPage() {
       {tab === "plans" ? <PlansTab /> : null}
       {tab === "invoices" ? <InvoicesTab /> : null}
       {tab === "payments" ? <PaymentsTab /> : null}
+      {tab === "autopay" ? <AutopayAdmin /> : null}
       {tab === "fees" ? <FeeEditor url="/api/admin/wallet-prices" scope="default" /> : null}
       {tab === "packages" ? <PackagesAdminTab /> : null}
       {tab === "settings" ? <SettingsTab /> : null}

@@ -37,6 +37,7 @@ import { istFmt } from "@/components/campaigns/types";
 import { MiniBars } from "@/components/app/mini-bars";
 import { openCheckout, type Checkout } from "@/components/billing/checkout";
 import { ClientWallet } from "@/components/wallet/client-wallet";
+import { AutopayCard, type AutopayView } from "@/components/billing/autopay-card";
 
 type PlanView = { id: string; name: string; slug: string; description: string; priceMonthly: number; priceYearly: number; trialDays: number; yearlySavingPct: number; selfServe: boolean; limits: PlanLimits; features: { key: string; label: string }[]; relation: "current" | "upgrade" | "downgrade" | "new" | "contact" };
 type InvoiceView = { id: string; number: string; kind: string; status: string; displayStatus: string; description: string; total: number; issuedAt: string; dueAt: string; paidAt: string | null; paidVia: string; lastPaymentFailure: string | null };
@@ -52,6 +53,7 @@ type Overview = {
   gateways: { id: string; label: string }[];
   onlinePaymentsConnected: boolean;
   tax: { percent: number };
+  autopay: AutopayView;
   supportEmail: string;
   paymentInstructions: string;
 };
@@ -270,6 +272,8 @@ function PlanTab({ base, data, canManage, reload, onOpenInvoices }: { base: stri
           )}
         </CardBody>
       </Card>
+
+      {sub && data.onlinePaymentsConnected ? <AutopayCard base={base} autopay={data.autopay} canManage={canManage} reload={reload} /> : null}
 
       {data.plans.some((p) => p.priceYearly > 0) ? (
         <div role="group" aria-label="Billing period" className="flex w-fit gap-1 rounded-full border border-app-border p-1">
