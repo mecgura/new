@@ -67,7 +67,8 @@ async function attribution(organizationId: string, rows: Rec[]) {
   return { leads, wonDeals, wonRupees: wonPaise / 100, purchases: purchaseCount, purchaseRupees: purchasePaise / 100, byContact };
 }
 
-async function unitCost(organizationId: string, category: string, isDemo: boolean) {
+/** Per-message cost in paise: Meta's rate + MECGURA's fee for the category (0 on demo numbers). */
+export async function unitCost(organizationId: string, category: string, isDemo: boolean) {
   if (isDemo) return { meta: 0, fee: 0 };
   const cat = (["marketing", "utility", "authentication"].includes(category.toLowerCase()) ? category.toLowerCase() : "marketing") as FeeCategory;
   const [rates, fee] = await Promise.all([getMetaRates(), feeFor(organizationId, cat)]);

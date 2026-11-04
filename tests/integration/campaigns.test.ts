@@ -530,3 +530,42 @@ describe("MECGURA message fee on campaigns (wallet)", () => {
     expect(await db.walletEntry.count({ where: { organizationId: t.orgId, reason: "usage" } })).toBe(3);
   });
 });
+
+describe("smart send (free message inside the open 24-hour window)", () => {
+  it("open-window contacts get the free message with buttons; others get the template; review estimates it", async () => {
+    const t = await makeTenant();
+    actAs(t.owner);
+    const tid = await approvedTemplate(t, { ...MARKETING, name: `smart_offer_${n++}` });
+    const recent = await addContact(t, { name: "Riya Kaur", optInStatus: "opted_in", tags: ["Smart"] });
+    const old = await addContact(t, { name: "Old Lead", optInStatus: "opted_in", tags: ["Smart"] });
+    // Riya messaged 2 hours ago (window open); Old Lead 2 days ago (window closed).
+    await db.conversation.create({ data: { organizationId: t.orgId, contactId: recent, whatsappAccountId: t.accountId, isDemo: true, lastInboundAt: new Date(Date.now() - 2 * 3_600_000) } });
+    await db.conversation.create({ data: { organizationId: t.orgId, contactId: old, whatsappAccountId: t.accountId, isDemo: true, lastInboundAt: new Date(Date.now() - 48 * 3_600_000) } });
+
+    const created = await json(await campaigns.POST(post({ name: "Smart offer", whatsappAccountId: t.accountId }), P(t.orgId)));
+    const cid = (created.body.campaign as { id: string }).id;
+    const tag = await db.tag.findFirstOrThrow({ where: { organizationId: t.orgId, name: "Smart" } });
+    expect((await campaign.PATCH(patch({ audience: { mode: "filters", filters: { tagIds: [tag.id], excludeTagIds: [], leadStatus: [], lifecycle: [], source: [], optIn: "opted_in" } } }), P(t.orgId, { cid }))).status).toBe(200);
+    // Smart send needs the free text.
+    expect((await campaign.PATCH(patch({ templateId: tid, smartSend: true, freeText: "" }), P(t.orgId, { cid }))).status).toBe(400);
+    const saved = await json(await campaign.PATCH(patch({ templateId: tid, smartSend: true, freeText: "Hi {{first_name}}! 20% off facials this week.", freeButtons: ["Book now", "Details"] }), P(t.orgId, { cid })));
+    expect(saved.status).toBe(200);
+    expect(saved.body.campaign).toMatchObject({ smart: { enabled: true, buttons: ["Book now", "Details"] } });
+    await campaign.PATCH(patch({ variables: { "body.1": { source: "field", field: "first_name", fallback: "there" }, "body.2": { source: "static", value: "20%" }, "body.3": { source: "static", value: "Ludhiana" } } }), P(t.orgId, { cid }));
+
+    const r = await json(await campaignReview.POST(post({}), P(t.orgId, { cid })));
+    expect((r.body.review as { smart: { openWindow: number; paid: number } }).smart).toMatchObject({ openWindow: 1, paid: 1 });
+
+    expect((await launch.POST(post({ confirmConsent: true }), P(t.orgId, { cid }))).status).toBe(200);
+    expect(await processCampaign(cid)).toMatchObject({ sent: 2, done: true });
+    const rows = await db.campaignRecipient.findMany({ where: { campaignId: cid }, include: { message: true } });
+    const free = rows.find((x) => x.contactId === recent)!;
+    const paid = rows.find((x) => x.contactId === old)!;
+    expect(free.sendMode).toBe("free");
+    expect(free.message).toMatchObject({ type: "interactive", body: "Hi Riya! 20% off facials this week." });
+    expect(paid.sendMode).toBe("template");
+    expect(paid.message?.type).toBe("template");
+    const an = await json(await analytics.GET(req("/x"), P(t.orgId, { cid })));
+    expect((an.body.stats as { freeSent: number }).freeSent).toBe(1);
+  });
+});

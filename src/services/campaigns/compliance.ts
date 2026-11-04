@@ -34,6 +34,8 @@ export type ComplianceReport = {
   removedSample: { name: string; phone: string; reason: RemovalReason }[];
   canSend: boolean;
   generatedAt: string;
+  /** Smart send: recipients with an open 24-hour window at review time (they get the free message). */
+  smart?: { openWindow: number; paid: number; estSavingsRupees: number };
 };
 
 export type EligibleRecipient = { contactId: string; phone: string; name: string; values: SlotValues; valuesB?: SlotValues };

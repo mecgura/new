@@ -13,6 +13,11 @@ import { getTemplate } from "@/services/templates/templates";
 import { assertTagsInOrg, parseAudience, previewAudience } from "@/services/campaigns/audience";
 import { runCompliance, type ComplianceReport } from "@/services/campaigns/compliance";
 import { assignVariant } from "@/lib/campaign-insights";
+import { unitCost } from "@/services/campaigns/insights";
+import { feeFor } from "@/services/wallet-pricing";
+
+/** A contact counts as "window open" if they messaged within 23 h — an hour's margin so the window can't close mid-send. */
+export const SMART_WINDOW_MS = 23 * 60 * 60 * 1000;
 
 export const CAMPAIGN_STATUSES = ["draft", "scheduled", "sending", "paused", "completed", "cancelled", "failed"] as const;
 const MIN_LEAD_MS = 2 * 60 * 1000;
@@ -27,8 +32,8 @@ const include = {
 } satisfies Prisma.CampaignInclude;
 type Row = Prisma.CampaignGetPayload<{ include: typeof include }>;
 
-export type CampaignStats = { total: number; queued: number; sent: number; delivered: number; read: number; failed: number; skipped: number; replies: number; optOuts: number };
-const EMPTY: CampaignStats = { total: 0, queued: 0, sent: 0, delivered: 0, read: 0, failed: 0, skipped: 0, replies: 0, optOuts: 0 };
+export type CampaignStats = { total: number; queued: number; sent: number; delivered: number; read: number; failed: number; skipped: number; replies: number; optOuts: number; freeSent: number };
+const EMPTY: CampaignStats = { total: 0, queued: 0, sent: 0, delivered: 0, read: 0, failed: 0, skipped: 0, replies: 0, optOuts: 0, freeSent: 0 };
 
 /** Live counters from recipient rows (never drifting stored totals). */
 export async function campaignStats(ids: string[]): Promise<Map<string, CampaignStats>> {
@@ -36,13 +41,14 @@ export async function campaignStats(ids: string[]): Promise<Map<string, Campaign
   if (!ids.length) return out;
   const where = { campaignId: { in: ids } };
   const by = (extra: Prisma.CampaignRecipientWhereInput) => db.campaignRecipient.groupBy({ by: ["campaignId"], where: { ...where, ...extra }, _count: { _all: true } });
-  const [statuses, sent, delivered, read, replies, optOuts] = await Promise.all([
+  const [statuses, sent, delivered, read, replies, optOuts, freeSent] = await Promise.all([
     db.campaignRecipient.groupBy({ by: ["campaignId", "status"], where, _count: { _all: true } }),
     by({ sentAt: { not: null } }),
     by({ deliveredAt: { not: null } }),
     by({ readAt: { not: null } }),
     by({ repliedAt: { not: null } }),
     by({ optedOutAt: { not: null } }),
+    by({ sentAt: { not: null }, sendMode: "free" }),
   ]);
   for (const g of statuses) {
     const s = out.get(g.campaignId)!;
@@ -51,7 +57,7 @@ export async function campaignStats(ids: string[]): Promise<Map<string, Campaign
     if (g.status === "failed") s.failed += g._count._all;
     if (g.status === "skipped") s.skipped += g._count._all;
   }
-  for (const [list, key] of [[sent, "sent"], [delivered, "delivered"], [read, "read"], [replies, "replies"], [optOuts, "optOuts"]] as const) {
+  for (const [list, key] of [[sent, "sent"], [delivered, "delivered"], [read, "read"], [replies, "replies"], [optOuts, "optOuts"], [freeSent, "freeSent"]] as const) {
     for (const g of list) out.get(g.campaignId)![key] = g._count._all;
   }
   return out;
@@ -73,6 +79,7 @@ function toDto(c: Row, stats: CampaignStats) {
     variables: JSON.parse(c.variables || "{}") as Record<string, VariableMapping>,
     ab: { template: c.abTemplate, variables: JSON.parse(c.abVariables || "{}") as Record<string, VariableMapping>, split: c.abTemplateId ? c.abSplit : 0 },
     scheduledAt: c.scheduledAt,
+    smart: { enabled: c.smartSend, text: c.freeText, buttons: JSON.parse(c.freeButtons || "[]") as string[] },
     review: c.reviewedAt ? (JSON.parse(c.review) as ComplianceReport) : null,
     reviewedAt: c.reviewedAt,
     totalRecipients: c.totalRecipients,
@@ -146,6 +153,9 @@ export type CampaignPatch = Partial<{
   abSplit: number;
   scheduledAt: Date | null;
   step: number;
+  smartSend: boolean;
+  freeText: string;
+  freeButtons: string[];
 }>;
 
 /** Saves wizard progress. Anything that changes who/what gets sent invalidates the last compliance review. */
@@ -225,6 +235,10 @@ export async function updateCampaign(access: OrgAccess, id: string, p: CampaignP
     data.scheduledAt = p.scheduledAt;
   }
   if (p.step !== undefined) data.step = Math.max(c.step, p.step);
+  if (p.smartSend !== undefined) data.smartSend = p.smartSend;
+  if (p.freeText !== undefined) data.freeText = p.freeText;
+  if (p.freeButtons !== undefined) data.freeButtons = JSON.stringify(p.freeButtons);
+  if ((p.smartSend ?? c.smartSend) && !(p.freeText ?? c.freeText).trim()) throw new ApiError("VALIDATION_ERROR", "Write the free message for contacts whose 24-hour window is open.", { details: { freeText: ["Required for smart send"] } });
   if (p.templateId !== undefined || p.audience !== undefined || p.variables !== undefined || p.whatsappAccountId !== undefined || p.abTemplateId !== undefined || p.abVariables !== undefined || p.abSplit !== undefined) {
     data.reviewedAt = null;
     data.review = "{}";
@@ -248,13 +262,31 @@ export async function audiencePreview(access: OrgAccess, audience: Audience) {
 }
 
 /** Step 6. Stores the report so the team can see exactly what was checked before sending. */
+/**
+ * How many recipients have an open 24-hour customer-service window right now (they get the free message instead of
+ * the template) and the estimated saving. It is re-decided per contact at the moment of sending, so it's an estimate.
+ */
+export async function smartSendEstimate(organizationId: string, whatsappAccountId: string, templateId: string | null, contactIds: string[]) {
+  const since = new Date(Date.now() - SMART_WINDOW_MS);
+  let open = 0;
+  for (let i = 0; i < contactIds.length; i += 500) {
+    open += await db.conversation.count({ where: { organizationId, whatsappAccountId, contactId: { in: contactIds.slice(i, i + 500) }, lastInboundAt: { gte: since } } });
+  }
+  const acct = await db.whatsAppAccount.findUnique({ where: { id: whatsappAccountId }, select: { isDemo: true } });
+  const t = templateId ? await db.messageTemplate.findUnique({ where: { id: templateId }, select: { category: true } }) : null;
+  const [tpl, svc] = await Promise.all([unitCost(organizationId, t?.category ?? "MARKETING", Boolean(acct?.isDemo)), feeFor(organizationId, "service")]);
+  const perMessage = tpl.meta + tpl.fee - (acct?.isDemo ? 0 : svc);
+  return { openWindow: open, paid: contactIds.length - open, estSavingsRupees: Math.max(0, Math.round(open * perMessage) / 100) };
+}
+
 export async function reviewCampaign(access: OrgAccess, id: string, req?: Request) {
   const c = await load(access.organizationId, id);
   if (c.status !== "draft") throw new ApiError("CONFLICT", "This campaign was already launched.");
   await assertFeature(access.organizationId, "campaigns");
   await assertBillingActive(access.organizationId);
   await assertMonthlyQuota(access.organizationId, "campaigns", 1, "campaigns");
-  const { report } = await runCompliance(id);
+  const { report: base, recipients } = await runCompliance(id);
+  const report = c.smartSend && c.whatsappAccountId ? { ...base, smart: await smartSendEstimate(access.organizationId, c.whatsappAccountId, c.templateId, recipients.map((r) => r.contactId)) } : base;
   await db.campaign.update({ where: { id }, data: { review: JSON.stringify(report), reviewedAt: new Date(), step: Math.max(c.step, 6) } });
   await audit({
     action: "campaign.reviewed",

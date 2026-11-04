@@ -139,7 +139,7 @@ export function CampaignWizard({ orgId, campaign, accounts }: { orgId: string; c
         <div className="min-w-0">
           {step === 1 ? <DetailsStep c={c} accounts={accounts} onSave={(p) => save(p, 2)} /> : null}
           {step === 2 ? <AudienceStep c={c} api={api} onBack={() => setStep(1)} onSave={(audience) => save({ audience }, 3)} /> : null}
-          {step === 3 ? <TemplateStep c={c} api={api} onBack={() => setStep(2)} onSave={(templateId, ab) => save({ templateId, abTemplateId: ab ? ab.templateId : null, ...(ab ? { abSplit: ab.split } : {}) }, 4)} /> : null}
+          {step === 3 ? <TemplateStep c={c} api={api} onBack={() => setStep(2)} onSave={(templateId, ab, smart) => save({ templateId, abTemplateId: ab ? ab.templateId : null, ...(ab ? { abSplit: ab.split } : {}), smartSend: smart.enabled, freeText: smart.text, freeButtons: smart.buttons.map((b) => b.trim()).filter(Boolean) }, 4)} /> : null}
           {step === 4 ? <VariablesStep c={c} api={api} onBack={() => setStep(3)} onSave={(variables, abVariables) => save({ variables, ...(abVariables ? { abVariables } : {}) }, 5)} /> : null}
           {step === 5 ? <ScheduleStep c={c} onBack={() => setStep(4)} onSave={(scheduledAt) => save({ scheduledAt }, 6)} /> : null}
           {step === 6 ? <ReviewStep c={c} api={api} onBack={() => setStep(5)} onReviewed={(review) => setC((x) => ({ ...x, review, reviewedAt: review.generatedAt }))} onNext={() => setStep(7)} /> : null}
@@ -422,7 +422,10 @@ function AudienceStep({ c, api, onBack, onSave }: { c: CampaignView; api: Api; o
 // 3. Template
 // ---------------------------------------------------------------------------
 
-function TemplateStep({ c, api, onBack, onSave }: { c: CampaignView; api: Api; onBack: () => void; onSave: (id: string, ab: { templateId: string; split: number } | null) => Promise<boolean> }) {
+function TemplateStep({ c, api, onBack, onSave }: { c: CampaignView; api: Api; onBack: () => void; onSave: (id: string, ab: { templateId: string; split: number } | null, smart: { enabled: boolean; text: string; buttons: string[] }) => Promise<boolean> }) {
+  const [smartOn, setSmartOn] = React.useState(c.smart?.enabled ?? false);
+  const [freeText, setFreeText] = React.useState(c.smart?.text ?? "");
+  const [freeButtons, setFreeButtons] = React.useState<string[]>(c.smart?.buttons?.length ? c.smart.buttons : []);
   const [list, setList] = React.useState<TemplateView[] | null>(null);
   const [error, setError] = React.useState("");
   const [id, setId] = React.useState(c.template?.id ?? "");
@@ -495,8 +498,38 @@ function TemplateStep({ c, api, onBack, onSave }: { c: CampaignView; api: Api; o
               ) : null}
             </div>
           ) : null}
+          {list && t ? (
+            <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+              <label className="flex cursor-pointer items-start gap-2.5 text-small text-app-text">
+                <input type="checkbox" className="mt-0.5 size-4 accent-[var(--color-app-primary)]" checked={smartOn} onChange={(e) => setSmartOn(e.target.checked)} />
+                <span>
+                  <span className="font-medium">Smart send — save on template charges</span>
+                  <span className="block text-caption text-app-muted">Contacts who messaged you in the last 24 hours get the free message below instead of the template (WhatsApp only charges for templates). Everyone else gets the template. Decided per contact at the moment of sending.</span>
+                </span>
+              </label>
+              {smartOn ? (
+                <div className="mt-3 space-y-3">
+                  <Field id="cw-free-text" label="Free message for open-window contacts" hint="Write {{first_name}} for the contact's first name. Up to 1024 characters.">
+                    <Textarea rows={4} maxLength={1024} value={freeText} onChange={(e) => setFreeText(e.target.value)} placeholder={"Hi {{first_name}}! 🎉 This week only: 20% off all facials. Reply YES to book your slot."} />
+                  </Field>
+                  <div>
+                    <p className="mb-1.5 text-small font-medium text-app-text">Reply buttons <span className="font-normal text-app-subtle">(optional, up to 3)</span></p>
+                    <div className="flex flex-wrap gap-2">
+                      {freeButtons.map((b, i) => (
+                        <span key={i} className="flex items-center gap-1">
+                          <Input aria-label={`Button ${i + 1}`} value={b} maxLength={20} onChange={(e) => setFreeButtons((x) => x.map((y, j) => (j === i ? e.target.value : y)))} className="w-40" />
+                          <Button type="button" size="sm" variant="ghost" aria-label={`Remove button ${i + 1}`} onClick={() => setFreeButtons((x) => x.filter((_, j) => j !== i))}>✕</Button>
+                        </span>
+                      ))}
+                      {freeButtons.length < 3 ? <Button type="button" size="sm" variant="secondary" onClick={() => setFreeButtons((x) => [...x, ""])}>+ Add button</Button> : null}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <StepFooter onBack={onBack}>
-            <Button onClick={() => run(() => onSave(id, abOn && abId ? { templateId: abId, split } : null))} loading={busy} disabled={!id || (abOn && !abId)}>
+            <Button onClick={() => run(() => onSave(id, abOn && abId ? { templateId: abId, split } : null, { enabled: smartOn, text: freeText, buttons: freeButtons }))} loading={busy} disabled={!id || (abOn && !abId) || (smartOn && !freeText.trim())}>
               Save & continue <ChevronRight aria-hidden="true" />
             </Button>
           </StepFooter>
@@ -796,6 +829,12 @@ function ReviewStep({ c, api, onBack, onReviewed, onNext }: { c: CampaignView; a
       <CardBody>
         {error ? <Alert tone="danger">{error}</Alert> : null}
         {!review ? <LoadingState label="Checking contacts…" /> : <ComplianceView review={review} />}
+        {review?.smart ? (
+          <Alert tone="success" className="mt-4" title="Smart send">
+            Right now <strong>{review.smart.openWindow}</strong> of {review.smart.openWindow + review.smart.paid} recipients have an open 24-hour window and will get the free message; <strong>{review.smart.paid}</strong> get the template.
+            {review.smart.estSavingsRupees > 0 ? <> Estimated saving: <strong>₹{review.smart.estSavingsRupees.toLocaleString("en-IN")}</strong>.</> : null} Final numbers are decided at the moment each message is sent.
+          </Alert>
+        ) : null}
         {review && !review.canSend ? (
           <Alert tone="danger" className="mt-4" title="Fix the blocking items before sending">
             Go back to the step that needs changes, then re-run the review.

@@ -272,7 +272,39 @@ const festivalDrip = () =>
     { id: "f3", label: "Last day (needs fallback template)", text: "Last day of the festival offer, {{contact.first_name}}! Reply now and we'll hold it for you 🙏", waitDays: 1 },
   ], "Festival: interested", "Festival: no reply");
 
+/**
+ * Utility reply → free offer. A genuine utility template (reminder, order update…) with a button gets a reply; the
+ * reply opens WhatsApp's 24-hour window, so the offer goes as a free-form message (no template charge).
+ */
+function utilityToOffer(): Graph {
+  const b = builder();
+  const M = 260;
+  b.node("t", "trigger", M, 0, { label: "Reply to a utility template", trigger: "template_reply", templateId: "" });
+  b.node("thanks", "message", M, 140, { label: "Answer + offer (free)", text: "Thanks {{contact.first_name}}! ✅ (edit: answer their reply, e.g. “Your appointment is confirmed.”)\n\nBy the way, (edit) this week you get 15% off on ___. Want me to book it for you?", buttons: ["Yes, book it", "Send details", "Not now"], waitForReply: true, replyTimeoutMinutes: 720 });
+  b.node("interested", "condition", M, 300, { label: "Interested?", ...replyHas("yes, book, details, price, interested") });
+  b.node("tag", "tag", 80, 450, { label: "Tag: offer interested", action: "add", tagName: "Offer interested" });
+  b.node("assign", "assign", 80, 590, { label: "Assign sales", mode: "auto" });
+  b.node("handover", "message", 80, 730, { label: "Hand over (free)", text: "Great! Someone from our team will message you here in a few minutes 🙏" });
+  b.node("end1", "end", 80, 870, { label: "End" });
+  b.node("bye", "message", 460, 450, { label: "No worries (free)", text: "No problem! Reply here anytime if you need anything 🙂" });
+  b.node("end2", "end", 460, 590, { label: "End" });
+  b.chain("t", "thanks", "interested");
+  b.link("interested", "tag", "yes");
+  b.chain("tag", "assign", "handover", "end1");
+  b.link("interested", "bye", "no");
+  b.chain("bye", "end2");
+  return b.graph();
+}
+
 export const AUTOMATION_LIBRARY: LibraryTemplate[] = [
+  {
+    id: "utility_to_offer",
+    name: "Utility reply → free offer (save on marketing charges)",
+    description: "Send a genuine utility template (reminder, order update) with a button. When the customer replies, the 24-hour window opens and your offer goes as a free message — no marketing template charge. Pick your utility template in the trigger.",
+    steps: ["Customer replies to your utility template", "Answer + offer (free message)", "Interested → tag + assign sales", "Not now → polite close"],
+    premium: false,
+    graph: utilityToOffer,
+  },
   {
     id: "demo_welcome",
     name: "Welcome & route to sales",

@@ -109,7 +109,7 @@ export function CampaignReport({ orgId, campaign, canManage }: { orgId: string; 
   const progress = c.totalRecipients ? Math.min(100, Math.round((done / c.totalRecipients) * 100)) : 0;
 
   const cards = [
-    { label: "Sent", value: s.sent, hint: `of ${formatNumber(c.totalRecipients)} recipients`, icon: Send },
+    { label: "Sent", value: s.sent, hint: `of ${formatNumber(c.totalRecipients)} recipients${s.freeSent ? ` · ${formatNumber(s.freeSent)} free (smart send)` : ""}`, icon: Send },
     { label: "Delivered", value: s.delivered, hint: pct(s.delivered, s.sent), icon: CheckCheck },
     { label: "Read", value: s.read, hint: pct(s.read, s.sent), icon: BookOpenCheck },
     { label: "Failed", value: s.failed, hint: pct(s.failed, s.sent + s.failed), icon: XCircle },

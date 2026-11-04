@@ -5,7 +5,8 @@ import { getWallet } from "@/services/wallet";
 import { audit } from "@/lib/audit";
 import { publish } from "@/lib/realtime/broker";
 import { emitCampaignCompleted } from "@/services/webhooks/events";
-import { preview, templateMessage, transmit } from "@/services/inbox/messaging";
+import { preview, templateMessage, toPayload, transmit } from "@/services/inbox/messaging";
+import { SMART_WINDOW_MS } from "@/services/campaigns/campaigns";
 import type { SlotValues } from "@/lib/templates";
 
 const BATCH = 25;
@@ -81,6 +82,9 @@ export async function processCampaign(campaignId: string, budgetMs = 50_000): Pr
   // Message package: how many of this category are left this month (Infinity when not on a package).
   const { packageRemaining } = await import("@/services/billing/package");
   let pkgLeft = acct.isDemo ? Infinity : await packageRemaining(c.organizationId, categoryOfMessage("template", { category: t.category }));
+  // Smart send: inside an open 24-hour window the free-form message goes instead of the template (service rate, no template charge).
+  const freeButtons = c.smartSend ? (JSON.parse(c.freeButtons || "[]") as string[]).filter((b) => b.trim()).slice(0, 3) : [];
+  const serviceFee = c.smartSend && !acct.isDemo ? await feeFor(c.organizationId, "service") : 0;
 
   while (Date.now() - started < budgetMs) {
     const batch = await db.campaignRecipient.findMany({ where: { campaignId, status: "queued" }, orderBy: { createdAt: "asc" }, take: BATCH });
@@ -107,27 +111,41 @@ export async function processCampaign(campaignId: string, budgetMs = 50_000): Pr
         continue;
       }
 
-      const tpl = r.variant === "B" && tB ? tB : t;
-      const { payload, body, stored } = templateMessage(tpl, JSON.parse(r.variables) as SlotValues);
       const now = new Date();
       const conv =
         (await db.conversation.findUnique({ where: { whatsappAccountId_contactId: { whatsappAccountId: acct.id, contactId: contact.id } } })) ??
         (await db.conversation.create({ data: { organizationId: c.organizationId, contactId: contact.id, whatsappAccountId: acct.id, isDemo: acct.isDemo, lastMessagePreview: "" } }));
+      const free = Boolean(c.smartSend && c.freeText.trim() && conv.lastInboundAt && now.getTime() - conv.lastInboundAt.getTime() < SMART_WINDOW_MS);
+      let payload: Parameters<typeof transmit>[3];
+      let body: string;
+      let stored: Record<string, unknown>;
+      let msgType: string;
+      if (free) {
+        const firstName = contact.name.split(/\s+/)[0] || "there";
+        const text = c.freeText.replace(/\{\{\s*(first_name|name)\s*\}\}/gi, (_m, k: string) => (k.toLowerCase() === "name" ? contact.name || firstName : firstName)).slice(0, 1024);
+        const input = freeButtons.length ? ({ type: "interactive", body: text, buttons: freeButtons.map((b, i) => ({ id: `btn_${i + 1}`, title: b.slice(0, 20) })) } as const) : ({ type: "text", body: text } as const);
+        ({ payload, body, stored } = toPayload(input));
+        msgType = input.type;
+      } else {
+        const tpl = r.variant === "B" && tB ? tB : t;
+        ({ payload, body, stored } = templateMessage(tpl, JSON.parse(r.variables) as SlotValues));
+        msgType = "template";
+      }
       const msg = await db.message.create({
         data: {
           organizationId: c.organizationId,
           conversationId: conv.id,
           direction: "outbound",
-          type: "template",
+          type: msgType,
           body,
-          payload: JSON.stringify({ ...stored, campaignId: c.id, campaignName: c.name, ...(c.abTemplateId ? { variant: r.variant } : {}) }),
+          payload: JSON.stringify({ ...stored, campaignId: c.id, campaignName: c.name, ...(c.abTemplateId && !free ? { variant: r.variant } : {}), ...(free ? { smartSend: true } : {}) }),
           status: "pending",
           senderUserId: c.createdById,
           isDemo: acct.isDemo,
         },
       });
-      await db.campaignRecipient.update({ where: { id: r.id }, data: { messageId: msg.id } });
-      await db.conversation.update({ where: { id: conv.id }, data: { lastMessageAt: now, lastMessagePreview: preview("template", body) } });
+      await db.campaignRecipient.update({ where: { id: r.id }, data: { messageId: msg.id, sendMode: free ? "free" : "template" } });
+      await db.conversation.update({ where: { id: conv.id }, data: { lastMessageAt: now, lastMessagePreview: preview(msgType, body) } });
       await db.contact.update({ where: { id: contact.id }, data: { lastMessageAt: now } });
 
       const sent = await transmit(msg.id, { isDemo: acct.isDemo, phoneNumberId: acct.phoneNumberId, connection: acct.connection }, contact.phone, payload, undefined);
@@ -135,8 +153,11 @@ export async function processCampaign(campaignId: string, budgetMs = 50_000): Pr
         await db.campaignRecipient.update({ where: { id: r.id }, data: { status: "sent", sentAt: sent.sentAt ?? now } });
         if (acct.isDemo && acct.phoneRecordId) await db.phoneNumber.update({ where: { id: acct.phoneRecordId }, data: { messagesSent: { increment: 1 } } });
         tally.sent++;
-        if (fee > 0) funds -= fee;
-        pkgLeft -= 1;
+        if (free) funds -= serviceFee;
+        else {
+          if (fee > 0) funds -= fee;
+          pkgLeft -= 1;
+        }
       } else {
         await db.campaignRecipient.update({ where: { id: r.id }, data: { status: "failed", failedAt: now, error: sent.error } });
         tally.failed++;

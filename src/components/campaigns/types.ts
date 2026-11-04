@@ -11,9 +11,10 @@ export type ComplianceReport = {
   removedSample: { name: string; phone: string; reason: string }[];
   canSend: boolean;
   generatedAt: string;
+  smart?: { openWindow: number; paid: number; estSavingsRupees: number };
 };
 
-export type CampaignStats = { total: number; queued: number; sent: number; delivered: number; read: number; failed: number; skipped: number; replies: number; optOuts: number };
+export type CampaignStats = { total: number; queued: number; sent: number; delivered: number; read: number; failed: number; skipped: number; replies: number; optOuts: number; freeSent?: number };
 
 export type CampaignView = {
   id: string;
@@ -30,6 +31,7 @@ export type CampaignView = {
   variables: Record<string, VariableMapping>;
   ab: { template: { id: string; name: string; language: string; category: string; status: string; qualityScore: string } | null; variables: Record<string, VariableMapping>; split: number };
   scheduledAt: string | null;
+  smart: { enabled: boolean; text: string; buttons: string[] };
   review: ComplianceReport | null;
   reviewedAt: string | null;
   totalRecipients: number;

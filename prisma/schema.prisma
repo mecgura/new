@@ -842,6 +842,10 @@ model Campaign {
   reviewedAt        DateTime?
   statusReason      String    @default("")
   totalRecipients   Int       @default(0)
+  // Smart send: contacts whose 24-hour customer-service window is open get this free-form message (no template charge)
+  smartSend         Boolean   @default(false)
+  freeText          String    @default("")
+  freeButtons       String    @default("[]") // JSON: up to 3 reply-button titles
   isDemo            Boolean   @default(false)
   createdById       String?
   startedAt         DateTime?
@@ -869,6 +873,7 @@ model CampaignRecipient {
   phone          String // E.164
   name           String    @default("")
   variant        String    @default("A") // A/B test arm
+  sendMode       String    @default("template") // template | free (sent free-form inside the open 24-hour window)
   status         String    @default("queued") // queued | sending | sent | delivered | read | failed
   variables      String    @default("{}") // JSON: resolved values
   messageId      String?   @unique

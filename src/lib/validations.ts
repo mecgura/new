@@ -465,8 +465,13 @@ export const campaignUpdateSchema = z
     abSplit: z.number().int().refine((v) => v === 0 || (v >= 10 && v <= 50), "Send version B to 10–50% of people"),
     scheduledAt: z.coerce.date().nullable(),
     step: z.number().int().min(1).max(7),
+    // Smart send: free-form message for contacts whose 24-hour window is open (no template charge).
+    smartSend: z.boolean(),
+    freeText: z.string().trim().max(1024, "Up to 1024 characters"),
+    freeButtons: z.array(z.string().trim().min(1, "Button text can't be empty").max(20, "Up to 20 characters")).max(3, "Up to 3 buttons"),
   })
-  .partial();
+  .partial()
+  .refine((v) => !v.smartSend || v.freeText === undefined || v.freeText.length > 0, { message: "Write the free message for open-window contacts", path: ["freeText"] });
 
 export const campaignListSchema = z.object({
   status: z.enum(["", "draft", "scheduled", "sending", "paused", "completed", "cancelled", "failed"]).optional().default(""),
