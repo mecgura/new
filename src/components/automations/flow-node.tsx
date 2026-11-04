@@ -4,7 +4,7 @@ import * as React from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NODE_LABELS, type FlowNode, type NodeType } from "@/lib/automations";
+import { NODE_LABELS, handleLabel, handlesOf, isBranching, type FlowNode, type NodeType } from "@/lib/automations";
 import { NODE_ACCENT, NODE_ICON, nodeTitle, summarize } from "@/components/automations/meta";
 
 export type BuilderInfo = {
@@ -62,18 +62,31 @@ export function FlowNodeCard({ id, type, data, selected }: NodeProps) {
           {s.skipped ? <span>⤼ {s.skipped}</span> : null}
         </div>
       ) : null}
-      {t === "condition" ? (
-        <>
-          <Handle id="yes" type="source" position={Position.Bottom} style={{ left: "28%" }} className={cn(handleCls, "!bg-emerald-400")} aria-label="Yes" />
-          <Handle id="no" type="source" position={Position.Bottom} style={{ left: "72%" }} className={cn(handleCls, "!bg-red-400")} aria-label="No" />
-          <div className="flex justify-between px-[20%] pb-1 text-[10px] font-semibold">
-            <span className="text-emerald-300">Yes</span>
-            <span className="text-red-300">No</span>
-          </div>
-        </>
+      {isBranching(t) ? (
+        <BranchHandles type={t} data={data} />
       ) : t !== "end" ? (
         <Handle id="next" type="source" position={Position.Bottom} className={cn(handleCls, "!bg-app-primary")} aria-label="Next" />
       ) : null}
     </div>
+  );
+}
+
+const POSITIVE = new Set(["yes", "approved"]);
+const NEGATIVE = new Set(["no", "rejected"]);
+
+/** One output per branch, spread along the bottom edge and labelled in text (not colour alone). */
+function BranchHandles({ type, data }: { type: NodeType; data: unknown }) {
+  const hs = handlesOf(type, data);
+  return (
+    <>
+      {hs.map((h, i) => (
+        <Handle key={h} id={h} type="source" position={Position.Bottom} style={{ left: `${((i + 0.5) / hs.length) * 100}%` }} className={cn(handleCls, POSITIVE.has(h) ? "!bg-emerald-400" : NEGATIVE.has(h) ? "!bg-red-400" : h === "default" ? "!bg-app-muted" : "!bg-violet-400")} aria-label={handleLabel(type, data, h)} />
+      ))}
+      <div className="grid pb-1 text-center text-[10px] font-semibold" style={{ gridTemplateColumns: `repeat(${hs.length}, minmax(0, 1fr))` }}>
+        {hs.map((h) => (
+          <span key={h} className={cn("truncate px-0.5", POSITIVE.has(h) ? "text-emerald-300" : NEGATIVE.has(h) ? "text-red-300" : h === "default" ? "text-app-muted" : "text-violet-300")}>{handleLabel(type, data, h)}</span>
+        ))}
+      </div>
+    </>
   );
 }

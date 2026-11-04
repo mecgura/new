@@ -1,7 +1,7 @@
 // Automation graph model. Pure module (no DB / Node APIs): the builder UI,
 // the API validation and the execution engine share these definitions.
 
-export const NODE_TYPES = ["trigger", "message", "template", "delay", "condition", "tag", "assign", "update_contact", "webhook", "ai_response", "end"] as const;
+export const NODE_TYPES = ["trigger", "message", "template", "delay", "condition", "switch", "approval", "tag", "assign", "update_contact", "webhook", "ai_response", "end"] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
 
 export const NODE_LABELS: Record<NodeType, string> = {
@@ -10,6 +10,8 @@ export const NODE_LABELS: Record<NodeType, string> = {
   template: "Template",
   delay: "Delay",
   condition: "Condition",
+  switch: "Switch",
+  approval: "Approval",
   tag: "Tag",
   assign: "Assign agent",
   update_contact: "Update contact",
@@ -84,6 +86,14 @@ export const OPERATORS_FOR: Record<ConditionField, Operator[]> = {
   time: ["before", "after"],
 };
 
+/** Fields a Switch step can branch on (one value, many paths). */
+export const SWITCH_FIELDS = ["message", "contact_name", "custom", "lead_status", "source"] as const;
+export type SwitchField = (typeof SWITCH_FIELDS)[number];
+export const SWITCH_OPERATORS = ["equals", "contains", "starts_with"] as const;
+export type SwitchCase = { id: string; label: string; operator: (typeof SWITCH_OPERATORS)[number]; value: string };
+export const MAX_SWITCH_CASES = 8;
+export const MAX_APPROVAL_HOURS = 7 * 24;
+
 export const LEAD_STATUS_VALUES = ["new", "contacted", "qualified", "proposal", "won", "lost"];
 export const SOURCE_VALUES = ["manual", "whatsapp", "import", "api", "landing"];
 export const CONSENT_VALUES = ["opted_in", "opted_out", "unknown"];
@@ -114,6 +124,8 @@ export type NodeDataMap = {
   template: { templateId: string; variables: VariableMap; onError: OnError };
   delay: { amount: number; unit: "minutes" | "hours" | "days" };
   condition: { match: "all" | "any"; rules: { field: ConditionField; key: string; operator: Operator; value: string }[] };
+  switch: { field: SwitchField; key: string; cases: SwitchCase[] };
+  approval: { question: string; approvers: "managers" | "user"; userId: string; timeoutHours: number; onTimeout: "approved" | "rejected" };
   tag: { action: "add" | "remove"; tagName: string };
   assign: { mode: "user" | "auto"; userId: string };
   update_contact: { field: "name" | "email" | "leadStatus" | "lifecycle" | "custom"; key: string; value: string };
@@ -137,6 +149,8 @@ export function defaultData<T extends NodeType>(type: T): NodeDataMap[T] {
     template: { templateId: "", variables: {}, onError: "stop" },
     delay: { amount: 5, unit: "minutes" },
     condition: { match: "any", rules: [{ field: "message", key: "", operator: "contains", value: "" }] },
+    switch: { field: "message", key: "", cases: [{ id: "c1", label: "Option 1", operator: "contains", value: "" }, { id: "c2", label: "Option 2", operator: "contains", value: "" }] },
+    approval: { question: "", approvers: "managers", userId: "", timeoutHours: 24, onTimeout: "rejected" },
     tag: { action: "add", tagName: "" },
     assign: { mode: "auto", userId: "" },
     update_contact: { field: "leadStatus", key: "", value: "contacted" },
@@ -151,11 +165,24 @@ export function delayMinutes(d: NodeDataMap["delay"]) {
   return d.amount * (d.unit === "days" ? 1440 : d.unit === "hours" ? 60 : 1);
 }
 
-/** Outgoing handles a node type exposes. */
-export function handlesOf(type: NodeType): string[] {
+/** Steps whose connections leave from named outputs (Yes/No, cases, Approved/Rejected). */
+export const isBranching = (type: NodeType) => type === "condition" || type === "switch" || type === "approval";
+
+/** Outgoing handles a node exposes (Switch needs its data: one output per case plus "default"). */
+export function handlesOf(type: NodeType, data?: unknown): string[] {
   if (type === "end") return [];
   if (type === "condition") return ["yes", "no"];
+  if (type === "approval") return ["approved", "rejected"];
+  if (type === "switch") return [...((data as NodeDataMap["switch"] | undefined)?.cases ?? []).map((c) => c.id), "default"];
   return ["next"];
+}
+
+/** Human name of an output handle. */
+export function handleLabel(type: NodeType, data: unknown, handle: string): string {
+  if (type === "condition") return handle === "yes" ? "Yes" : "No";
+  if (type === "approval") return handle === "approved" ? "Approved" : "Rejected";
+  if (type === "switch") return handle === "default" ? "Anything else" : ((data as NodeDataMap["switch"]).cases.find((c) => c.id === handle)?.label ?? handle);
+  return "Next";
 }
 
 // ---------------------------------------------------------------------------
@@ -192,8 +219,8 @@ export function validateGraph(g: Graph): { errors: GraphIssue[]; warnings: Graph
   for (const e of g.edges) {
     const src = nodes.get(e.source);
     if (!src) continue;
-    const h = src.type === "condition" ? (e.sourceHandle ?? "") : "next";
-    if (!handlesOf(src.type).includes(h)) errors.push({ nodeId: src.id, message: src.type === "end" ? "End can't continue to another step." : "Connect from the Yes or No output." });
+    const h = isBranching(src.type) ? (e.sourceHandle ?? "") : "next";
+    if (!handlesOf(src.type, src.data).includes(h)) errors.push({ nodeId: src.id, message: src.type === "end" ? "End can't continue to another step." : src.type === "switch" ? "A connection leaves from a case that no longer exists." : "Connect from one of the step's outputs." });
     const key = `${e.source}:${h}`;
     if (seen.has(key)) errors.push({ nodeId: src.id, message: "Each output can connect to one step only." });
     seen.add(key);
@@ -230,8 +257,8 @@ export function validateGraph(g: Graph): { errors: GraphIssue[]; warnings: Graph
   }
   for (const n of g.nodes) {
     for (const m of nodeProblems(n)) errors.push({ nodeId: n.id, message: m });
-    if (n.type === "condition") {
-      for (const h of ["yes", "no"]) if (!g.edges.some((e) => e.source === n.id && e.sourceHandle === h)) warnings.push({ nodeId: n.id, message: `The “${h === "yes" ? "Yes" : "No"}” path isn't connected — the automation ends there.` });
+    if (isBranching(n.type)) {
+      for (const h of handlesOf(n.type, n.data)) if (!g.edges.some((e) => e.source === n.id && e.sourceHandle === h)) warnings.push({ nodeId: n.id, message: `The “${handleLabel(n.type, n.data, h)}” path isn't connected — the automation ends there.` });
     }
   }
   // A message that can come a day or more after the start may land outside WhatsApp's 24-hour window.
@@ -301,6 +328,26 @@ export function nodeProblems(n: FlowNode): string[] {
         if (r.field === "date" && r.value && !/^\d{4}-\d{2}-\d{2}$/.test(r.value)) p.push("Dates use YYYY-MM-DD.");
         if (r.field === "time" && r.value && !/^([01]\d|2[0-3]):[0-5]\d$/.test(r.value)) p.push("Times use HH:MM (24 h).");
       }
+      break;
+    }
+    case "switch": {
+      const d = n.data as NodeDataMap["switch"];
+      if (!(SWITCH_FIELDS as readonly string[]).includes(d.field)) p.push("Choose what to check.");
+      if (d.field === "custom" && !d.key.trim()) p.push("Name the custom field.");
+      if (!d.cases.length) p.push("Add at least one case.");
+      if (d.cases.length > MAX_SWITCH_CASES) p.push(`Up to ${MAX_SWITCH_CASES} cases.`);
+      if (new Set(d.cases.map((c) => c.id)).size !== d.cases.length || d.cases.some((c) => !c.id || c.id === "default")) p.push("Cases need unique ids.");
+      if (d.cases.some((c) => !c.value.trim())) p.push("Every case needs a value to match.");
+      if (d.cases.some((c) => !c.label.trim() || c.label.length > 30)) p.push("Case names: 1–30 characters.");
+      if (d.cases.some((c) => !(SWITCH_OPERATORS as readonly string[]).includes(c.operator))) p.push("Choose how each case matches.");
+      break;
+    }
+    case "approval": {
+      const d = n.data as NodeDataMap["approval"];
+      if (!d.question.trim()) p.push("Write what the approver should check.");
+      if (d.question.length > 500) p.push("Keep the question under 500 characters.");
+      if (d.approvers === "user" && !d.userId) p.push("Choose who approves.");
+      if (!Number.isInteger(d.timeoutHours) || d.timeoutHours < 1 || d.timeoutHours > MAX_APPROVAL_HOURS) p.push("Wait between 1 hour and 7 days for a decision.");
       break;
     }
     case "tag":
@@ -409,6 +456,14 @@ export function evaluateRule(r: NodeDataMap["condition"]["rules"][number], ctx: 
 export function evaluateCondition(d: NodeDataMap["condition"], ctx: EvalContext): boolean {
   const results = d.rules.map((r) => evaluateRule(r, ctx));
   return d.match === "all" ? results.every(Boolean) : results.some(Boolean);
+}
+
+/** The first case that matches, else "default". */
+export function evaluateSwitch(d: NodeDataMap["switch"], ctx: EvalContext): string {
+  const c = ctx.contact;
+  const actual = d.field === "message" ? ctx.message : d.field === "contact_name" ? (c?.name ?? "") : d.field === "custom" ? (c?.customFields[d.key] ?? "") : d.field === "lead_status" ? (c?.leadStatus ?? "") : (c?.source ?? "");
+  const hit = d.cases.find((k) => textOp(k.operator, actual, k.value));
+  return hit?.id ?? "default";
 }
 
 /** {{contact.first_name}}, {{contact.name}}, {{contact.phone}}, {{contact.email}}, {{contact.custom.city}}, {{reply}}, {{ai.response}}, {{trigger.text}} */

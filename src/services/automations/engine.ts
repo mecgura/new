@@ -8,6 +8,8 @@ import { assertPublicHttpsUrl, UnsafeUrlError } from "@/lib/safe-fetch";
 import {
   delayMinutes,
   evaluateCondition,
+  evaluateSwitch,
+  isBranching,
   istNow,
   keywordMatches,
   renderText,
@@ -26,6 +28,7 @@ import { resolveValue } from "@/services/campaigns/compliance";
 import { AiError, generateReply } from "@/providers/anthropic/reply";
 import { billingState } from "@/services/billing/entitlements";
 import { pickLeastBusyMember, systemAssign } from "@/services/inbox/routing";
+import { notify } from "@/lib/notifications";
 
 // ---------------------------------------------------------------------------
 // Safety limits — no infinite loops, bounded retries, bounded fan-out
@@ -237,7 +240,7 @@ async function resumeWaitingForReply(organizationId: string, ev: Extract<Automat
 
 type Outcome =
   | { kind: "next"; handle?: string; output?: Record<string, unknown>; status?: "completed" | "skipped" }
-  | { kind: "wait"; state: "delay" | "reply"; until: Date; output?: Record<string, unknown> }
+  | { kind: "wait"; state: "delay" | "reply" | "approval"; until: Date; output?: Record<string, unknown> }
   | { kind: "end" };
 
 type RunCtx = {
@@ -336,8 +339,9 @@ export async function runExecution(id: string, budgetMs = 20_000): Promise<strin
       return finish({ ...ex, context: JSON.stringify(ctx) }, automation, "completed");
     }
     if (outcome.kind === "wait") {
-      const next = nextOf(graph, node.id, "next");
-      await recordStep(ex, node, outcome.state === "reply" ? "waiting" : "completed", { ...outcome.output, until: outcome.until.toISOString() }, "", ex.attempts + 1);
+      // An Approval step stays on itself: when the decision (or the timeout) comes, it picks the branch.
+      const next = outcome.state === "approval" ? node.id : nextOf(graph, node.id, "next");
+      await recordStep(ex, node, outcome.state === "delay" ? "completed" : "waiting", { ...outcome.output, until: outcome.until.toISOString() }, "", ex.attempts + 1);
       await db.automationExecution.update({
         where: { id },
         data: { currentNodeId: next, waitState: outcome.state, nextRunAt: outcome.until, lockedUntil: null, attempts: 0, stepCount: { increment: 1 }, context: JSON.stringify(ctx) },
@@ -352,7 +356,7 @@ export async function runExecution(id: string, budgetMs = 20_000): Promise<strin
 
 function nextOf(g: Graph, nodeId: string, handle: string): string | null {
   const node = g.nodes.find((n) => n.id === nodeId);
-  const edge = g.edges.find((e: FlowEdge) => e.source === nodeId && (node?.type === "condition" ? e.sourceHandle === handle : true));
+  const edge = g.edges.find((e: FlowEdge) => e.source === nodeId && (node && isBranching(node.type) ? e.sourceHandle === handle : true));
   return edge?.target ?? null;
 }
 
@@ -412,6 +416,15 @@ async function runNode(r: RunCtx): Promise<Outcome> {
       const ok = evaluateCondition(d, { message, contact, now: new Date() });
       return { kind: "next", handle: ok ? "yes" : "no", output: { result: ok ? "yes" : "no", message: message.slice(0, 200) } };
     }
+    case "switch": {
+      const contact = await loadContact(orgId, ex.contactId);
+      const d = node.data as NodeDataMap["switch"];
+      const message = r.ctx.reply !== undefined ? r.ctx.reply : String(r.trigger.text ?? "");
+      const hit = evaluateSwitch(d, { message, contact, now: new Date() });
+      return { kind: "next", handle: hit, output: { case: hit, label: hit === "default" ? "Anything else" : (d.cases.find((c) => c.id === hit)?.label ?? hit) } };
+    }
+    case "approval":
+      return approvalStep(r);
     case "tag":
       return tagStep(r);
     case "assign":
@@ -432,6 +445,31 @@ async function runNode(r: RunCtx): Promise<Outcome> {
 function originOf(r: RunCtx): Origin {
   const chain = parse<{ chain?: string[] }>(r.ex.context, {}).chain ?? [r.automation.id];
   return { executionId: r.ex.id, automationId: r.automation.id, depth: r.ex.depth + 1, chain };
+}
+
+/**
+ * Approval step: creates one request per run, notifies the approvers and
+ * waits. A decision (or the timeout) picks the Approved / Rejected branch.
+ */
+async function approvalStep(r: RunCtx): Promise<Outcome> {
+  const { ex, node } = r;
+  const d = node.data as NodeDataMap["approval"];
+  const existing = await db.automationApproval.findUnique({ where: { executionId_nodeId: { executionId: ex.id, nodeId: node.id } } });
+  if (!existing) {
+    const contact = await loadContact(ex.organizationId, ex.contactId);
+    const question = renderText(d.question, vars(r, contact)).slice(0, 1000);
+    const expiresAt = new Date(Date.now() + d.timeoutHours * 3_600_000);
+    const approverUserId = d.approvers === "user" && d.userId ? d.userId : null;
+    const a = await db.automationApproval.create({ data: { organizationId: ex.organizationId, automationId: ex.automationId, executionId: ex.id, nodeId: node.id, contactId: ex.contactId, question, approverUserId, expiresAt } });
+    const members = await db.organizationMember.findMany({ where: { organizationId: ex.organizationId, ...(approverUserId ? { userId: approverUserId } : { role: { in: ["CLIENT_OWNER", "MANAGER"] } }) }, select: { userId: true } });
+    const who = contact ? contact.name || contact.phone : "a contact";
+    for (const m of members) await notify({ userId: m.userId, organizationId: ex.organizationId, title: `Approval needed: ${r.automation.name}`, body: `${question.slice(0, 140)} (${who})`, link: "/automations?approvals=1" });
+    return { kind: "wait", state: "approval", until: expiresAt, output: { approvalId: a.id, waitingFor: "approval" } };
+  }
+  if (existing.status === "approved" || existing.status === "rejected") return { kind: "next", handle: existing.status, output: { decision: existing.status, note: existing.note } };
+  if (existing.status === "pending" && existing.expiresAt.getTime() > Date.now()) return { kind: "wait", state: "approval", until: existing.expiresAt, output: { approvalId: existing.id, waitingFor: "approval" } };
+  if (existing.status === "pending") await db.automationApproval.updateMany({ where: { id: existing.id, status: "pending" }, data: { status: "expired", decidedAt: new Date() } });
+  return { kind: "next", handle: d.onTimeout, output: { decision: d.onTimeout, timedOut: true } };
 }
 
 async function requireContact(r: RunCtx) {

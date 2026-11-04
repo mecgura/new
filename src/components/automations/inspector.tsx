@@ -9,10 +9,13 @@ import {
   CONDITION_FIELD_LABELS,
   CONSENT_VALUES,
   LEAD_STATUS_VALUES,
+  MAX_APPROVAL_HOURS,
+  MAX_SWITCH_CASES,
   NODE_LABELS,
   OPERATORS_FOR,
   OPERATOR_LABELS,
   SOURCE_VALUES,
+  SWITCH_FIELDS,
   TRIGGER_LABELS,
   TRIGGER_TYPES,
   type ConditionField,
@@ -77,6 +80,8 @@ export function NodeInspector({ node, onChange, onDelete, lists, readOnly, webho
       {node.type === "template" ? <TemplateForm d={node.data as NodeDataMap["template"]} set={set} lists={lists} fid={fid} /> : null}
       {node.type === "delay" ? <DelayForm d={node.data as NodeDataMap["delay"]} set={set} fid={fid} /> : null}
       {node.type === "condition" ? <ConditionForm d={node.data as NodeDataMap["condition"]} set={set} lists={lists} fid={fid} /> : null}
+      {node.type === "switch" ? <SwitchForm d={node.data as NodeDataMap["switch"]} set={set} fid={fid} /> : null}
+      {node.type === "approval" ? <ApprovalForm d={node.data as NodeDataMap["approval"]} set={set} lists={lists} fid={fid} /> : null}
       {node.type === "tag" ? (
         <>
           <Field id={fid("action")} label="Action">
@@ -523,5 +528,99 @@ export function WebhookTriggerInfo({ orgId, automationId, hasSecret, canManage }
         </Button>
       ) : null}
     </div>
+  );
+}
+
+const SWITCH_FIELD_LABELS: Record<(typeof SWITCH_FIELDS)[number], string> = {
+  message: "Customer's message / last reply",
+  contact_name: "Contact name",
+  custom: "Contact custom field",
+  lead_status: "Lead status",
+  source: "Contact source",
+};
+
+/** Many paths from one value: the first matching case wins, otherwise "Anything else". */
+function SwitchForm({ d, set, fid }: { d: NodeDataMap["switch"]; set: (p: Record<string, unknown>) => void; fid: (k: string) => string }) {
+  const setCase = (i: number, patch: Partial<NodeDataMap["switch"]["cases"][number]>) => set({ cases: d.cases.map((c, j) => (j === i ? { ...c, ...patch } : c)) });
+  const nextId = () => {
+    let n = d.cases.length + 1;
+    while (d.cases.some((c) => c.id === `c${n}`)) n++;
+    return `c${n}`;
+  };
+  return (
+    <>
+      <Field id={fid("sw-field")} label="Check">
+        <Select value={d.field} onChange={(e) => set({ field: e.target.value })}>
+          {SWITCH_FIELDS.map((f) => <option key={f} value={f}>{SWITCH_FIELD_LABELS[f]}</option>)}
+        </Select>
+      </Field>
+      {d.field === "custom" ? (
+        <Field id={fid("sw-key")} label="Custom field name">
+          <Input value={d.key} onChange={(e) => set({ key: e.target.value })} maxLength={40} placeholder="city" />
+        </Field>
+      ) : null}
+      <div className="space-y-2">
+        <p className="text-small font-medium text-app-text">Cases <span className="text-caption font-normal text-app-muted">— checked top to bottom, first match wins</span></p>
+        {d.cases.map((c, i) => (
+          <div key={c.id} className="space-y-2 rounded-lg border border-app-border p-2">
+            <div className="flex gap-2">
+              <Input aria-label={`Case ${i + 1} name`} value={c.label} maxLength={30} onChange={(e) => setCase(i, { label: e.target.value })} placeholder="Path name" />
+              <IconButton label={`Remove case ${i + 1}`} onClick={() => set({ cases: d.cases.filter((_, j) => j !== i) })} disabled={d.cases.length <= 1}>
+                <X aria-hidden="true" />
+              </IconButton>
+            </div>
+            <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-2">
+              <Select aria-label={`Case ${i + 1} match`} value={c.operator} onChange={(e) => setCase(i, { operator: e.target.value as typeof c.operator })}>
+                <option value="contains">contains</option>
+                <option value="equals">equals</option>
+                <option value="starts_with">starts with</option>
+              </Select>
+              <Input aria-label={`Case ${i + 1} value`} value={c.value} maxLength={200} onChange={(e) => setCase(i, { value: e.target.value })} placeholder={d.field === "lead_status" ? "qualified" : "price, rate, cost"} />
+            </div>
+          </div>
+        ))}
+        <Button size="sm" variant="secondary" disabled={d.cases.length >= MAX_SWITCH_CASES} onClick={() => set({ cases: [...d.cases, { id: nextId(), label: `Option ${d.cases.length + 1}`, operator: "contains", value: "" }] })}>
+          <Plus aria-hidden="true" /> Add case
+        </Button>
+        <p className="text-caption text-app-muted">“contains” accepts several words separated by commas. Anything that matches no case goes to “Anything else”.</p>
+      </div>
+    </>
+  );
+}
+
+/** A person decides: the run waits, then follows Approved or Rejected. */
+function ApprovalForm({ d, set, lists, fid }: { d: NodeDataMap["approval"]; set: (p: Record<string, unknown>) => void; lists: Lists; fid: (k: string) => string }) {
+  return (
+    <>
+      <Field id={fid("ap-q")} label="What should they check?" hint="Shown to the approver. You can use {{contact.name}}, {{reply}} and other variables.">
+        <Textarea rows={3} maxLength={500} value={d.question} onChange={(e) => set({ question: e.target.value })} placeholder="Give {{contact.name}} a 10% discount on the bridal package?" />
+      </Field>
+      <Field id={fid("ap-who")} label="Who approves">
+        <Select value={d.approvers} onChange={(e) => set({ approvers: e.target.value })}>
+          <option value="managers">Any owner or manager</option>
+          <option value="user">A specific person</option>
+        </Select>
+      </Field>
+      {d.approvers === "user" ? (
+        <Field id={fid("ap-user")} label="Approver">
+          <Select value={d.userId} onChange={(e) => set({ userId: e.target.value })}>
+            <option value="">Choose…</option>
+            {lists.members.map((m) => <option key={m.userId} value={m.userId}>{m.name} ({m.role.toLowerCase().replace("client_", "")})</option>)}
+          </Select>
+        </Field>
+      ) : null}
+      <div className="grid gap-2">
+        <Field id={fid("ap-hours")} label="Wait up to (hours)">
+          <Input type="number" min={1} max={MAX_APPROVAL_HOURS} value={d.timeoutHours} onChange={(e) => set({ timeoutHours: Math.round(Number(e.target.value) || 1) })} />
+        </Field>
+        <Field id={fid("ap-timeout")} label="If nobody decides">
+          <Select value={d.onTimeout} onChange={(e) => set({ onTimeout: e.target.value })}>
+            <option value="rejected">Treat as rejected</option>
+            <option value="approved">Treat as approved</option>
+          </Select>
+        </Field>
+      </div>
+      <p className="text-caption text-app-muted">Approvers get a notification and decide from Automations → Approvals. The owner can always decide.</p>
+    </>
   );
 }

@@ -547,6 +547,28 @@ export const flowNodeSchema = z.discriminatedUnion("type", [
         .default([]),
     }),
   }),
+  z.object({
+    ...nodeBase,
+    type: z.literal("switch"),
+    data: z.object({
+      label,
+      field: z.enum(["message", "contact_name", "custom", "lead_status", "source"]).default("message"),
+      key: short(40),
+      cases: z.array(z.object({ id: z.string().min(1).max(20), label: short(30), operator: z.enum(["equals", "contains", "starts_with"]).default("contains"), value: short(200) })).max(8).default([]),
+    }),
+  }),
+  z.object({
+    ...nodeBase,
+    type: z.literal("approval"),
+    data: z.object({
+      label,
+      question: short(500),
+      approvers: z.enum(["managers", "user"]).default("managers"),
+      userId: short(64),
+      timeoutHours: z.number().int().min(0).max(10_000).default(24),
+      onTimeout: z.enum(["approved", "rejected"]).default("rejected"),
+    }),
+  }),
   z.object({ ...nodeBase, type: z.literal("tag"), data: z.object({ label, action: z.enum(["add", "remove"]).default("add"), tagName: short(40) }) }),
   z.object({ ...nodeBase, type: z.literal("assign"), data: z.object({ label, mode: z.enum(["user", "auto"]).default("auto"), userId: short(64) }) }),
   z.object({ ...nodeBase, type: z.literal("update_contact"), data: z.object({ label, field: z.enum(["name", "email", "leadStatus", "lifecycle", "custom"]), key: short(40), value: short(500) }) }),

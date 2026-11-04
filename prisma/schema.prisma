@@ -975,6 +975,27 @@ model AutomationExecutionStep {
   @@index([organizationId, nodeId])
 }
 
+// A person's decision that an automation run is waiting for (Approval step).
+model AutomationApproval {
+  id             String    @id @default(cuid())
+  organizationId String
+  automationId   String
+  executionId    String
+  nodeId         String
+  contactId      String?
+  question       String
+  approverUserId String? // null = any owner or manager
+  status         String    @default("pending") // pending | approved | rejected | expired | cancelled
+  note           String    @default("")
+  decidedById    String?
+  decidedAt      DateTime?
+  expiresAt      DateTime
+  createdAt      DateTime  @default(now())
+
+  @@unique([executionId, nodeId])
+  @@index([organizationId, status])
+}
+
 // ---------------------------------------------------------------------------
 // Phase 7 — WhatsApp Flows, AI agent, appointments
 // ---------------------------------------------------------------------------

@@ -4,6 +4,8 @@ import {
   FileText,
   Flag,
   GitBranch,
+  ShieldCheck,
+  Split,
   MessageSquare,
   Tag,
   UserCheck,
@@ -31,6 +33,8 @@ export const NODE_ICON: Record<NodeType, LucideIcon> = {
   template: FileText,
   delay: Clock,
   condition: GitBranch,
+  switch: Split,
+  approval: ShieldCheck,
   tag: Tag,
   assign: UserCheck,
   update_contact: UserPen,
@@ -46,6 +50,8 @@ export const NODE_ACCENT: Record<NodeType, string> = {
   template: "text-emerald-300 bg-emerald-400/15 border-l-emerald-400",
   delay: "text-sky-300 bg-sky-400/15 border-l-sky-400",
   condition: "text-violet-300 bg-violet-400/15 border-l-violet-400",
+  switch: "text-violet-300 bg-violet-400/15 border-l-violet-400",
+  approval: "text-amber-300 bg-amber-400/15 border-l-amber-400",
   tag: "text-pink-300 bg-pink-400/15 border-l-pink-400",
   assign: "text-orange-300 bg-orange-400/15 border-l-orange-400",
   update_contact: "text-orange-300 bg-orange-400/15 border-l-orange-400",
@@ -59,6 +65,8 @@ export const PALETTE: { type: NodeType; hint: string }[] = [
   { type: "template", hint: "Approved template (works outside 24 h)" },
   { type: "delay", hint: "Wait minutes, hours or days" },
   { type: "condition", hint: "Branch Yes / No" },
+  { type: "switch", hint: "Many paths by answer, status or field" },
+  { type: "approval", hint: "Wait for an owner or manager to approve" },
   { type: "tag", hint: "Add or remove a tag" },
   { type: "assign", hint: "Hand the chat to a person" },
   { type: "update_contact", hint: "Change a contact field" },
@@ -99,6 +107,14 @@ export function summarize(n: FlowNode, names: { templates: Record<string, string
       if (!r) return "Add a rule";
       const more = d.rules.length > 1 ? ` ${d.match === "all" ? "and" : "or"} ${d.rules.length - 1} more` : "";
       return `If ${CONDITION_FIELD_LABELS[r.field].toLowerCase()} ${OPERATOR_LABELS[r.operator]} ${r.value ? `“${r.value.slice(0, 30)}”` : ""}${more}`;
+    }
+    case "switch": {
+      const d = n.data as NodeDataMap["switch"];
+      return `${d.cases.length} case${d.cases.length === 1 ? "" : "s"}: ${d.cases.map((c) => c.label).join(", ").slice(0, 60)}`;
+    }
+    case "approval": {
+      const d = n.data as NodeDataMap["approval"];
+      return `${d.question.slice(0, 50) || "Ask a question"} · ${d.approvers === "user" ? (names.users[d.userId] ?? "choose a person") : "owner/manager"} · ${d.timeoutHours} h`;
     }
     case "tag": {
       const d = n.data as NodeDataMap["tag"];
@@ -143,7 +159,7 @@ export const STEP_STATUS: Record<string, { label: string; tone: BadgeTone }> = {
   completed: { label: "Done", tone: "success" },
   failed: { label: "Failed", tone: "danger" },
   skipped: { label: "Skipped", tone: "neutral" },
-  waiting: { label: "Waiting for reply", tone: "info" },
+  waiting: { label: "Waiting", tone: "info" },
   retrying: { label: "Retrying", tone: "warning" },
 };
 

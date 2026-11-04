@@ -25,7 +25,7 @@ import { AlertTriangle, ArrowLeft, BarChart3, ChevronDown, FlaskConical, History
 import { Alert, Badge, Button, Drawer, Dropdown, DropdownItem, Field, IconButton, Input, Modal, Select, Textarea, useToast } from "@/components/ds";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/client-api";
-import { NODE_LABELS, defaultData, handlesOf, validateGraph, type FlowEdge, type FlowNode, type Graph, type NodeType } from "@/lib/automations";
+import { NODE_LABELS, NODE_TYPES, defaultData, handleLabel, handlesOf, isBranching, validateGraph, type FlowEdge, type FlowNode, type Graph, type NodeType } from "@/lib/automations";
 import { useRealtime } from "@/components/inbox/use-realtime";
 import type { TemplateView } from "@/components/templates/types";
 import type { TeamMember, Tag } from "@/components/inbox/types";
@@ -54,13 +54,13 @@ type RFNode = Node<Record<string, unknown>, NodeType>;
 type Snapshot = { nodes: FlowNode[]; edges: FlowEdge[] };
 type Meta = { name: string; description: string; whatsappAccountId: string; reentry: "always" | "once" };
 
-const nodeTypes = Object.fromEntries((["trigger", "message", "template", "delay", "condition", "tag", "assign", "update_contact", "webhook", "ai_response", "end"] as const).map((t) => [t, FlowNodeCard]));
+const nodeTypes = Object.fromEntries(NODE_TYPES.map((t) => [t, FlowNodeCard]));
 
 const EDGE_STYLE = { strokeWidth: 2, stroke: "var(--color-app-border-strong)" };
 
 function toRFEdge(e: FlowEdge, nodes: FlowNode[]): Edge {
   const src = nodes.find((n) => n.id === e.source);
-  const handle = src?.type === "condition" ? (e.sourceHandle ?? "yes") : "next";
+  const handle = src && isBranching(src.type) ? (e.sourceHandle ?? handlesOf(src.type, src.data)[0]) : "next";
   return {
     id: e.id,
     source: e.source,
@@ -285,10 +285,11 @@ function Builder({ orgId, automation, accounts, canManage }: { orgId: string; au
       if (readOnly) return;
       remember();
       const src = current.current.nodes.find((n) => n.id === c.source);
-      const handle = src?.type === "condition" ? (c.sourceHandle ?? "yes") : "next";
+      const branching = Boolean(src && isBranching(src.type as NodeType));
+      const handle = branching ? (c.sourceHandle ?? handlesOf(src!.type as NodeType, src!.data)[0]) : "next";
       const g = toGraph(current.current.nodes, current.current.edges);
       // One connection per output: reconnecting replaces the old one.
-      setEdges((es) => [...es.filter((e) => !(e.source === c.source && (src?.type !== "condition" || e.sourceHandle === handle))), toRFEdge({ id: `e_${c.source}_${handle}_${c.target}_${Date.now().toString(36)}`, source: c.source, target: c.target, sourceHandle: handle }, g.nodes)]);
+      setEdges((es) => [...es.filter((e) => !(e.source === c.source && (!branching || e.sourceHandle === handle))), toRFEdge({ id: `e_${c.source}_${handle}_${c.target}_${Date.now().toString(36)}`, source: c.source, target: c.target, sourceHandle: handle }, g.nodes)]);
     },
     [readOnly, remember]
   );
@@ -306,10 +307,12 @@ function Builder({ orgId, automation, accounts, canManage }: { orgId: string; au
       position = anchor ? { x: anchor.position.x, y: anchor.position.y + 170 } : { x: 260, y: 0 };
       if (from && from.type !== "end") {
         const used = current.current.edges.filter((e) => e.source === from.id).map((e) => e.sourceHandle ?? "next");
-        const free = handlesOf(from.type as NodeType).find((h) => !used.includes(h));
+        const hs = handlesOf(from.type as NodeType, from.data);
+        const free = hs.find((h) => !used.includes(h));
         if (free) {
           link = { id: `e_${from.id}_${free}_${id}`, source: from.id, target: id, sourceHandle: free };
-          if (free === "no") position = { x: from.position.x + 300, y: from.position.y + 170 };
+          const idx = hs.indexOf(free);
+          if (idx > 0) position = { x: from.position.x + 300 * idx, y: from.position.y + 170 };
         }
       }
     }
@@ -643,7 +646,7 @@ function Builder({ orgId, automation, accounts, canManage }: { orgId: string; au
       ) : (
         <div className="app-scroll min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
           {tab === "logs" ? <LogsPanel orgId={orgId} automationId={a.id} canManage={canManage} refreshKey={refreshKey} onOpen={setExecId} /> : null}
-          {tab === "analytics" ? <AnalyticsPanel orgId={orgId} automationId={a.id} refreshKey={refreshKey} labels={Object.fromEntries(graph.nodes.map((n) => [n.id, nodeTitle(n)]))} /> : null}
+          {tab === "analytics" ? <AnalyticsPanel orgId={orgId} automationId={a.id} refreshKey={refreshKey} labels={Object.fromEntries(graph.nodes.map((n) => [n.id, nodeTitle(n)]))} handleNames={Object.fromEntries(graph.nodes.filter((n) => isBranching(n.type)).map((n) => [n.id, Object.fromEntries(handlesOf(n.type, n.data).map((h) => [h, handleLabel(n.type, n.data, h)]))]))} /> : null}
           {tab === "versions" ? <VersionsPanel versions={a.versions} canManage={canManage} onRestore={restoreVersion} /> : null}
         </div>
       )}

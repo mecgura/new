@@ -404,6 +404,24 @@ export async function automationAnalytics(access: OrgAccess, id: string) {
     if (r.status === "completed") d.completed++;
     if (r.status === "failed") d.failed++;
   }
+  // Which way people went at each branching step (condition yes/no, switch case, approval decision).
+  const branchSteps = await db.automationExecutionStep.findMany({
+    where: { execution: { automationId: id, isTest: false }, nodeType: { in: ["condition", "switch", "approval"] }, status: "completed" },
+    select: { nodeId: true, output: true },
+    orderBy: { startedAt: "desc" },
+    take: 5000,
+  });
+  const branches: Record<string, Record<string, number>> = {};
+  for (const b of branchSteps) {
+    let o: { result?: string; case?: string; decision?: string } = {};
+    try {
+      o = JSON.parse(b.output) as typeof o;
+    } catch {
+      continue;
+    }
+    const h = o.result ?? o.case ?? o.decision;
+    if (h) (branches[b.nodeId] ??= {})[h] = (branches[b.nodeId]?.[h] ?? 0) + 1;
+  }
   const durations = completed.map((c) => c.finishedAt!.getTime() - c.startedAt!.getTime());
   const finished = totals.completed + totals.failed + totals.stopped;
   return {
@@ -413,6 +431,7 @@ export async function automationAnalytics(access: OrgAccess, id: string) {
     nodes,
     days,
     errors: errors.map((e) => ({ error: e.error, count: e._count._all })),
+    branches,
   };
 }
 

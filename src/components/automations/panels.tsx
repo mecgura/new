@@ -272,11 +272,12 @@ type Analytics = {
   nodes: Record<string, Record<string, number>>;
   days: { day: string; runs: number; completed: number; failed: number }[];
   errors: { error: string; count: number }[];
+  branches?: Record<string, Record<string, number>>;
 };
 
 const duration = (s: number | null) => (s === null ? "—" : s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)} min` : `${Math.round(s / 360) / 10} h`);
 
-export function AnalyticsPanel({ orgId, automationId, refreshKey, labels }: { orgId: string; automationId: string; refreshKey: number; labels: Record<string, string> }) {
+export function AnalyticsPanel({ orgId, automationId, refreshKey, labels, handleNames = {} }: { orgId: string; automationId: string; refreshKey: number; labels: Record<string, string>; handleNames?: Record<string, Record<string, string>> }) {
   const [a, setA] = React.useState<Analytics | null>(null);
   const load = React.useCallback(async () => {
     const r = await apiFetch<Analytics>(`/api/organizations/${orgId}/automations/${automationId}/analytics`);
@@ -355,6 +356,30 @@ export function AnalyticsPanel({ orgId, automationId, refreshKey, labels }: { or
           )}
         </Card>
       </div>
+      {Object.keys(a.branches ?? {}).length ? (
+        <Card>
+          <CardHeader title="Which way people went" description="At each Condition, Switch and Approval step (live runs)." />
+          <CardBody className="space-y-4">
+            {Object.entries(a.branches ?? {}).map(([nodeId, counts]) => {
+              const total = Object.values(counts).reduce((x, y) => x + y, 0) || 1;
+              return (
+                <div key={nodeId}>
+                  <p className="mb-1.5 text-small font-medium text-app-text">{labels[nodeId] ?? "Removed step"}</p>
+                  <ul className="space-y-1">
+                    {Object.entries(counts).sort((x, y) => y[1] - x[1]).map(([h, c]) => (
+                      <li key={h} className="grid grid-cols-[8rem_minmax(0,1fr)_4.5rem] items-center gap-2 text-caption">
+                        <span className="truncate text-app-muted">{handleNames[nodeId]?.[h] ?? (h === "yes" ? "Yes" : h === "no" ? "No" : h === "default" ? "Anything else" : h)}</span>
+                        <span className="h-2.5 rounded-full bg-app-elevated" aria-hidden="true"><span className="block h-full rounded-full bg-violet-400" style={{ width: `${(c / total) * 100}%` }} /></span>
+                        <span className="text-right tabular-nums text-app-text">{c} · {Math.round((c / total) * 100)}%</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </CardBody>
+        </Card>
+      ) : null}
       {a.errors.length ? (
         <Card>
           <CardHeader title="Most common errors" />

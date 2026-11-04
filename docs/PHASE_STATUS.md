@@ -220,3 +220,17 @@ _(newest last)_
   its own copy, so deleting from the library never breaks a scheduled post).
 - Not built: post analytics (reach, likes). Needs Meta insights permissions on the connected Page. Marked 🔧.
 - Tests `tests/integration/social-approvals.test.ts` (6). Suite 517/517, build OK, browser smoke OK.
+
+### Stage 11: Automation Switch + Approval steps, branch analytics ✅ (2026-11-04)
+- New steps in `src/lib/automations.ts` (validated in the API schema, builder, inspector, canvas):
+  - **Switch**: one value (customer's message/last reply, name, custom field, lead status, source) → up to 8
+    named cases (contains / equals / starts with; first match wins) + "Anything else".
+  - **Approval**: the run pauses and owners/managers (or one named person) get a notification; they Approve or Reject
+    with a note from Automations → Approvals, and the run continues on that branch. Timeout 1 h–7 days, then it is
+    treated as approved or rejected (your choice). The owner can always decide; agents can't unless named.
+- Schema: `AutomationApproval` (one per run+step). Migration `prisma/migrations/20261115090000_automation_approvals`.
+- Engine: branch outputs generalised (`isBranching`, `handlesOf(type, data)`); the Approval step stays on itself
+  while waiting and picks its branch on the decision or timeout; requests from stopped/finished runs are cancelled.
+- Analytics: "Which way people went" — split per Condition / Switch / Approval step (live runs).
+- Tests `tests/integration/automation-branching.test.ts` (6). Suite 523/523, build OK, browser smoke OK.
+- Not built: reusable sub-flows ("components") — copy a step group with Duplicate for now.

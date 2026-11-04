@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BarChart3, Copy, ListChecks, Lock, MoreHorizontal, Pause, Pencil, Play, Plus, Trash2, Workflow } from "lucide-react";
+import { BarChart3, Copy, ListChecks, Lock, MoreHorizontal, Pause, Pencil, Play, Plus, ShieldCheck, Trash2, Workflow } from "lucide-react";
 import {
   Alert,
   Badge,
@@ -67,7 +67,20 @@ export function AutomationsApp({ orgId, canManage, accounts, activeAccountId = "
   const [newOpen, setNewOpen] = React.useState(false);
   const [del, setDel] = React.useState<Item | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [approvalsOpen, setApprovalsOpen] = React.useState(false);
+  const [approvalCount, setApprovalCount] = React.useState(0);
   const base = `/api/organizations/${orgId}/automations`;
+  const loadApprovals = React.useCallback(async () => {
+    const r = await apiFetch<{ approvals: Approval[] }>(`${base}/approvals`);
+    if (r.ok) setApprovalCount(r.data.approvals.filter((a) => a.canDecide).length);
+  }, [base]);
+  React.useEffect(() => {
+    const t = window.setTimeout(() => {
+      void loadApprovals();
+      if (new URLSearchParams(window.location.search).get("approvals")) setApprovalsOpen(true);
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [loadApprovals]);
   const qs = new URLSearchParams({ status: tab === "all" ? "" : tab, q }).toString();
 
   const load = React.useCallback(async () => {
@@ -120,11 +133,16 @@ export function AutomationsApp({ orgId, canManage, accounts, activeAccountId = "
         title="Automations"
         description="Visual workflows that reply, tag, route and follow up — automatically and within WhatsApp's rules."
         actions={
-          canManage ? (
-            <Button onClick={() => setNewOpen(true)}>
-              <Plus aria-hidden="true" /> Create automation
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setApprovalsOpen(true)}>
+              <ShieldCheck aria-hidden="true" /> Approvals{approvalCount ? <Badge tone="warning">{approvalCount}</Badge> : null}
             </Button>
-          ) : null
+            {canManage ? (
+              <Button onClick={() => setNewOpen(true)}>
+                <Plus aria-hidden="true" /> Create automation
+              </Button>
+            ) : null}
+          </div>
         }
       />
       {!accounts.length ? (
@@ -224,6 +242,7 @@ export function AutomationsApp({ orgId, canManage, accounts, activeAccountId = "
         )}
       </Card>
       <NewAutomationModal open={newOpen} onClose={() => setNewOpen(false)} base={base} accounts={accounts} activeAccountId={activeAccountId} />
+      {approvalsOpen ? <ApprovalsModal base={base} onClose={() => setApprovalsOpen(false)} onChanged={() => void loadApprovals()} /> : null}
       <ConfirmationDialog
         open={Boolean(del)}
         onClose={() => setDel(null)}
@@ -311,6 +330,93 @@ function NewAutomationModal({ open, onClose, base, accounts, activeAccountId }: 
           <Button type="submit" loading={busy} disabled={!f.name.trim()}>Open builder</Button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+type Approval = {
+  id: string;
+  automation: { id: string; name: string };
+  contact: { id: string; name: string; phone: string } | null;
+  question: string;
+  status: string;
+  note: string;
+  approver: string;
+  canDecide: boolean;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  expiresAt: string;
+  createdAt: string;
+};
+const APPROVAL_STATUS: Record<string, { label: string; tone: "warning" | "success" | "danger" | "neutral" }> = {
+  pending: { label: "Waiting", tone: "warning" },
+  approved: { label: "Approved", tone: "success" },
+  rejected: { label: "Rejected", tone: "danger" },
+  expired: { label: "Timed out", tone: "neutral" },
+  cancelled: { label: "Run ended", tone: "neutral" },
+};
+
+/** Requests from Approval steps: decide here and the waiting run continues on that branch. */
+function ApprovalsModal({ base, onClose, onChanged }: { base: string; onClose: () => void; onChanged: () => void }) {
+  const toast = useToast();
+  const [view, setView] = React.useState<"pending" | "decided">("pending");
+  const [rows, setRows] = React.useState<Approval[] | null>(null);
+  const [notes, setNotes] = React.useState<Record<string, string>>({});
+  const [busy, setBusy] = React.useState("");
+  const load = React.useCallback(async () => {
+    const r = await apiFetch<{ approvals: Approval[] }>(`${base}/approvals?status=${view}`);
+    if (!r.ok) return toast(r.error, "error");
+    setRows(r.data.approvals);
+  }, [base, view, toast]);
+  React.useEffect(() => {
+    const t = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(t);
+  }, [load]);
+  async function decide(a: Approval, decision: "approved" | "rejected") {
+    setBusy(a.id + decision);
+    const r = await apiFetch(`${base}/approvals/${a.id}`, { method: "POST", body: { decision, note: notes[a.id] ?? "" } });
+    setBusy("");
+    if (!r.ok) return toast(r.error, "error");
+    toast(decision === "approved" ? "Approved — the automation continues." : "Rejected — the automation takes the Rejected path.");
+    onChanged();
+    void load();
+  }
+  return (
+    <Modal open onClose={onClose} size="lg" title="Automation approvals" description="Automations wait here for a person's decision.">
+      <Tabs label="Approvals" value={view} onValueChange={(v) => { setRows(null); setView(v as "pending" | "decided"); }} items={[{ id: "pending", label: "Waiting" }, { id: "decided", label: "History" }]} />
+      <div className="mt-3">
+        {!rows ? (
+          <LoadingState />
+        ) : !rows.length ? (
+          <p className="py-8 text-center text-small text-app-muted">{view === "pending" ? "Nothing is waiting for approval." : "No decisions yet."}</p>
+        ) : (
+          <ul className="space-y-3">
+            {rows.map((a) => (
+              <li key={a.id} className="rounded-lg border border-app-border p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Link href={`/automations/${a.automation.id}`} className="text-small font-semibold text-app-text hover:underline">{a.automation.name}</Link>
+                  <Badge tone={APPROVAL_STATUS[a.status]?.tone ?? "neutral"}>{APPROVAL_STATUS[a.status]?.label ?? a.status}</Badge>
+                </div>
+                <p className="mt-1 whitespace-pre-wrap text-small text-app-text">{a.question}</p>
+                <p className="mt-1 text-caption text-app-muted">
+                  {a.contact ? `${a.contact.name || a.contact.phone} · ` : ""}
+                  {a.status === "pending" ? `Approver: ${a.approver} · decide by ${istFmt.format(new Date(a.expiresAt))}` : `${a.decidedBy ? `${a.decidedBy} · ` : ""}${a.decidedAt ? istFmt.format(new Date(a.decidedAt)) : ""}`}
+                </p>
+                {a.note ? <p className="mt-1 text-caption text-app-subtle">“{a.note}”</p> : null}
+                {a.canDecide ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Input aria-label="Note (optional)" placeholder="Note (optional)" value={notes[a.id] ?? ""} maxLength={500} onChange={(e) => setNotes({ ...notes, [a.id]: e.target.value })} className="min-w-0 flex-1" />
+                    <Button size="sm" variant="secondary" loading={busy === a.id + "rejected"} onClick={() => void decide(a, "rejected")}>Reject</Button>
+                    <Button size="sm" loading={busy === a.id + "approved"} onClick={() => void decide(a, "approved")}>Approve</Button>
+                  </div>
+                ) : a.status === "pending" ? (
+                  <p className="mt-2 text-caption text-app-subtle">Waiting for {a.approver}.</p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </Modal>
   );
 }
