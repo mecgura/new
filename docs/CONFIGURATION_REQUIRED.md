@@ -31,6 +31,7 @@ Checked against the production project's environment variable **names** on 2026-
 | Ads Manager (create/launch ads) | Meta Marketing API advanced access | Approval-dependent, as before |
 | Custom domains for landing pages | Per-client domain setup on Vercel | Pages on mecgura.tech/p/… |
 | Auto-pay (card / UPI AutoPay) | **Razorpay Subscriptions** enabled on the MECGURA Razorpay account (Dashboard → Subscriptions; Razorpay may ask for activation), and on the existing webhook (`/api/webhooks/payments/razorpay`) tick the `subscription.*` events: authenticated, activated, charged, pending, halted, cancelled, completed, paused, resumed. Which methods appear (card, UPI AutoPay, eMandate) depends on what Razorpay enabled. | Pay-now links + payment reminders. Until enabled, “Turn on auto-pay” shows Razorpay's own error. |
+| Food ordering — pay now | The client's **own** Razorpay Key ID + Key Secret in Food orders → Settings, and on their Razorpay dashboard a webhook to `https://mecgura.tech/api/webhooks/food/<orgId>` (URL shown in Settings) with the `payment_link.paid` event and the same webhook secret pasted in Settings. | Room bill and pay-at-counter work with no setup; staff can tap “Mark paid”. |
 
 ## Store integrations (no approval needed)
 Shopify and WooCommerce use the store's own signed webhooks — the client connects them in **Integrations** and

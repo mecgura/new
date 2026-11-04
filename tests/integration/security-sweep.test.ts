@@ -276,6 +276,7 @@ describe("5. public and secret-protected surfaces", () => {
       ["POST", "/api/site-chat", "{}"],
       ["POST", "/api/webhooks/payments/razorpay", "{}"],
       ["POST", "/api/webhooks/payments/nope", "{}"],
+      ["POST", "/api/webhooks/food/someid", "{}"],
       ["GET", "/api/cron/campaigns", ""],
       ["GET", "/api/cron/weekly-report", ""],
       ["POST", "/api/automations/hooks/someid", "{}"],
@@ -345,6 +346,8 @@ describe("5. public and secret-protected surfaces", () => {
         "/api/webhooks/channels/[key]",
         "/api/webhooks/meta",
         "/api/webhooks/payments/[gateway]",
+        "/api/food-menu/[org]/[code]/order",
+        "/api/webhooks/food/[orgId]",
       ].sort()
     );
   });

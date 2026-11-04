@@ -90,6 +90,16 @@ Built in this run:
 - Migration `20261119120000_ai_tests_data_requests`.
 - Tests: `tests/integration/p3-features.test.ts` (7).
 
+### Food ordering service (QR → WhatsApp → kitchen)
+- New gated service `FOOD_ORDERING` (Admin → Clients → Services), nav “Food orders” (`/food`).
+- Models `FoodSettings`, `MenuItem`, `DiningSpot`, `FoodOrder`; migration `20261121090000_food_ordering`.
+- Public menu `/menu/<org>/<spot>` → draft order → guest sends “Confirm my order CODE” on WhatsApp → order placed,
+  confirmation (+ Razorpay payment link for pay-now) sent back; inbound handled before automations/AI.
+- Kitchen board with polling + sound, menu CRUD, rooms/tables with printable QR sheet, settings (secrets write-only,
+  encrypted), report. Guest gets WhatsApp updates on every status change.
+- Webhook `/api/webhooks/food/<orgId>` (HMAC verified, deduped) marks pay-now orders paid.
+- Tests: `tests/integration/food-ordering.test.ts`; security sweep covers the new public routes.
+
 ## 3. Pending external dependencies (nothing simulated)
 | Item | Needed from Guri |
 |---|---|
@@ -101,10 +111,11 @@ Built in this run:
 | Voice calling | Voice provider + DLT/consent (practice mode until then) |
 | SMS | DLT registration (not implemented by design) |
 | RCS | Google RBM approval (coming soon) |
+| Food ordering pay-now | Each client's own Razorpay keys + `payment_link.paid` webhook |
 
 ## 4. Test results (this run)
 - `npx tsc --noEmit`: pass
 - `npx eslint src tests --quiet`: pass
-- `npx vitest run`: **68 files, 578 tests passed** (was 65 files / 549 tests before this run)
+- `npx vitest run`: **69 files, 586 tests passed**
 - `next build`: compiled successfully
 - Browser smoke: Integrations readiness, Admin auto-pay tab, contact journey, deals forecast, AI tests tab, data card and Admin security all render with no page errors and no mobile overflow.

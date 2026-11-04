@@ -1,6 +1,6 @@
-import { Activity, ShieldAlert, Newspaper, BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, LayoutTemplate, LifeBuoy, Mail, Plug, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, TrendingUp, Users, UsersRound, Webhook, Workflow, type LucideIcon } from "lucide-react";
+import { UtensilsCrossed, Activity, ShieldAlert, Newspaper, BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, LayoutTemplate, LifeBuoy, Mail, Plug, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, TrendingUp, Users, UsersRound, Webhook, Workflow, type LucideIcon } from "lucide-react";
 
-export type NavService = "WHATSAPP_AUTOMATION" | "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "SOCIAL_MEDIA" | "LOYALTY" | "REVIEWS" | "LANDING_PAGES";
+export type NavService = "WHATSAPP_AUTOMATION" | "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "SOCIAL_MEDIA" | "LOYALTY" | "REVIEWS" | "LANDING_PAGES" | "FOOD_ORDERING";
 
 export type NavItem = {
   label: string;
@@ -32,6 +32,7 @@ export const CLIENT_NAV: NavSection[] = [
       { label: "Loyalty", icon: Gift, href: "/loyalty", service: "LOYALTY" },
       { label: "Reviews", icon: Star, href: "/reviews", service: "REVIEWS" },
       { label: "Landing pages", icon: LayoutTemplate, href: "/pages", service: "LANDING_PAGES" },
+      { label: "Food orders", icon: UtensilsCrossed, href: "/food", service: "FOOD_ORDERING" },
       { label: "WhatsApp", icon: MessageCircle, href: "/dashboard/whatsapp", also: ["/whatsapp"], service: "WHATSAPP_AUTOMATION" },
       { label: "Campaigns", icon: Megaphone, href: "/campaigns", service: "WHATSAPP_AUTOMATION" },
       { label: "Templates", icon: FileText, href: "/templates", service: "WHATSAPP_AUTOMATION" },

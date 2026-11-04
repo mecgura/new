@@ -17,7 +17,8 @@ export type RealtimeEvent =
   | { type: "team.presence"; userId: string; status: string }
   | { type: "campaign.updated"; campaignId: string }
   | { type: "template.updated"; templateId: string }
-  | { type: "automation.updated"; automationId: string };
+  | { type: "automation.updated"; automationId: string }
+  | { type: "food.order"; orderId: string; status: string };
 
 export interface RealtimeBroker {
   publish(organizationId: string, event: RealtimeEvent): void;

@@ -71,6 +71,10 @@ model Organization {
   settings                OrganizationSettings?
   subscriptions           Subscription[]
   autopays                Autopay[]
+  foodSettings            FoodSettings?
+  menuItems               MenuItem[]
+  diningSpots             DiningSpot[]
+  foodOrders              FoodOrder[]
   whatsappAccounts        WhatsAppAccount[]
   channelAccounts         ChannelAccount[]
   voiceCalls              VoiceCall[]
@@ -2452,4 +2456,95 @@ model DataRequest {
 
   @@index([status, createdAt])
   @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// Food ordering (service FOOD_ORDERING): QR menu → order confirmed on WhatsApp → kitchen screen → status updates.
+// ---------------------------------------------------------------------------
+
+model FoodSettings {
+  id                     String   @id @default(cuid())
+  organizationId         String   @unique
+  whatsappAccountId      String? // the number guests confirm orders on
+  venueName              String   @default("")
+  paymentModes           String   @default("[\"room_bill\",\"counter\"]") // JSON subset of pay_now | room_bill | counter
+  razorpayKeyId          String   @default("") // the client's own Razorpay key id (money goes to the client)
+  encryptedKeySecret     String   @default("")
+  encryptedWebhookSecret String   @default("")
+  taxPercent             Float    @default(0)
+  welcomeNote            String   @default("")
+  acceptingOrders        Boolean  @default(true)
+  updatedAt              DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model MenuItem {
+  id             String   @id @default(cuid())
+  organizationId String
+  category       String   @default("Menu")
+  name           String
+  description    String   @default("")
+  pricePaise     Int
+  imageUrl       String   @default("")
+  veg            Boolean  @default(true)
+  available      Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, category, sortOrder])
+}
+
+// A room or table with its own QR code.
+model DiningSpot {
+  id             String   @id @default(cuid())
+  organizationId String
+  label          String // "Room 204", "Table 7"
+  code           String // short, unique per workspace (used in the QR link)
+  kind           String   @default("table") // room | table | other
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, code])
+}
+
+model FoodOrder {
+  id             String    @id @default(cuid())
+  organizationId String
+  number         Int // per workspace, increasing
+  code           String    @unique // 6 characters the guest sends on WhatsApp to confirm
+  spotLabel      String    @default("")
+  contactId      String?
+  conversationId String?
+  guestName      String    @default("")
+  items          String    @default("[]") // JSON: [{ itemId, name, qty, pricePaise }]
+  note           String    @default("")
+  subtotalPaise  Int       @default(0)
+  taxPaise       Int       @default(0)
+  totalPaise     Int       @default(0)
+  // draft (made on the menu page) → placed (confirmed on WhatsApp) → accepted → preparing → ready → delivered | cancelled
+  status         String    @default("draft")
+  paymentMode    String    @default("counter") // pay_now | room_bill | counter
+  paymentStatus  String    @default("pending") // pending | paid | unpaid (room bill / counter until marked paid)
+  paymentLinkId  String    @default("")
+  paymentLinkUrl String    @default("")
+  paidAt         DateTime?
+  placedAt       DateTime?
+  acceptedAt     DateTime?
+  readyAt        DateTime?
+  deliveredAt    DateTime?
+  cancelledAt    DateTime?
+  cancelReason   String    @default("")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status, createdAt])
 }

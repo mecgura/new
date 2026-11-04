@@ -501,6 +501,15 @@ export async function receiveInbound(organizationId: string, whatsappAccountId: 
       console.error("[flows] submission failed:", e);
     }
   }
+  // Food ordering: a message carrying a menu-page order code confirms that order (nothing else answers it).
+  if (input.type === "text" && input.body) {
+    const { handleFoodInbound } = await import("@/services/food/food");
+    const food = await handleFoodInbound(organizationId, { contactId: contact.id, conversationId: conv.id, text: input.body, profileName: input.profileName ?? "" }).catch((e) => {
+      console.error("[food] order confirmation failed:", e);
+      return false;
+    });
+    if (food) return { conversationId: conv.id, messageId: msg.id, contactId: contact.id };
+  }
   const quotedTemplate = replyTo?.type === "template" ? ((JSON.parse(replyTo.payload || "{}") as { templateId?: string }).templateId ?? null) : null;
   const automationHandled = await emitAutomationEvent(organizationId, {
     type: "inbound",

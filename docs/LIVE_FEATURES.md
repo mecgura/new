@@ -42,6 +42,10 @@ one-by-one WhatsApp), site editor.
   and optional fallback in Admin → Integrations readiness.
 - **Integrations readiness** (Admin): every outside service with a verified status — LIVE only after a real check.
 - **Security** (Admin): failed sign-ins, flagged IPs, permission denials, sensitive actions, admin sign-ins, workspace deletion requests.
+- **Food ordering (QR → WhatsApp → kitchen)** — separate service, enabled per client in Admin → Clients → Services.
+  Guests scan a room/table QR, pick items, confirm on WhatsApp; the kitchen screen gets the order (with a beep),
+  Accept → Preparing → Ready → Delivered sends the guest a WhatsApp update at each step. Payment: pay now
+  (the client's own Razorpay payment link), room bill or pay at counter. Printable QR sheet and a sales report.
 
 ## Not built yet (on the list)
 See `DEVELOPMENT_STATUS.md`.

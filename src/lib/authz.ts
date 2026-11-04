@@ -96,6 +96,8 @@ export const ORG_PERMISSIONS = {
   "ads:manage": ["CLIENT_OWNER", "MANAGER"], // create, start, pause click-to-WhatsApp ads
   "ads:connect": ["CLIENT_OWNER"], // link the ad account
   "appointments:manage": ["CLIENT_OWNER", "MANAGER", "AGENT"],
+  "food:kitchen": ["CLIENT_OWNER", "MANAGER", "AGENT"],
+  "food:manage": ["CLIENT_OWNER", "MANAGER"],
   // Developer access: API keys are owner-only; webhooks are owner/manager
   "api:read": ["CLIENT_OWNER", "MANAGER"], // usage + request logs, key list (never the secret)
   "api:manage": ["CLIENT_OWNER"], // create / rotate / revoke keys
@@ -157,6 +159,8 @@ export const PERMISSION_LABELS: Partial<Record<OrgPermission, string>> = {
   "ads:manage": "Create and run click-to-WhatsApp ads",
   "ads:connect": "Connect the ad account",
   "appointments:manage": "Confirm appointments",
+  "food:kitchen": "Kitchen screen: update food orders",
+  "food:manage": "Manage menu, rooms/tables and food settings",
   "api:read": "View API usage and logs",
   "api:manage": "Create, rotate and revoke API keys",
   "webhooks:read": "View webhook endpoints",
