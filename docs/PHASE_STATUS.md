@@ -87,3 +87,20 @@ _(newest last)_
 - UI `/loyalty` (`src/components/loyalty/loyalty-app.tsx`): Overview, Customers, Referrals, Rewards, Settings.
 - Tests `tests/integration/loyalty.test.ts` (7). Suite 478/478, build OK, browser smoke OK.
 - Retention/win-back: uses the existing "Drip: win back" automation (tag "Win back"); lapsed count shown on Overview.
+
+### Stage 3: Reviews & reputation ✅ (2026-11-04)
+- New gated client service `REVIEWS` ("Reviews & reputation"); sidebar "Reviews"; permissions
+  `reviews:read|send|manage`; route guard `src/services/reviews/route-guard.ts`.
+- Schema: `ReviewRequest` (token, location, status sent/failed/opened/rated, channel, rating, comment, escalated,
+  resolved, Google click), `OrganizationSettings.reviews`. Migration `prisma/migrations/20261108090000_reviews`.
+- Service `src/services/reviews/reviews.ts`: settings (locations with Google review links, message with {name}/{link},
+  fallback approved template, low-rating threshold, cooldown), send requests (chat message inside the 24-hour window,
+  approved template outside it, or "links only"; skips opted-out and cooldown), public feedback page `/f/[token]`
+  (+ `POST /api/f/[token]`, `GET /api/f/[token]/google` counts the click and redirects), low ratings notify owners and
+  managers and tag the contact "Unhappy customer", resolve with a note, stats (average, distribution, open/response/
+  Google-click rates, 8-week trend, per location).
+- Google policy: the Google review button is shown to every customer after they rate (no review gating).
+- 🔧 Google Business Profile API (reading/replying to Google reviews, insights) needs Google's API access approval;
+  not built yet. Review links work today without it.
+- Tests `tests/integration/reviews.test.ts` (4) + sweep public list. Suite 482/482, build OK, browser smoke
+  (team pages + phone feedback page) OK.

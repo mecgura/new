@@ -119,6 +119,7 @@ model Organization {
   loyaltyRewards          LoyaltyReward[]
   referralCodes           ReferralCode[]
   referrals               Referral[]
+  reviewRequests          ReviewRequest[]
 
   @@index([status])
   @@index([createdAt])
@@ -304,6 +305,7 @@ model OrganizationSettings {
   packageAlerts      String    @default("{}") // JSON: usage alerts already sent this month
   leadScoring        String    @default("") // JSON scoring rules for Hot/Warm/Cold ("" = defaults)
   loyalty            String    @default("") // JSON loyalty + referral programme settings ("" = defaults, off)
+  reviews            String    @default("") // JSON review-request settings ("" = defaults)
   updatedAt          DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -541,6 +543,7 @@ model Contact {
   referralCode         ReferralCode?
   referralsMade        Referral[]            @relation("ReferralsMade")
   referredBy           Referral[]            @relation("ReferredBy")
+  reviewRequests       ReviewRequest[]
 
   @@unique([organizationId, phone])
   @@index([organizationId, lifecycle])
@@ -1994,4 +1997,35 @@ model Referral {
   @@unique([organizationId, refereeContactId])
   @@index([organizationId, status])
   @@index([referrerContactId])
+}
+
+// ---------------------------------------------------------------------------
+// Reviews & reputation (client service REVIEWS): feedback requests on WhatsApp, private ratings, Google review links.
+// ---------------------------------------------------------------------------
+model ReviewRequest {
+  id              String    @id @default(cuid())
+  organizationId  String
+  contactId       String
+  token           String    @unique
+  location        String    @default("")
+  status          String    @default("sent") // sent | failed | opened | rated
+  channel         String    @default("") // session | template | link
+  error           String    @default("")
+  rating          Int?
+  comment         String    @default("")
+  escalated       Boolean   @default(false)
+  resolvedAt      DateTime?
+  resolvedNote    String    @default("")
+  sentAt          DateTime  @default(now())
+  openedAt        DateTime?
+  ratedAt         DateTime?
+  googleClickedAt DateTime?
+  actorId         String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, sentAt])
+  @@index([organizationId, escalated, resolvedAt])
+  @@index([contactId, sentAt])
 }
