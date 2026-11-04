@@ -308,6 +308,62 @@ export function knowledgeText(cfg: AgentConfig): string {
   return out.join("\n\n") || "(No knowledge base yet.)";
 }
 
+const STOPWORDS = new Set("the and for you your are with this that have what when where which from will can our not but any how all was has its who why may per get got does did into than then them they also just like want need please kya hai hain aur ka ki ke ko se me mein".split(" "));
+const words = (s: string) => (s.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []).filter((w) => !STOPWORDS.has(w));
+
+/** Splits long text into ~1,200-character passages on paragraph boundaries. */
+export function passages(text: string, size = 1200): string[] {
+  const out: string[] = [];
+  let cur = "";
+  for (const para of text.split(/\n{2,}|\n(?=[-•*] )/)) {
+    if (cur && cur.length + para.length > size) {
+      out.push(cur.trim());
+      cur = "";
+    }
+    if (para.length > size) {
+      for (let i = 0; i < para.length; i += size) out.push(para.slice(i, i + size).trim());
+    } else cur += (cur ? "\n\n" : "") + para;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out.filter(Boolean);
+}
+
+export const MAX_EXTRA_CHARS = 12_000;
+
+/**
+ * Document text that didn't fit the fixed knowledge budget is still searchable:
+ * the passages that best match the customer's latest messages are added for
+ * that one reply (keyword overlap, rarer words count more).
+ */
+export function relevantPassages(cfg: AgentConfig, query: string, budget = MAX_EXTRA_CHARS): string {
+  let fixed = MAX_DOC_CHARS;
+  const overflow: { doc: string; text: string }[] = [];
+  for (const d of cfg.documents) {
+    const keep = Math.max(0, Math.min(fixed, d.content.length));
+    fixed -= keep;
+    if (d.content.length > keep) overflow.push({ doc: d.name, text: d.content.slice(keep) });
+  }
+  if (!overflow.length) return "";
+  const q = new Set(words(query));
+  if (!q.size) return "";
+  const chunks = overflow.flatMap((o) => passages(o.text).map((t, i) => ({ doc: o.doc, i, t, w: new Set(words(t)) })));
+  const df = new Map<string, number>();
+  for (const c of chunks) for (const w of c.w) if (q.has(w)) df.set(w, (df.get(w) ?? 0) + 1);
+  const scored = chunks
+    .map((c) => ({ ...c, score: [...q].reduce((s, w) => s + (c.w.has(w) ? Math.log(1 + chunks.length / (df.get(w) ?? 1)) : 0), 0) }))
+    .filter((c) => c.score > 0)
+    .sort((a, b) => b.score - a.score);
+  const picked: typeof scored = [];
+  let used = 0;
+  for (const c of scored) {
+    if (used + c.t.length > budget) continue;
+    picked.push(c);
+    used += c.t.length;
+  }
+  if (!picked.length) return "";
+  return "# More from the documents (matched to this conversation)\n" + picked.map((c) => `## ${c.doc} (part ${c.i + 1})\n${c.t}`).join("\n\n");
+}
+
 export function systemPrompt(cfg: AgentConfig): string {
   const a = cfg.actions;
   const rules = [

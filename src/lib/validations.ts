@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { partialNoDefaults } from "@/lib/schema-utils";
 import { LIBRARY_IDS } from "@/lib/automation-library";
 import { SERVICE_KEYS } from "@/lib/catalog";
 import { DEFAULT_AUTH_OPTIONS, HEADER_TYPES, TEMPLATE_CATEGORIES } from "@/lib/templates";
@@ -672,7 +673,7 @@ export const aiAgentSchema = z.object({
     })
     .default({ keywords: ["agent", "human", "talk to someone", "call me"], assign: "auto", userId: "", message: "Sure — I'm connecting you with our team. Someone will reply here shortly.", resume: "manual", resumeAfterHours: 24 }),
 });
-export const aiAgentUpdateSchema = aiAgentSchema.partial();
+export const aiAgentUpdateSchema = partialNoDefaults(aiAgentSchema);
 export const aiStatusSchema = z.object({ status: z.enum(["active", "paused"]) });
 export const aiTestSchema = z.object({
   history: z.array(z.object({ role: z.enum(["customer", "business"]), text: z.string().max(2000) })).max(30).default([]),

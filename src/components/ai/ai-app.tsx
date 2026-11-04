@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Bot, CalendarCheck, FileText, FlaskConical, History, ListChecks, Pause, Play, Plus, RotateCcw, Save, Send, Settings2, Trash2, Upload, UserRound, X } from "lucide-react";
+import { Bot, CalendarCheck, FileText, FlaskConical, Globe, History, IndianRupee, ListChecks, Pause, Play, Plus, RefreshCw, RotateCcw, Save, Send, Settings2, ThumbsDown, ThumbsUp, Trash2, Upload, UserRound, Undo2, X } from "lucide-react";
 import {
   Alert,
   Badge,
@@ -36,8 +36,9 @@ import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/client-api";
 import { COLLECTABLE_FIELDS, DEMO_LABEL, RESUME_LABELS, type AiAction, type AiActionsConfig, type AiHandoffConfig, type AiKnowledge, type KbItem } from "@/lib/ai";
 import { istFmt } from "@/components/campaigns/types";
+import { UsageTab, VersionsTab } from "@/components/ai/ai-studio-panels";
 
-type Doc = { id: string; name: string; mimeType: string; sizeBytes: number; createdAt: string };
+type Doc = { id: string; name: string; mimeType: string; sizeBytes: number; sourceUrl?: string; syncedAt?: string | null; createdAt: string };
 type Agent = {
   id: string;
   name: string;
@@ -67,6 +68,8 @@ const TABS = [
   { id: "actions", label: "Actions & handoff", icon: ListChecks },
   { id: "test", label: "Test chat", icon: FlaskConical },
   { id: "activity", label: "Activity", icon: History },
+  { id: "versions", label: "Versions", icon: Undo2, manage: true },
+  { id: "usage", label: "Usage & cost", icon: IndianRupee, manage: true },
   { id: "appointments", label: "Appointments", icon: CalendarCheck },
 ] as const;
 
@@ -231,7 +234,7 @@ export function AiApp({ orgId, canManage, initialTab }: { orgId: string; canMana
           </Card>
 
           <nav aria-label="AI agent sections" className="mb-4 flex gap-1 overflow-x-auto border-b border-app-border">
-            {TABS.map((t) => (
+            {TABS.filter((t) => canManage || !("manage" in t)).map((t) => (
               <button key={t.id} type="button" onClick={() => setTab(t.id)} aria-current={tab === t.id ? "page" : undefined} className={cn("flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-small", tab === t.id ? "border-app-primary text-app-text" : "border-transparent text-app-muted hover:text-app-text")}>
                 <t.icon className="size-4" aria-hidden="true" /> {t.label}
               </button>
@@ -243,6 +246,8 @@ export function AiApp({ orgId, canManage, initialTab }: { orgId: string; canMana
           {tab === "actions" ? <ActionsTab key={agent.id} draft={draft} setDraft={setDraft} members={data.members} disabled={!canManage} /> : null}
           {tab === "test" ? <TestTab key={agent.id} url={`${base}/agents/${agent.id}/test`} live={data.liveConfigured} dirty={dirty} canManage={canManage} /> : null}
           {tab === "activity" ? <ActivityTab key={agent.id} url={`${base}/agents/${agent.id}/interactions`} /> : null}
+          {tab === "versions" && canManage ? <VersionsTab<Agent> key={agent.id} url={`${base}/agents/${agent.id}/versions`} dirty={dirty} onRestored={(a) => { replace(a); setDraft(editable(a)); setSaved(JSON.stringify(editable(a))); }} /> : null}
+          {tab === "usage" && canManage ? <UsageTab url={`${base}/usage`} /> : null}
         </>
       )}
       {tab === "appointments" || (!agent && initialTab === "appointments") ? <AppointmentsTab base={`${base}/appointments`} /> : null}
@@ -385,7 +390,17 @@ function KnowledgeTab({ draft, setDraft, agent, base, disabled, onDocs }: { draf
   const fileRef = React.useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = React.useState(false);
   const [paste, setPaste] = React.useState(false);
+  const [web, setWeb] = React.useState(false);
+  const [refreshing, setRefreshing] = React.useState("");
 
+  async function refresh(id: string) {
+    setRefreshing(id);
+    const r = await apiFetch<{ document: Doc & { changed: boolean } }>(`${base}/documents/${id}/refresh`, { method: "POST", body: {} });
+    setRefreshing("");
+    if (!r.ok) return toast(r.error, "error");
+    onDocs(agent.documents.map((d) => (d.id === id ? r.data.document : d)));
+    toast(r.data.document.changed ? "Page updated" : "No changes on the page");
+  }
   async function upload(file: File) {
     setUploading(true);
     const form = new FormData();
@@ -436,15 +451,16 @@ function KnowledgeTab({ draft, setDraft, agent, base, disabled, onDocs }: { draf
       <Card>
         <CardHeader
           title="Documents"
-          description="Plain text only: .txt, .md or .csv up to 200 KB, or paste text. PDFs and Word files aren't read — paste their text instead. Documents save immediately."
+          description="PDF, Word (.docx), TXT, Markdown, CSV or HTML files up to 10 MB (200 KB of text each), website pages, or pasted text. Scanned PDFs have no text — paste it instead. Documents save immediately."
           action={
             !disabled ? (
               <div className="flex gap-2">
+                <Button size="sm" variant="secondary" onClick={() => setWeb(true)}><Globe aria-hidden="true" /> Website page</Button>
                 <Button size="sm" variant="secondary" onClick={() => setPaste(true)}>Paste text</Button>
                 <Button size="sm" variant="secondary" onClick={() => fileRef.current?.click()} loading={uploading}>
                   <Upload aria-hidden="true" /> Upload
                 </Button>
-                <input ref={fileRef} type="file" accept=".txt,.md,.csv,text/plain,text/markdown,text/csv" className="hidden" aria-hidden="true" tabIndex={-1} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+                <input ref={fileRef} type="file" accept=".pdf,.docx,.txt,.md,.csv,.html,.htm,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,text/html" className="hidden" aria-hidden="true" tabIndex={-1} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
               </div>
             ) : null
           }
@@ -456,11 +472,19 @@ function KnowledgeTab({ draft, setDraft, agent, base, disabled, onDocs }: { draf
             <ul className="divide-y divide-app-border">
               {agent.documents.map((d) => (
                 <li key={d.id} className="flex items-center gap-3 py-2">
-                  <FileText className="size-4 shrink-0 text-app-subtle" aria-hidden="true" />
+                  {d.sourceUrl ? <Globe className="size-4 shrink-0 text-app-subtle" aria-hidden="true" /> : <FileText className="size-4 shrink-0 text-app-subtle" aria-hidden="true" />}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-small text-app-text">{d.name}</span>
-                    <span className="block text-caption text-app-subtle">{(d.sizeBytes / 1000).toFixed(1)} KB · {d.mimeType}</span>
+                    <span className="block truncate text-caption text-app-subtle">
+                      {(d.sizeBytes / 1000).toFixed(1)} KB · {d.sourceUrl ? d.sourceUrl : DOC_LABEL[d.mimeType] ?? d.mimeType}
+                      {d.sourceUrl && d.syncedAt ? ` · read ${istFmt.format(new Date(d.syncedAt))}` : ""}
+                    </span>
                   </span>
+                  {!disabled && d.sourceUrl ? (
+                    <IconButton label={`Refresh ${d.name}`} onClick={() => refresh(d.id)} disabled={refreshing === d.id}>
+                      <RefreshCw className={cn(refreshing === d.id && "animate-spin")} aria-hidden="true" />
+                    </IconButton>
+                  ) : null}
                   {!disabled ? (
                     <IconButton label={`Remove ${d.name}`} onClick={() => removeDoc(d.id)}>
                       <Trash2 aria-hidden="true" />
@@ -472,8 +496,47 @@ function KnowledgeTab({ draft, setDraft, agent, base, disabled, onDocs }: { draf
           )}
         </CardBody>
       </Card>
+      {web ? <WebsiteModal url={`${base}/documents/import`} onClose={() => setWeb(false)} onAdded={(d) => { setWeb(false); onDocs([...agent.documents, d]); toast("Page added"); }} /> : null}
       {paste ? <PasteModal url={`${base}/documents`} onClose={() => setPaste(false)} onAdded={(d) => { setPaste(false); onDocs([...agent.documents, d]); toast("Document added"); }} /> : null}
     </div>
+  );
+}
+
+const DOC_LABEL: Record<string, string> = {
+  "application/pdf": "PDF",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "Word",
+  "text/plain": "Text",
+  "text/markdown": "Markdown",
+  "text/csv": "CSV",
+  "text/html": "HTML",
+};
+
+function WebsiteModal({ url, onClose, onAdded }: { url: string; onClose: () => void; onAdded: (d: Doc) => void }) {
+  const [link, setLink] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    const r = await apiFetch<{ document: Doc }>(url, { method: "POST", body: { url: link.trim() } });
+    setBusy(false);
+    if (!r.ok) return setError(Object.values(r.details ?? {})[0]?.[0] ?? r.error);
+    onAdded(r.data.document);
+  }
+  return (
+    <Modal open onClose={onClose} title="Add a website page">
+      <form onSubmit={submit} className="space-y-4">
+        {error ? <Alert tone="danger">{error}</Alert> : null}
+        <p className="text-small text-app-muted">The agent reads the text of one public page — your services, menu, price list or FAQ page. Add each important page separately, and use Refresh when it changes.</p>
+        <Field id="web-url" label="Page link">
+          <Input type="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://yourshop.in/services" maxLength={2000} />
+        </Field>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" loading={busy} disabled={!/^https:\/\/\S+\.\S+/.test(link.trim())}>Read page</Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -683,19 +746,28 @@ function TestTab({ url, live, dirty, canManage }: { url: string; live: boolean; 
   );
 }
 
-type Interaction = { id: string; mode: string; kind: string; input: string; output: string; actions: AiAction[]; model: string; inputTokens: number; outputTokens: number; error: string; isTest: boolean; contact: { name: string; phone: string } | null; createdAt: string };
+type Interaction = { id: string; mode: string; kind: string; input: string; output: string; actions: AiAction[]; model: string; inputTokens: number; outputTokens: number; error: string; isTest: boolean; feedback: string; feedbackNote: string; contact: { name: string; phone: string } | null; createdAt: string };
 const KIND_TONE: Record<string, BadgeTone> = { reply: "success", handoff: "warning", summary: "info", skipped: "neutral", error: "danger" };
 
 function ActivityTab({ url }: { url: string }) {
+  const toast = useToast();
   const [page, setPage] = React.useState(1);
+  const [filter, setFilter] = React.useState("");
   const [data, setData] = React.useState<{ interactions: Interaction[]; total: number } | null>(null);
   const [error, setError] = React.useState("");
   const load = React.useCallback(async () => {
-    const r = await apiFetch<{ interactions: Interaction[]; total: number }>(`${url}?page=${page}&pageSize=20`);
+    const r = await apiFetch<{ interactions: Interaction[]; total: number }>(`${url}?page=${page}&pageSize=20${filter ? `&feedback=${filter}` : ""}`);
     if (!r.ok) return setError(r.error);
     setError("");
     setData(r.data);
-  }, [url, page]);
+  }, [url, page, filter]);
+  async function rate(x: Interaction, rating: "good" | "bad") {
+    const next = x.feedback === rating ? "" : rating;
+    const note = next === "bad" ? (window.prompt("What was wrong? (optional — helps fix the knowledge)") ?? "") : "";
+    const r = await apiFetch<{ interaction: { feedback: string; feedbackNote: string } }>(`${url}/${x.id}/feedback`, { method: "POST", body: { rating: next, note } });
+    if (!r.ok) return toast(r.error, "error");
+    setData((d) => (d ? { ...d, interactions: d.interactions.map((i) => (i.id === x.id ? { ...i, ...r.data.interaction } : i)) } : d));
+  }
   React.useEffect(() => {
     const t = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(t);
@@ -704,7 +776,18 @@ function ActivityTab({ url }: { url: string }) {
   if (!data) return <LoadingState />;
   return (
     <Card>
-      <CardHeader title="Activity" description="Every reply, handoff, summary and skip — live and demo are labelled." />
+      <CardHeader
+        title="Activity"
+        description="Every reply, handoff, summary and skip — live and demo are labelled. Rate replies 👍 / 👎 so the team can see what to fix."
+        action={
+          <Select aria-label="Filter by rating" value={filter} onChange={(e) => { setPage(1); setFilter(e.target.value); }} className="w-40">
+            <option value="">All activity</option>
+            <option value="bad">Rated 👎</option>
+            <option value="good">Rated 👍</option>
+            <option value="any">Any rating</option>
+          </Select>
+        }
+      />
       {!data.interactions.length ? (
         <EmptyState icon={History} title="No activity yet" description="Use the test chat or activate the agent." />
       ) : (
@@ -735,6 +818,17 @@ function ActivityTab({ url }: { url: string }) {
                     {x.input ? <p className="text-app-muted">“{x.input.slice(0, 160)}”</p> : null}
                     {x.output ? <p className="mt-1 whitespace-pre-wrap text-app-text">{x.output.slice(0, 300)}</p> : null}
                     {x.error ? <p className="mt-1 text-red-300">{x.error}</p> : null}
+                    {x.output ? (
+                      <div className="mt-2 flex items-center gap-1">
+                        <IconButton label="Good reply" size="sm" onClick={() => rate(x, "good")} className={cn(x.feedback === "good" && "text-emerald-300")} aria-pressed={x.feedback === "good"}>
+                          <ThumbsUp aria-hidden="true" />
+                        </IconButton>
+                        <IconButton label="Bad reply" size="sm" onClick={() => rate(x, "bad")} className={cn(x.feedback === "bad" && "text-red-300")} aria-pressed={x.feedback === "bad"}>
+                          <ThumbsDown aria-hidden="true" />
+                        </IconButton>
+                        {x.feedbackNote ? <span className="text-caption text-app-subtle">“{x.feedbackNote}”</span> : null}
+                      </div>
+                    ) : null}
                   </TD>
                   <TD className="align-top text-caption text-app-muted">
                     {x.actions.length ? x.actions.map((a, i) => <p key={i}>{actionLabel(a)}</p>) : "—"}

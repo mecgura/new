@@ -184,3 +184,23 @@ _(newest last)_
 - Inbox "Waiting" tab with wait badges; `/inbox/monitor` for owners/managers (waiting chats, breaches, per-agent
   response times and CSAT, SLA settings); transcript download (`contacts:export`, audited).
 - Tests `tests/integration/inbox-sla.test.ts` (4). Suite 503/503, build OK, smoke OK.
+
+### Stage 9: AI studio upgrades ✅ (2026-11-04)
+- Schema: `AiAgentVersion`, `AiDocument.sourceUrl/syncedAt`, `AiInteraction.feedback/feedbackNote/feedbackById/feedbackAt`.
+  Migration `prisma/migrations/20261113090000_ai_studio`. Dependency `unpdf@1.8.1` (PDF text layer).
+- Knowledge files: PDF, Word (.docx), TXT, Markdown, CSV and HTML up to 10 MB (200 KB of text each); only the text is
+  kept (`src/lib/doc-extract.ts`). Scanned/password PDFs and old .doc files get a clear message instead.
+- Website pages: one public https page per document, fetched with the SSRF guard re-checked on every redirect,
+  3 MB / 10 s limits, scripts/nav/footer stripped; Refresh re-reads it. Rate-limited 20/hour per workspace.
+- Large documents: text beyond the fixed 60 K-character knowledge budget is no longer lost — passages that match the
+  customer's latest messages are added per reply (outside the cached prompt).
+- Versions: a copy of instructions/knowledge/actions/handoff is saved before each change (last 30); restore saves the
+  current settings first so it can be undone.
+- Reply feedback: 👍/👎 (+ note) on every AI reply in Activity, filter by rating; counts in usage.
+- Usage & cost: per-agent calls, replies, handoff rate, errors, ratings, tokens and estimated cost in ₹ from list
+  prices (`src/lib/ai-cost.ts`, `AI_USD_INR`, default 88). Demo replies cost nothing. Owners/managers only.
+- Bug fixed: under Zod 4 `.partial()` still applied defaults, so a PATCH with only some fields reset the others
+  (AI agent instructions/knowledge/actions/handoff, webhook description). New `partialNoDefaults()` helper.
+- Not built: OpenAI as an alternative agent model (the agent stays on Claude; OpenAI/Gemini remain for images and ad
+  copy in the admin studio). Multi-page website crawling (add pages one by one instead).
+- Tests `tests/integration/ai-knowledge.test.ts` (8). Suite 511/511, build OK, browser smoke OK (real PDF upload).

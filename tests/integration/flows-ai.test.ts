@@ -243,7 +243,7 @@ describe("AI agent", () => {
     form.set("file", new File(["%PDF-1.4"], "brochure.pdf", { type: "application/pdf" }));
     const pdf = await json(await agentDocs.POST(new Request("http://localhost:3000/x", { method: "POST", body: form, headers: { host: "localhost:3000" } }), P(t.orgId, { aid: agentId })));
     expect(pdf.status).toBe(400);
-    expect(String(pdf.body.error)).toMatch(/plain-text/);
+    expect(String(pdf.body.error)).toMatch(/PDF/); // a broken PDF is refused with a clear message
   });
 
   it("does nothing while in draft", async () => {

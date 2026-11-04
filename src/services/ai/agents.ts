@@ -14,10 +14,19 @@ type AgentInput = z.infer<typeof aiAgentSchema>;
 
 export const MAX_DOCUMENTS = 20;
 export const MAX_DOCUMENT_BYTES = 200_000;
-export const DOC_TYPES: Record<string, string> = { "text/plain": "txt", "text/markdown": "md", "text/csv": "csv" };
+export const DOC_TYPES: Record<string, string> = {
+  "text/plain": "txt",
+  "text/markdown": "md",
+  "text/csv": "csv",
+  "text/html": "html",
+  "application/pdf": "pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+};
+/** Largest file accepted for upload (the extracted text must still fit MAX_DOCUMENT_BYTES). */
+export const MAX_UPLOAD_BYTES = 10_000_000;
 
 const include = {
-  documents: { select: { id: true, name: true, mimeType: true, sizeBytes: true, createdAt: true }, orderBy: { createdAt: "asc" } },
+  documents: { select: { id: true, name: true, mimeType: true, sizeBytes: true, sourceUrl: true, syncedAt: true, createdAt: true }, orderBy: { createdAt: "asc" } },
   _count: { select: { interactions: true } },
 } satisfies Prisma.AiAgentInclude;
 type Row = Prisma.AiAgentGetPayload<{ include: typeof include }>;
@@ -61,6 +70,10 @@ export async function agentConfig(agent: AiAgent): Promise<AgentConfig> {
   ]);
   const p = agentParts(agent);
   return { name: agent.name, businessName: org?.name ?? "", instructions: agent.instructions, knowledge: p.knowledge, actions: p.actions, handoff: p.handoff, documents: docs };
+}
+
+export async function loadAgent(organizationId: string, id: string) {
+  return load(organizationId, id);
 }
 
 async function load(organizationId: string, id: string) {
@@ -145,10 +158,35 @@ export async function updateAgent(access: OrgAccess, id: string, input: Partial<
   if (input.knowledge !== undefined) data.knowledge = JSON.stringify(input.knowledge);
   if (input.actions !== undefined) data.actions = JSON.stringify(input.actions);
   if (input.handoff !== undefined) data.handoff = JSON.stringify(await validHandoff(orgId, input.handoff as AiHandoffConfig));
+  const changed = (["instructions", "knowledge", "actions", "handoff"] as const).some((k) => typeof data[k] === "string" && canon(data[k] as string) !== canon(before[k]));
+  if (changed) await saveVersion(before, access.user.id);
   await db.aiAgent.update({ where: { id: before.id }, data });
   if (before.status === "active" && input.accountIds !== undefined) await assertNoOverlap(orgId, id);
   await audit({ action: "ai_agent.updated", actorUserId: access.user.id, organizationId: orgId, targetType: "ai_agent", targetId: id, metadata: { fields: Object.keys(input) }, req });
   return getAgent(orgId, id);
+}
+
+export const MAX_VERSIONS = 30;
+
+/** JSON with sorted keys, so re-saving the same settings in another key order isn't a change. */
+function canon(s: string): string {
+  const sort = (v: unknown): unknown => (Array.isArray(v) ? v.map(sort) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, sort(x)])) : v);
+  try {
+    return JSON.stringify(sort(JSON.parse(s)));
+  } catch {
+    return s;
+  }
+}
+
+/** Keeps a copy of the agent's current behaviour settings before they change (newest 30 kept). */
+export async function saveVersion(a: Pick<AiAgent, "id" | "organizationId" | "instructions" | "knowledge" | "actions" | "handoff">, userId: string | null, note = "") {
+  const last = await db.aiAgentVersion.findFirst({ where: { agentId: a.id }, orderBy: { version: "desc" } });
+  if (last && last.instructions === a.instructions && canon(last.knowledge) === canon(a.knowledge) && canon(last.actions) === canon(a.actions) && canon(last.handoff) === canon(a.handoff)) return last;
+  const version = (last?.version ?? 0) + 1;
+  const v = await db.aiAgentVersion.create({ data: { organizationId: a.organizationId, agentId: a.id, version, instructions: a.instructions, knowledge: a.knowledge, actions: a.actions, handoff: a.handoff, note: note.slice(0, 200), createdById: userId } });
+  const old = await db.aiAgentVersion.findMany({ where: { agentId: a.id }, orderBy: { version: "desc" }, skip: MAX_VERSIONS, select: { id: true } });
+  if (old.length) await db.aiAgentVersion.deleteMany({ where: { id: { in: old.map((o) => o.id) } } });
+  return v;
 }
 
 /** One active agent per number, so a customer never gets two bots answering. */
@@ -187,18 +225,18 @@ export async function deleteAgent(access: OrgAccess, id: string, req?: Request) 
  * Knowledge documents: plain text only (TXT, Markdown, CSV, or pasted text).
  * The text is stored and given to the AI; the original file isn't kept.
  */
-export async function addDocument(access: OrgAccess, agentId: string, input: { name: string; mimeType: string; content: string }) {
+export async function addDocument(access: OrgAccess, agentId: string, input: { name: string; mimeType: string; content: string; sourceUrl?: string }) {
   const a = await load(access.organizationId, agentId);
   if (a.documents.length >= MAX_DOCUMENTS) throw new ApiError("VALIDATION_ERROR", `An agent can have at most ${MAX_DOCUMENTS} documents.`);
   const mime = input.mimeType.split(";")[0].trim().toLowerCase() || "text/plain";
-  if (!DOC_TYPES[mime]) throw new ApiError("VALIDATION_ERROR", "Only plain-text documents are supported (TXT, Markdown or CSV). For PDFs or Word files, paste the text instead.", { details: { file: ["Unsupported type"] } });
+  if (!DOC_TYPES[mime]) throw new ApiError("VALIDATION_ERROR", "Upload a PDF, Word (.docx), TXT, Markdown, CSV or HTML file, or paste the text.", { details: { file: ["Unsupported type"] } });
   const content = input.content.replace(/\u0000/g, "").trim();
   const size = Buffer.byteLength(content, "utf8");
   if (!content) throw new ApiError("VALIDATION_ERROR", "The document is empty.", { details: { file: ["Empty"] } });
   if (size > MAX_DOCUMENT_BYTES) throw new ApiError("VALIDATION_ERROR", `Documents can be up to ${MAX_DOCUMENT_BYTES / 1000} KB of text.`, { details: { file: ["Too large"] } });
-  const d = await db.aiDocument.create({ data: { organizationId: access.organizationId, agentId: a.id, name: input.name.slice(0, 120) || "Document", mimeType: mime, sizeBytes: size, content } });
+  const d = await db.aiDocument.create({ data: { organizationId: access.organizationId, agentId: a.id, name: input.name.slice(0, 120) || "Document", mimeType: mime, sizeBytes: size, content, sourceUrl: input.sourceUrl ?? "", syncedAt: input.sourceUrl ? new Date() : null } });
   await db.aiAgent.update({ where: { id: a.id }, data: { updatedAt: new Date() } });
-  return { id: d.id, name: d.name, mimeType: d.mimeType, sizeBytes: d.sizeBytes, createdAt: d.createdAt };
+  return { id: d.id, name: d.name, mimeType: d.mimeType, sizeBytes: d.sizeBytes, sourceUrl: d.sourceUrl, syncedAt: d.syncedAt, createdAt: d.createdAt };
 }
 
 export async function deleteDocument(access: OrgAccess, agentId: string, docId: string) {
@@ -207,9 +245,9 @@ export async function deleteDocument(access: OrgAccess, agentId: string, docId: 
   if (!r.count) throw new ApiError("NOT_FOUND", "Document not found.");
 }
 
-export async function listInteractions(organizationId: string, agentId: string, f: { page: number; pageSize: number }) {
+export async function listInteractions(organizationId: string, agentId: string, f: { page: number; pageSize: number; feedback?: "good" | "bad" | "any" }) {
   await load(organizationId, agentId);
-  const where = { organizationId, agentId };
+  const where: Prisma.AiInteractionWhereInput = { organizationId, agentId, ...(f.feedback === "any" ? { feedback: { not: "" } } : f.feedback ? { feedback: f.feedback } : {}) };
   const [rows, total] = await Promise.all([
     db.aiInteraction.findMany({ where, orderBy: { createdAt: "desc" }, skip: (f.page - 1) * f.pageSize, take: f.pageSize }),
     db.aiInteraction.count({ where }),
@@ -234,6 +272,8 @@ export async function listInteractions(organizationId: string, agentId: string, 
       outputTokens: r.outputTokens,
       error: r.error,
       isTest: r.isTest,
+      feedback: r.feedback,
+      feedbackNote: r.feedbackNote,
       conversationId: r.conversationId,
       contact: contacts.find((c) => c.id === r.contactId) ?? null,
       createdAt: r.createdAt,

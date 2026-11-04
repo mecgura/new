@@ -1041,24 +1041,46 @@ model AiAgent {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy    User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
   documents    AiDocument[]
   interactions AiInteraction[]
+  versions     AiAgentVersion[]
 
   @@index([organizationId, status])
 }
 
-// Knowledge-base document (text extracted at upload; the original file is not stored).
-model AiDocument {
+// Saved copy of an agent's instructions and settings, taken before each change.
+model AiAgentVersion {
   id             String   @id @default(cuid())
   organizationId String
   agentId        String
-  name           String
-  mimeType       String   @default("text/plain")
-  sizeBytes      Int      @default(0)
-  content        String
+  version        Int
+  instructions   String   @default("")
+  knowledge      String   @default("{}")
+  actions        String   @default("{}")
+  handoff        String   @default("{}")
+  note           String   @default("")
+  createdById    String?
   createdAt      DateTime @default(now())
+
+  agent AiAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, version])
+}
+
+// Knowledge-base document (text extracted at upload; the original file is not stored).
+model AiDocument {
+  id             String    @id @default(cuid())
+  organizationId String
+  agentId        String
+  name           String
+  mimeType       String    @default("text/plain")
+  sizeBytes      Int       @default(0)
+  content        String
+  sourceUrl      String    @default("") // set when imported from a website page
+  syncedAt       DateTime?
+  createdAt      DateTime  @default(now())
 
   agent AiAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
@@ -1066,22 +1088,26 @@ model AiDocument {
 }
 
 model AiInteraction {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   organizationId String
   agentId        String
   conversationId String?
   contactId      String?
   mode           String // live | demo
   kind           String // reply | summary | handoff | skipped | error
-  input          String   @default("")
-  output         String   @default("")
-  actions        String   @default("[]") // JSON: tools used (qualify, collect, book, transfer…)
-  model          String   @default("")
-  inputTokens    Int      @default(0)
-  outputTokens   Int      @default(0)
-  error          String   @default("")
-  isTest         Boolean  @default(false)
-  createdAt      DateTime @default(now())
+  input          String    @default("")
+  output         String    @default("")
+  actions        String    @default("[]") // JSON: tools used (qualify, collect, book, transfer…)
+  model          String    @default("")
+  inputTokens    Int       @default(0)
+  outputTokens   Int       @default(0)
+  error          String    @default("")
+  isTest         Boolean   @default(false)
+  feedback       String    @default("") // "" | good | bad
+  feedbackNote   String    @default("")
+  feedbackById   String?
+  feedbackAt     DateTime?
+  createdAt      DateTime  @default(now())
 
   agent AiAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 

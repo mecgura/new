@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { partialNoDefaults } from "@/lib/schema-utils";
 
 /** Events an endpoint can subscribe to. */
 export const WEBHOOK_EVENTS = {
@@ -34,7 +35,7 @@ export const webhookEndpointSchema = z.object({
   description: z.string().trim().max(200).optional().default(""),
   events: z.array(z.enum(WEBHOOK_EVENT_LIST as [WebhookEvent, ...WebhookEvent[]])).min(1, "Choose at least one event").max(WEBHOOK_EVENT_LIST.length),
 });
-export const webhookEndpointUpdateSchema = webhookEndpointSchema.partial().extend({ status: z.enum(["active", "disabled"]).optional() });
+export const webhookEndpointUpdateSchema = partialNoDefaults(webhookEndpointSchema).extend({ status: z.enum(["active", "disabled"]).optional() });
 
 // ---------------------------------------------------------------------------
 // Signing:  X-Mecgura-Signature: t=<unix seconds>,v1=<hex hmac-sha256(secret, "<t>.<raw body>")>

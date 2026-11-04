@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AI_MODEL, AiError, aiConfigured } from "@/providers/anthropic/reply";
-import { systemPrompt, type AgentConfig, type AiAction, type AiTurn, type ChatTurn, type KnownContact } from "@/lib/ai";
+import { relevantPassages, systemPrompt, type AgentConfig, type AiAction, type AiTurn, type ChatTurn, type KnownContact } from "@/lib/ai";
 
 /** Most tool rounds per customer message — the loop always ends. */
 export const MAX_TOOL_ROUNDS = 4;
@@ -128,6 +128,9 @@ export async function liveRespond(
     { type: "text", text: systemPrompt(cfg), cache_control: { type: "ephemeral" } },
     { type: "text", text: knownLine },
   ];
+  const recent = history.filter((h) => h.role === "customer").slice(-3).map((h) => h.text).join("\n");
+  const extra = relevantPassages(cfg, recent);
+  if (extra) system.push({ type: "text", text: extra });
   const toolDefs = tools(cfg);
   const actions: AiAction[] = [];
   let inputTokens = 0;
