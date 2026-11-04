@@ -127,7 +127,7 @@ export function ContactProfile({ orgId, contactId, perms, accounts }: { orgId: s
                   <Field id="pf-life" label="Type"><Select value={form.lifecycle ?? "lead"} onChange={set("lifecycle")}><option value="lead">Lead</option><option value="customer">Customer</option></Select></Field>
                   <Field id="pf-status" label="Lead status"><Select value={form.leadStatus ?? "new"} onChange={set("leadStatus")} className="capitalize">{LEAD_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</Select></Field>
                   <Field id="pf-source" label="Source">
-                    <Select value={form.source ?? "manual"} onChange={set("source")}>{["manual", "whatsapp", "import", "api"].map((s) => <option key={s} value={s}>{s}</option>)}</Select>
+                    <Select value={form.source ?? "manual"} onChange={set("source")}>{["manual", "whatsapp", "import", "api", "landing"].map((s) => <option key={s} value={s}>{s}</option>)}</Select>
                   </Field>
                   <div className="sm:col-span-2 space-y-2">
                     <Checkbox label="Suppress — never send messages to this contact" checked={suppressed} onChange={(e) => setSuppressed(e.target.checked)} />

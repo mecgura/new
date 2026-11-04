@@ -120,6 +120,8 @@ model Organization {
   referralCodes           ReferralCode[]
   referrals               Referral[]
   reviewRequests          ReviewRequest[]
+  landingPages            LandingPage[]
+  landingImages           LandingImage[]
 
   @@index([status])
   @@index([createdAt])
@@ -2028,4 +2030,82 @@ model ReviewRequest {
   @@index([organizationId, sentAt])
   @@index([organizationId, escalated, resolvedAt])
   @@index([contactId, sentAt])
+}
+
+// ---------------------------------------------------------------------------
+// Landing pages (client service LANDING_PAGES): block-based pages at /p/<workspace>/<slug>, forms into the CRM.
+// ---------------------------------------------------------------------------
+model LandingPage {
+  id              String    @id @default(cuid())
+  organizationId  String
+  slug            String
+  title           String
+  status          String    @default("draft") // draft | published
+  blocks          String    @default("[]") // JSON blocks being edited
+  publishedBlocks String    @default("[]") // JSON blocks visitors see
+  theme           String    @default("{}") // JSON { accent, whatsapp }
+  seoTitle        String    @default("")
+  seoDescription  String    @default("")
+  noIndex         Boolean   @default(false)
+  publishedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  events       LandingEvent[]
+  submissions  LandingSubmission[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, updatedAt])
+}
+
+model LandingEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  pageId         String
+  kind           String // view | click | submit
+  name           String   @default("") // which button (whatsapp | cta | link)
+  visitor        String   @default("")
+  utmSource      String   @default("")
+  utmMedium      String   @default("")
+  utmCampaign    String   @default("")
+  referrerHost   String   @default("")
+  createdAt      DateTime @default(now())
+
+  page LandingPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId, createdAt])
+  @@index([organizationId, createdAt])
+}
+
+model LandingSubmission {
+  id             String   @id @default(cuid())
+  organizationId String
+  pageId         String
+  contactId      String?
+  data           String   @default("{}") // JSON name/phone/email/message
+  consent        Boolean  @default(false)
+  utmSource      String   @default("")
+  utmMedium      String   @default("")
+  utmCampaign    String   @default("")
+  createdAt      DateTime @default(now())
+
+  page LandingPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId, createdAt])
+  @@index([organizationId, createdAt])
+}
+
+model LandingImage {
+  id             String   @id @default(cuid())
+  organizationId String
+  mimeType       String   @default("image/webp")
+  width          Int      @default(0)
+  height         Int      @default(0)
+  data           Bytes
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
 }

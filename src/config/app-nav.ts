@@ -1,6 +1,6 @@
-import { BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, Mail, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, Users, UsersRound, Webhook, Workflow, type LucideIcon } from "lucide-react";
+import { BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, LayoutTemplate, Mail, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, Users, UsersRound, Webhook, Workflow, type LucideIcon } from "lucide-react";
 
-export type NavService = "WHATSAPP_AUTOMATION" | "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "SOCIAL_MEDIA" | "LOYALTY" | "REVIEWS";
+export type NavService = "WHATSAPP_AUTOMATION" | "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "SOCIAL_MEDIA" | "LOYALTY" | "REVIEWS" | "LANDING_PAGES";
 
 export type NavItem = {
   label: string;
@@ -31,6 +31,7 @@ export const CLIENT_NAV: NavSection[] = [
       { label: "Deals", icon: Handshake, href: "/deals" },
       { label: "Loyalty", icon: Gift, href: "/loyalty", service: "LOYALTY" },
       { label: "Reviews", icon: Star, href: "/reviews", service: "REVIEWS" },
+      { label: "Landing pages", icon: LayoutTemplate, href: "/pages", service: "LANDING_PAGES" },
       { label: "WhatsApp", icon: MessageCircle, href: "/dashboard/whatsapp", also: ["/whatsapp"], service: "WHATSAPP_AUTOMATION" },
       { label: "Campaigns", icon: Megaphone, href: "/campaigns", service: "WHATSAPP_AUTOMATION" },
       { label: "Templates", icon: FileText, href: "/templates", service: "WHATSAPP_AUTOMATION" },

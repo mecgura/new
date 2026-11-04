@@ -11,7 +11,7 @@ export type Ctx = { organizationId: string; actorUserId: string | null; req?: Re
 
 export const LIFECYCLES = ["lead", "customer"] as const;
 export const LEAD_STATUSES = ["new", "contacted", "qualified", "proposal", "won", "lost"] as const;
-export const CONTACT_SOURCES = ["manual", "whatsapp", "import", "api"] as const;
+export const CONTACT_SOURCES = ["manual", "whatsapp", "import", "api", "landing"] as const;
 export const CONTACT_TABS = ["all", "customers", "leads", "opted_in", "opted_out", "suppressed"] as const;
 export type ContactTab = (typeof CONTACT_TABS)[number];
 

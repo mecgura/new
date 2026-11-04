@@ -68,6 +68,9 @@ export const ORG_PERMISSIONS = {
   "reviews:read": ["CLIENT_OWNER", "MANAGER", "AGENT"],
   "reviews:send": ["CLIENT_OWNER", "MANAGER", "AGENT"],
   "reviews:manage": ["CLIENT_OWNER", "MANAGER"],
+  // Landing pages
+  "pages:read": ["CLIENT_OWNER", "MANAGER", "AGENT"],
+  "pages:manage": ["CLIENT_OWNER", "MANAGER"],
   // Team presence
   "team:status": ["CLIENT_OWNER", "MANAGER", "AGENT"],
   // Templates & campaigns (business-initiated messaging)
@@ -133,6 +136,7 @@ export const PERMISSION_LABELS: Partial<Record<OrgPermission, string>> = {
   "loyalty:manage": "Set loyalty rules, rewards and approve referrals",
   "reviews:send": "Send feedback requests",
   "reviews:manage": "Review settings and resolve unhappy feedback",
+  "pages:manage": "Build and publish landing pages",
   "members:manage": "Manage team",
   "whatsapp:manage": "Connect WhatsApp numbers",
   "channels:manage": "Connect email, web chat and social inboxes",

@@ -104,3 +104,22 @@ _(newest last)_
   not built yet. Review links work today without it.
 - Tests `tests/integration/reviews.test.ts` (4) + sweep public list. Suite 482/482, build OK, browser smoke
   (team pages + phone feedback page) OK.
+
+### Stage 4: Landing page builder ✅ (2026-11-04)
+- New gated client service `LANDING_PAGES` ("Landing pages"); sidebar "Landing pages" → `/pages`; permissions
+  `pages:read|manage`; route guard `src/services/landing/route-guard.ts`. Contact source `landing` added.
+- Schema: `LandingPage` (draft blocks vs published blocks, theme, SEO, noindex), `LandingEvent` (view/click/submit
+  with UTM + referrer), `LandingSubmission`, `LandingImage` (WebP bytes). Migration
+  `prisma/migrations/20261109090000_landing_pages`. New dependency `qrcode@1.5.4`.
+- Blocks `src/lib/landing.ts`: hero, text, features, services, pricing, image, YouTube video, testimonials, FAQ, lead
+  form, CTA, QR, address & timings. Starters: blank, salon, clinic, real estate, coaching, restaurant.
+- Service `src/services/landing/pages.ts`: CRUD, unique addresses, duplicate, publish checks (WhatsApp number,
+  consent text, links), image upload (sharp → WebP ≤1600px), public page, view/click beacon, form → contact
+  (create or update, tag, consent only when ticked, note, optional deal), honeypot, team alert, analytics (views,
+  visitors, leads, conversion, sources, clicks, daily, latest entries).
+- Public: `/p/<workspace-slug>/<page-slug>` (SEO metadata, OG, canonical, noindex option, floating WhatsApp, QR),
+  `/api/lp/[id]/event`, `/api/lp/[id]/submit`, `/api/lp-image/[id]`. QR PNG download for the team.
+- UI: list with 30-day stats + template picker (`pages-list.tsx`), builder (`builder.tsx`) with drag-and-drop block
+  list, desktop/phone preview (container queries), block editor, page settings + SEO, publish/unpublish, analytics.
+- 🔧 Custom domains per page need Vercel domain setup per client; not self-serve yet ("ask MECGURA").
+- Tests `tests/integration/landing.test.ts` (6). Suite 488/488, build OK, browser smoke OK.

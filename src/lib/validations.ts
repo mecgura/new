@@ -346,7 +346,7 @@ const contactFields = {
   email: z.string().trim().toLowerCase().email("Enter a valid email").max(255).or(z.literal("")),
   lifecycle: z.enum(["lead", "customer"]),
   leadStatus: z.enum(["new", "contacted", "qualified", "proposal", "won", "lost"]),
-  source: z.enum(["manual", "whatsapp", "import", "api"]),
+  source: z.enum(["manual", "whatsapp", "import", "api", "landing"]),
   ownerUserId: idSchema.nullable(),
   customFields: customFieldsSchema,
   suppressed: z.boolean(),
@@ -420,7 +420,7 @@ export const audienceFiltersSchema = z.object({
   leadStatuses: z.array(z.enum(["new", "contacted", "qualified", "proposal", "won", "lost"])).max(6).default([]),
   lifecycles: z.array(z.enum(["lead", "customer"])).max(2).default([]),
   consent: z.array(z.enum(AUDIENCE_CONSENT)).max(3).default([]),
-  sources: z.array(z.enum(["manual", "whatsapp", "import", "api"])).max(4).default([]),
+  sources: z.array(z.enum(["manual", "whatsapp", "import", "api", "landing"])).max(5).default([]),
 });
 export type AudienceFilters = z.infer<typeof audienceFiltersSchema>;
 
@@ -511,7 +511,7 @@ export const flowNodeSchema = z.discriminatedUnion("type", [
       templateId: short(64),
       tagName: short(40),
       leadStatus: z.enum(["", "new", "contacted", "qualified", "proposal", "won", "lost"]).default(""),
-      sources: z.array(z.enum(["manual", "whatsapp", "import", "api"])).max(4).default(["whatsapp", "manual", "api"]),
+      sources: z.array(z.enum(["manual", "whatsapp", "import", "api", "landing"])).max(5).default(["whatsapp", "manual", "api"]),
       schedule: z
         .object({ frequency: z.enum(["daily", "weekly"]).default("daily"), time: z.string().max(5).default("10:00"), days: z.array(z.number().int().min(0).max(6)).max(7).default([]), tagName: short(40) })
         .default({ frequency: "daily", time: "10:00", days: [], tagName: "" }),

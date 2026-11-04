@@ -85,7 +85,7 @@ export const OPERATORS_FOR: Record<ConditionField, Operator[]> = {
 };
 
 export const LEAD_STATUS_VALUES = ["new", "contacted", "qualified", "proposal", "won", "lost"];
-export const SOURCE_VALUES = ["manual", "whatsapp", "import", "api"];
+export const SOURCE_VALUES = ["manual", "whatsapp", "import", "api", "landing"];
 export const CONSENT_VALUES = ["opted_in", "opted_out", "unknown"];
 
 // ---------------------------------------------------------------------------
