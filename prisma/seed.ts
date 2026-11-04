@@ -40,6 +40,7 @@ async function main() {
   }
 
   await seedPlans();
+  await repriceNov2026();
   await backfillClientDefaults();
   await grandfatherAiAssistant();
   await seedDemoTenants();
@@ -54,10 +55,10 @@ async function main() {
 async function seedPlans() {
   const ALL = ["campaigns", "automations", "flows", "ai_agent", "api", "webhooks", "analytics"];
   const plans = [
-    { slug: "starter", name: "Starter", description: "For small businesses getting started on WhatsApp", priceMonthly: 199900, maxUsers: 3, maxWhatsAppNumbers: 1, maxMonthlyMessages: 2000, maxContacts: 1000, maxCampaigns: 5, maxAutomations: 3, maxAiReplies: 0, maxApiRequests: 0, features: ["campaigns", "automations", "flows", "analytics"], sortOrder: 1 },
-    { slug: "growth", name: "Growth", description: "For growing teams running campaigns", priceMonthly: 499900, maxUsers: 10, maxWhatsAppNumbers: 2, maxMonthlyMessages: 10000, maxContacts: 10000, maxCampaigns: 20, maxAutomations: 10, maxAiReplies: 2000, maxApiRequests: 10000, features: ALL, sortOrder: 2 },
-    { slug: "pro", name: "Pro", description: "For high-volume businesses and agencies", priceMonthly: 999900, maxUsers: 25, maxWhatsAppNumbers: 5, maxMonthlyMessages: 50000, maxContacts: 50000, maxCampaigns: 100, maxAutomations: 50, maxAiReplies: 10000, maxApiRequests: 100000, features: ALL, sortOrder: 3 },
-    { slug: "enterprise", name: "Enterprise", description: "Custom volumes, numbers and support — arranged with our team", priceMonthly: 2499900, maxUsers: -1, maxWhatsAppNumbers: -1, maxMonthlyMessages: -1, maxContacts: -1, maxCampaigns: -1, maxAutomations: -1, maxAiReplies: -1, maxApiRequests: -1, features: ALL, selfServe: false, sortOrder: 4 },
+    { slug: "starter", name: "Starter", description: "For small businesses getting started on WhatsApp", priceMonthly: 149900, priceYearly: 1499000, trialDays: 7, maxUsers: 3, maxWhatsAppNumbers: 1, maxMonthlyMessages: 2000, maxContacts: 1000, maxCampaigns: 5, maxAutomations: 3, maxAiReplies: 0, maxApiRequests: 0, features: ["campaigns", "automations", "flows", "analytics"], sortOrder: 1 },
+    { slug: "growth", name: "Growth", description: "For growing teams running campaigns", priceMonthly: 349900, priceYearly: 3499000, trialDays: 14, maxUsers: 10, maxWhatsAppNumbers: 2, maxMonthlyMessages: 10000, maxContacts: 10000, maxCampaigns: 20, maxAutomations: 10, maxAiReplies: 2000, maxApiRequests: 10000, features: ALL, sortOrder: 2 },
+    { slug: "pro", name: "Pro", description: "For high-volume businesses and agencies", priceMonthly: 749900, priceYearly: 7499000, trialDays: 14, maxUsers: 25, maxWhatsAppNumbers: 5, maxMonthlyMessages: 50000, maxContacts: 50000, maxCampaigns: 100, maxAutomations: 50, maxAiReplies: 10000, maxApiRequests: 100000, features: ALL, sortOrder: 3 },
+    { slug: "enterprise", name: "Enterprise", description: "Custom volumes, numbers and support — arranged with our team", priceMonthly: 1999900, maxUsers: -1, maxWhatsAppNumbers: -1, maxMonthlyMessages: -1, maxContacts: -1, maxCampaigns: -1, maxAutomations: -1, maxAiReplies: -1, maxApiRequests: -1, features: ALL, selfServe: false, sortOrder: 4 },
   ];
   let created = 0;
   for (const p of plans) {
@@ -66,6 +67,30 @@ async function seedPlans() {
     created++;
   }
   if (created) console.log(`Seeded ${created} plan(s) (edit them in Admin → Billing & Plans)`);
+}
+
+/**
+ * One time (Nov 2026): prices brought in line with the Indian market (AiSensy, Interakt, WATI, Gallabox),
+ * yearly billing at 10× monthly (2 months free) and free trials. A plan is only changed while it still has
+ * its original seeded price — anything the admin already edited is left alone. Existing clients keep the price
+ * they signed up at (subscriptions snapshot it); new prices apply to new sign-ups and plan changes.
+ */
+async function repriceNov2026() {
+  const key = "migration:pricing_2026_11";
+  if (await db.siteSetting.findUnique({ where: { key } })) return;
+  const changes = [
+    { slug: "starter", from: 199900, priceMonthly: 149900, priceYearly: 1499000, trialDays: 7 },
+    { slug: "growth", from: 499900, priceMonthly: 349900, priceYearly: 3499000, trialDays: 14 },
+    { slug: "pro", from: 999900, priceMonthly: 749900, priceYearly: 7499000, trialDays: 14 },
+    { slug: "enterprise", from: 2499900, priceMonthly: 1999900, priceYearly: 0, trialDays: 0 },
+  ];
+  let changed = 0;
+  for (const c of changes) {
+    const r = await db.plan.updateMany({ where: { slug: c.slug, priceMonthly: c.from }, data: { priceMonthly: c.priceMonthly, priceYearly: c.priceYearly, trialDays: c.trialDays } });
+    changed += r.count;
+  }
+  await db.siteSetting.create({ data: { key, value: new Date().toISOString() } });
+  if (changed) console.log(`Updated prices of ${changed} plan(s) (Nov 2026 pricing).`);
 }
 
 /**

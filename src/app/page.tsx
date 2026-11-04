@@ -19,6 +19,7 @@ import { FestivalPromoBar, FestivalPromoPopup, FestivePriceTag, type PublicPromo
 import { FestivalCalendar } from "@/components/festival/festival-calendar";
 import { FloatingChat } from "@/components/home/floating-chat";
 import { ScrollReveal } from "@/components/home/scroll-reveal";
+import { getBillingSettings } from "@/services/billing/settings";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -53,6 +54,14 @@ const FAQ = [
   { q: "Where is my data?", a: "In your private workspace. See our Privacy Policy for what is stored and how to request deletion." },
 ];
 
+async function loadTaxPercent() {
+  try {
+    return (await getBillingSettings()).taxPercent;
+  } catch {
+    return 0;
+  }
+}
+
 async function loadPlans() {
   try {
     return await db.plan.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } });
@@ -68,7 +77,7 @@ const phoneLabel = /^91\d{10}$/.test(whatsappDigits) ? `+91 ${whatsappDigits.sli
 const wa = (text: string) => `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(text)}`;
 
 export default async function Landing({ searchParams }: { searchParams: Promise<{ festivalPreview?: string; phase?: string }> }) {
-  const [plans, session, content, festivals, sp, hero] = await Promise.all([loadPlans(), auth().catch(() => null), getHomeContent(), getFestivals(), searchParams, getHero().catch(() => null)]);
+  const [plans, session, content, festivals, sp, hero, taxPercent] = await Promise.all([loadPlans(), auth().catch(() => null), getHomeContent(), getFestivals(), searchParams, getHero().catch(() => null), loadTaxPercent()]);
   const heroSlides = (hero ?? []).filter((x) => x.enabled).map(({ id, category, business, headline, description, photoUrl, outcome, chat }) => ({ id, category, business, headline, description, photoUrl, outcome, chat }));
   const today = istToday();
   // ?festivalPreview=<id>&phase=pre|live lets the Super Admin see any festival's offer early; everyone else gets today's.
@@ -223,7 +232,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
         {plans.length ? (
           <section id="pricing" aria-labelledby="pricing-title" className="mx-auto max-w-6xl px-4 py-14">
             <h2 id="pricing-title" data-reveal className="text-center font-display text-3xl font-bold sm:text-4xl">Simple plans</h2>
-            <p data-reveal className="wa-muted mx-auto mt-3 max-w-xl text-center">Platform plans in rupees. Meta&apos;s WhatsApp charges are billed by Meta separately.</p>
+            <p data-reveal className="wa-muted mx-auto mt-3 max-w-xl text-center">Platform plans in rupees{taxPercent ? `, + ${taxPercent}% GST` : ""}. Meta&apos;s WhatsApp charges are billed by Meta separately.{plans.some((p) => p.priceYearly > 0) ? " Pay yearly and get 2 months free." : ""}</p>
             <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
               {plans.map((p, i) => (
                 <div key={p.id} data-reveal style={{ "--d": `${i * 0.07}s` } as React.CSSProperties} className={`wa-card flex flex-col p-6 ${plans.length >= 3 && i === 1 ? "!border-[#128c7e] ring-2 ring-[#128c7e]/30" : ""}`}>
@@ -244,6 +253,9 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
                       {p.selfServe ? <span className="wa-muted text-small font-medium"> / month</span> : null}
                     </p>
                   )}
+                  {p.selfServe && p.priceYearly > 0 ? <p className="mt-1 text-small font-semibold text-[#128c7e]">or {formatINR(p.priceYearly)} / year{p.priceMonthly > 0 && p.priceYearly < p.priceMonthly * 12 ? ` (save ${formatINR(p.priceMonthly * 12 - p.priceYearly)})` : ""}</p> : null}
+                  {p.selfServe && p.trialDays > 0 ? <p className="mt-1 text-small font-semibold">{p.trialDays}-day free trial</p> : null}
+                  {!p.selfServe && p.priceMonthly > 0 ? <p className="wa-muted mt-1 text-small">From {formatINR(p.priceMonthly)} / month</p> : null}
                   <p className="wa-muted mt-1 text-small">{p.description}</p>
                   <a href={wa(`Hi MECGURA, I am interested in the ${p.name} plan${planDiscount && festival ? ` with the ${festival.name} offer${festival.offerCode ? ` (${festival.offerCode})` : ""}` : ""}.`)} data-track="plan_whatsapp" className="wa-btn wa-btn-ghost mt-5 !min-h-11 w-full text-small">
                     {p.selfServe ? "Get started" : "Talk to us"}

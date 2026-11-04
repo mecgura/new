@@ -314,3 +314,18 @@ See `docs/LIVE_FEATURES.md` and `docs/CONFIGURATION_REQUIRED.md`.
   other websites and tracking parameters; every request goes through the SSRF guard; 45 s budget per run
   ("run it again to read more"); pages already in the knowledge base are skipped. Rate limit 5 runs/hour.
 - Route `/ai/agents/[aid]/documents/crawl`. Tests `tests/integration/ai-crawl.test.ts` (4). Suite 544/544, build OK.
+
+### Pricing update (Nov 2026)
+Researched Indian WhatsApp-platform prices (monthly, ex-GST, Oct–Nov 2026 sources): AiSensy ₹1,500 / ₹3,200;
+Interakt ₹2,799 / ₹3,799; WATI ₹2,999 / ₹6,499 / ₹18,499; Gallabox ₹2,999 / ₹6,999 / ₹16,999.
+New MECGURA list prices (one-time seed step `repriceNov2026`, only for plans still at their original seeded price —
+admin edits are never overwritten; existing clients keep the price they signed up at):
+
+| Plan | Before | Now / month | Yearly (2 months free) | Trial |
+|---|---|---|---|---|
+| Starter | ₹1,999 | ₹1,499 | ₹14,990 | 7 days |
+| Growth | ₹4,999 | ₹3,499 | ₹34,990 | 14 days |
+| Pro | ₹9,999 | ₹7,499 | ₹74,990 | 14 days |
+| Enterprise | ₹24,999 | from ₹19,999 | custom | — |
+
+Homepage pricing now shows the yearly option, savings, trial length and the GST note from Billing settings.
