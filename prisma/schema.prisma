@@ -44,6 +44,7 @@ model User {
   aiAgents              AiAgent[]
   apiKeys               ApiKey[]
   webhookEndpoints      WebhookEndpoint[]
+  ownedDeals            Deal[]               @relation("DealOwner")
 
   @@index([email])
   @@index([role])
@@ -111,6 +112,8 @@ model Organization {
   wallet                  Wallet?
   leadSources             LeadSource[]
   payments                Payment[]
+  pipelineStages          PipelineStage[]
+  deals                   Deal[]
 
   @@index([status])
   @@index([createdAt])
@@ -277,24 +280,25 @@ model OrganizationService {
 }
 
 model OrganizationSettings {
-  id                String   @id @default(cuid())
-  organizationId    String   @unique
-  timezone          String   @default("Asia/Kolkata")
-  locale            String   @default("en-IN")
-  currency          String   @default("INR")
-  notificationEmail String   @default("")
+  id                 String    @id @default(cuid())
+  organizationId     String    @unique
+  timezone           String    @default("Asia/Kolkata")
+  locale             String    @default("en-IN")
+  currency           String    @default("INR")
+  notificationEmail  String    @default("")
   // JSON-encoded weekly hours (SQLite + PostgreSQL compatible)
-  businessHours     String   @default("{}")
-  weeklyReportAt    DateTime? // last weekly summary sent
+  businessHours      String    @default("{}")
+  weeklyReportAt     DateTime? // last weekly summary sent
   // Who pays Meta for WhatsApp messages: "client_pays" (client's own card on their WABA) or "prepaid_wallet"
   // (MECGURA pays Meta and charges the client's wallet Meta's rate plus a markup).
-  metaBillingMode    String   @default("client_pays")
-  prepaidMarkupPaise Int      @default(20)
+  metaBillingMode    String    @default("client_pays")
+  prepaidMarkupPaise Int       @default(20)
   // Message package top-ups bought on top of the plan (used after the monthly allowance; they don't expire).
-  creditMarketing    Int      @default(0)
-  creditUtility      Int      @default(0)
-  packageAlerts      String   @default("{}") // JSON: usage alerts already sent this month
-  updatedAt         DateTime @updatedAt
+  creditMarketing    Int       @default(0)
+  creditUtility      Int       @default(0)
+  packageAlerts      String    @default("{}") // JSON: usage alerts already sent this month
+  leadScoring        String    @default("") // JSON scoring rules for Hot/Warm/Cold ("" = defaults)
+  updatedAt          DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
@@ -399,25 +403,25 @@ model PhoneNumber {
 // One onboarding attempt / credential set. Secrets are AES-256-GCM encrypted
 // (lib/crypto) and never returned by any API.
 model WhatsAppConnection {
-  id                   String    @id @default(cuid())
-  organizationId       String
-  method               String // embedded_signup | coexistence | manual | demo
-  status               String    @default("pending") // pending | active | failed | cancelled | disconnected
-  isDemo               Boolean   @default(false)
-  stateHash            String?   @unique // embedded-signup CSRF state (SHA-256)
-  stateExpiresAt       DateTime?
-  wabaRecordId         String?
-  encryptedAccessToken String    @default("")
-  tokenLast4           String    @default("")
-  encryptedAppSecret   String    @default("")
-  encryptedRegistrationPin String @default("") // two-step verification PIN set when MECGURA registers the number
-  tokenObtainedAt      DateTime?
-  error                String    @default("")
-  createdById          String?
-  connectedAt          DateTime?
-  disconnectedAt       DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  id                       String    @id @default(cuid())
+  organizationId           String
+  method                   String // embedded_signup | coexistence | manual | demo
+  status                   String    @default("pending") // pending | active | failed | cancelled | disconnected
+  isDemo                   Boolean   @default(false)
+  stateHash                String?   @unique // embedded-signup CSRF state (SHA-256)
+  stateExpiresAt           DateTime?
+  wabaRecordId             String?
+  encryptedAccessToken     String    @default("")
+  tokenLast4               String    @default("")
+  encryptedAppSecret       String    @default("")
+  encryptedRegistrationPin String    @default("") // two-step verification PIN set when MECGURA registers the number
+  tokenObtainedAt          DateTime?
+  error                    String    @default("")
+  createdById              String?
+  connectedAt              DateTime?
+  disconnectedAt           DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
   organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   waba         WhatsAppBusinessAccount? @relation(fields: [wabaRecordId], references: [id], onDelete: SetNull)
@@ -525,6 +529,7 @@ model Contact {
   automationExecutions AutomationExecution[]
   flowSubmissions      FlowSubmission[]
   appointments         Appointment[]
+  deals                Deal[]
 
   @@unique([organizationId, phone])
   @@index([organizationId, lifecycle])
@@ -1385,7 +1390,6 @@ model Lead {
   @@index([sourceId, createdAt])
 }
 
-
 // A connected non-WhatsApp inbox: email address, web chat widget, Instagram, Messenger.
 model ChannelAccount {
   id             String   @id @default(cuid())
@@ -1421,7 +1425,6 @@ model ContactIdentity {
   @@index([contactId])
 }
 
-
 // An AI phone call to a contact. Live calls need a voice provider; until one is connected every call is a labelled simulation.
 model VoiceCall {
   id              String    @id @default(cuid())
@@ -1451,7 +1454,6 @@ model VoiceCall {
   @@index([organizationId, createdAt])
   @@index([contactId])
 }
-
 
 // The Meta ad account + Facebook Page this workspace's click-to-WhatsApp ads run under. The access token (for example an agency
 // system-user token with partner access to the client's ad account) is encrypted and never returned.
@@ -1738,7 +1740,9 @@ model LeaveRequest {
 // MECGURA's own marketing (Super Admin): leads, website traffic and the content plan
 // ---------------------------------------------------------------------------
 
-/** A prospect for MECGURA itself: from the website chat, the MECGURA WhatsApp number, a tracked link or added by hand. */
+/**
+ * A prospect for MECGURA itself: from the website chat, the MECGURA WhatsApp number, a tracked link or added by hand.
+ */
 model MarketingLead {
   id             String    @id @default(cuid())
   name           String    @default("")
@@ -1782,7 +1786,9 @@ model MarketingLeadActivity {
   @@index([leadId, createdAt])
 }
 
-/** Anonymous website analytics: a page view or a tracked click. No IP or personal data is stored. */
+/**
+ * Anonymous website analytics: a page view or a tracked click. No IP or personal data is stored.
+ */
 model MarketingEvent {
   id        String   @id @default(cuid())
   kind      String // visit | click
@@ -1798,7 +1804,9 @@ model MarketingEvent {
   @@index([createdAt])
 }
 
-/** MECGURA's own content calendar. */
+/**
+ * MECGURA's own content calendar.
+ */
 model MarketingPost {
   id        String   @id @default(cuid())
   date      String // YYYY-MM-DD (India)
@@ -1814,16 +1822,77 @@ model MarketingPost {
   @@index([date])
 }
 
-/** An image made with AI in Admin → Marketing → AI studio (kept so it can be downloaded or used in a creative later). */
+/**
+ * An image made with AI in Admin → Marketing → AI studio (kept so it can be downloaded or used in a creative later).
+ */
 model MarketingImage {
-  id        String   @id @default(cuid())
-  provider  String // gemini | openai
-  prompt    String
-  aspect    String   @default("post") // post | square | story | landscape
-  mimeType  String   @default("image/png")
-  data      Bytes
+  id          String   @id @default(cuid())
+  provider    String // gemini | openai
+  prompt      String
+  aspect      String   @default("post") // post | square | story | landscape
+  mimeType    String   @default("image/png")
+  data        Bytes
   createdById String?
-  createdAt DateTime @default(now())
+  createdAt   DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// CRM deals: one sales pipeline per workspace with its own stages.
+// ---------------------------------------------------------------------------
+model PipelineStage {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  color          String   @default("slate")
+  position       Int      @default(0)
+  probability    Int      @default(10) // % chance a deal here is won (weighted forecast)
+  kind           String   @default("open") // open | won | lost
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deals        Deal[]
+
+  @@unique([organizationId, position])
+}
+
+model Deal {
+  id              String    @id @default(cuid())
+  organizationId  String
+  contactId       String
+  stageId         String
+  title           String
+  valuePaise      Int       @default(0)
+  ownerUserId     String?
+  expectedCloseAt DateTime?
+  status          String    @default("open") // open | won | lost (mirrors the stage kind)
+  lostReason      String    @default("")
+  stageChangedAt  DateTime  @default(now())
+  closedAt        DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  stage        PipelineStage  @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  owner        User?          @relation("DealOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  activities   DealActivity[]
+
+  @@index([organizationId, stageId])
+  @@index([organizationId, status, closedAt])
+  @@index([contactId])
+}
+
+model DealActivity {
+  id        String   @id @default(cuid())
+  dealId    String
+  kind      String // created | stage | value | note | owner | won | lost
+  text      String
+  actorId   String?
+  createdAt DateTime @default(now())
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId, createdAt])
 }

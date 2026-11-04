@@ -1,0 +1,72 @@
+# MECGURA platform expansion: status
+
+Single source of truth for the "complete platform" programme. Each stage is built, tested and deployed on its own so the
+live product never breaks. Update this file at the end of every stage.
+
+Legend: ✅ live and tested · 🟡 partly there · ❌ missing · 🔧 needs external setup (CONFIGURATION REQUIRED) · ⏳ coming soon by design
+
+## Ground rules (from the brief, kept on every stage)
+
+- Stack stays: Next.js 16, Prisma 7 (SQLite dev / Postgres prod), DB-backed scheduler (`src/services/scheduler.ts`,
+  `Job`-style tables). No Redis: there is none in production, and adding one is a hosting change, not a feature.
+- Every new client module: tenant-scoped queries, `requireOrgAccess` + permission, service gate where the module is sold
+  separately, audit log, rate limit on writes, zod validation, tests (RBAC + tenant isolation via `security-sweep`).
+- No fake data, no unofficial WhatsApp, no unsolicited bulk messages, SMS/RCS stay unavailable, Ads Manager stays
+  approval-dependent, AI Calling stays practice mode until a provider is configured.
+
+## Audit: brief vs. what exists (2026-11-04)
+
+| # | Area | Status | What exists | Main gaps |
+|---|------|--------|-------------|-----------|
+| A | Landing page builder | ❌ | Admin edits MECGURA's own site (`/admin/site`) | Whole client builder |
+| B | Advanced CRM | 🟡 | Contacts, tags, custom fields, lead status, notes, owner, import/export, bulk actions, consent | Deals + Kanban + custom stages, scoring rules, saved views, targets, merge, CLV |
+| C | Automation engine | ✅/🟡 | Visual builder, 10 triggers, condition, delay, webhook, AI node, assign, versions, draft/publish, execution history per step, test runs, retries with backoff, loop protection, max depth, recovery (retry from failed step) | Switch node, human approval node, reusable components, execution analytics page |
+| D | AI agent studio | 🟡 | Multiple agents, per-agent knowledge + txt/md/csv docs, actions (qualify/collect/book/transfer/summarise), handoff, interactions log | PDF/DOCX, website ingestion, OpenAI provider for agents, playground, prompt versions, feedback, token cost |
+| E | Omnichannel inbox | 🟡 | WhatsApp + email + web chat + Messenger + IG, ContactIdentity, assignment, notes | SLA rules/alerts, CSAT, workload balancing, collision indicator, export |
+| F | Campaign intelligence | 🟡 | Campaigns with delivery/read/reply stats, attribution, compliance checks, festival planner | A/B variants, cost/ROI, frequency caps, recommendations |
+| G | Referral & loyalty | ❌ | — | Whole module |
+| H | Reviews & reputation | 🟡 | "Feedback & Google review" automation | Review requests module, feedback form, history, analytics; GBP API 🔧 |
+| I | Google Business & local | ❌/🔧 | — | GBP API needs Google approval 🔧; UTM builder can be built |
+| J | Social media | 🟡 | Calendar, FB/IG scheduling + publishing, statuses | Approval workflow, AI captions/hashtags, media library, analytics |
+| K | AI calling | 🟡 (practice) | Practice mode, transcripts, summaries | Queue/scheduling/consent/sentiment: keep practice until provider 🔧 |
+| L | SaaS admin & revenue | 🟡 | Plans, subscriptions, invoices (GST), payments, wallet ledger, low balance alerts, agreements, KYC | MRR/ARR/churn dashboard, annual plans, trials, failed-payment recovery |
+| M | Support & service health | 🟡 | Admin health page, audit log, webhook event log | Support tickets, provider health, failed jobs dashboard |
+| N | Internal marketing | ✅ | Leads, tracking, calendar, AI images/copy, creative maker | — |
+| O | Internal outreach | ✅ | Maps finder, email finder, one-by-one WhatsApp, email + unsubscribe | Suppression list view |
+| 3 | Service entitlements | 🟡 | `OrganizationService` per client, gated modules (sidebar + API), plan feature keys, plan limits, usage counters | Per-feature beta flags, client "My services & usage" page |
+
+## Build order (by value to clients and to MECGURA sales)
+
+1. **B. CRM deals pipeline**: custom stages, Kanban, deal value/expected revenue, lead scoring rules (Hot/Warm/Cold)
+2. **G. Referral & loyalty**
+3. **H. Review requests & feedback**
+4. **A. Landing page builder** (block-based, forms → CRM, WhatsApp button, QR, UTM, analytics)
+5. **M. Support tickets** + service health
+6. **L. Revenue analytics** (MRR/ARR/churn)
+7. **F. Campaign A/B + ROI**
+8. **E. Inbox SLA + CSAT**
+9. **D. AI studio upgrades**
+10. **J. Social approvals + AI captions**
+11. **C. Switch / approval nodes, execution analytics**
+12. Integrations screens marked 🔧 (GBP, Google Ads, Shopify, WooCommerce, Zapier/Make/n8n via existing API + webhooks)
+
+## Stage log
+
+_(newest last)_
+
+### Stage 1: CRM deals pipeline ✅ (2026-11-04)
+- Schema: `PipelineStage` (unique workspace+position), `Deal`, `DealActivity`, `OrganizationSettings.leadScoring`.
+  Migration `prisma/migrations/20261106090000_deals`.
+- Service `src/services/crm/deals.ts`: default stages created on first open, stage editor (reorder/rename/add/remove,
+  one Won + one Lost, can't remove a stage with deals), deals CRUD with timeline, won → contact becomes customer,
+  lost → contact lost (if nothing else open), Kanban board, stats (open value, weighted forecast, won/lost this month,
+  90-day win rate, days to win, stuck >14 days, overdue, per-salesperson).
+- Scoring `src/lib/lead-scoring.ts`: configurable rules (tag, status, source, opt-in, email, recent message, open deal
+  value) → 0–100 → Hot/Warm/Cold thresholds.
+- API: `/api/organizations/[orgId]/deals` (GET board, POST), `/deals/[id]` (GET/PATCH/DELETE), `/deals/stats`,
+  `/deals/stages` (GET/PUT), `/deals/scoring` (GET/PUT). Permissions `deals:read|write|manage`.
+- UI: `/deals` (sidebar "Deals"), `src/components/crm/deals-app.tsx`: drag-and-drop board + mobile "Move to" select,
+  deal drawer with timeline and score reasons, stages and scoring editors, salesperson table.
+- Tests: `tests/integration/deals.test.ts` (6) + security sweep auto-covers the new routes. Suite 471/471, build OK,
+  browser smoke (desktop drag-drop + mobile) OK.
+- Not in this stage (next CRM pass): saved views, duplicate merge, sales targets, CLV/repeat purchase.
