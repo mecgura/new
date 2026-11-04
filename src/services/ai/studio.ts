@@ -5,7 +5,7 @@ import type { OrgAccess } from "@/lib/session";
 import { assertPublicHttpsUrl, UnsafeUrlError } from "@/lib/safe-fetch";
 import { htmlToText } from "@/lib/doc-extract";
 import { tokenCostInr, usdToInr } from "@/lib/ai-cost";
-import { addDocument, loadAgent, MAX_DOCUMENT_BYTES, saveVersion } from "@/services/ai/agents";
+import { addDocument, loadAgent, MAX_DOCUMENT_BYTES, MAX_DOCUMENTS, saveVersion } from "@/services/ai/agents";
 
 // ---------------------------------------------------------------------------
 // Website pages as knowledge
@@ -88,6 +88,126 @@ export async function refreshWebsitePage(access: OrgAccess, agentId: string, doc
   const { text } = pageText((await fetchPublicPage(d.sourceUrl)).html);
   const u = await db.aiDocument.update({ where: { id: d.id }, data: { content: text, sizeBytes: Buffer.byteLength(text, "utf8"), syncedAt: new Date() } });
   return { id: u.id, name: u.name, mimeType: u.mimeType, sizeBytes: u.sizeBytes, sourceUrl: u.sourceUrl, syncedAt: u.syncedAt, createdAt: u.createdAt, changed: u.content !== d.content };
+}
+
+// ---------------------------------------------------------------------------
+// Whole website (several pages of one site)
+// ---------------------------------------------------------------------------
+
+export const MAX_CRAWL_PAGES = 15;
+const CRAWL_BUDGET_MS = 45_000;
+const SKIP_EXT = /\.(pdf|jpe?g|png|gif|webp|svg|ico|zip|rar|mp4|mp3|webm|avi|mov|docx?|xlsx?|pptx?|css|js|json|xml|txt)$/i;
+const SKIP_PATH = /\/(wp-admin|wp-login|cart|checkout|my-account|account|login|signin|signup|register|logout|feed|tag|author|search)(\/|$)/i;
+
+/** Same-site links on a page, absolute, without #fragments, de-duplicated (shorter paths first). */
+export function sameSiteLinks(html: string, pageUrl: string): string[] {
+  const base = new URL(pageUrl);
+  const out = new Set<string>();
+  for (const m of html.matchAll(/<a\b[^>]*\bhref\s*=\s*["']([^"'#][^"']*)["']/gi)) {
+    let u: URL;
+    try {
+      u = new URL(m[1].trim(), base);
+    } catch {
+      continue;
+    }
+    if (u.protocol !== "https:" || u.hostname !== base.hostname || SKIP_EXT.test(u.pathname) || SKIP_PATH.test(u.pathname)) continue;
+    u.hash = "";
+    for (const k of [...u.searchParams.keys()]) if (/^(utm_|fbclid|gclid|ref$|replytocom$)/i.test(k)) u.searchParams.delete(k);
+    out.add(u.toString().replace(/\/$/, "") || u.toString());
+  }
+  return [...out].sort((a, b) => a.length - b.length);
+}
+
+/** `Disallow:` prefixes for all robots (User-agent: *). Missing or unreadable robots.txt = allowed. */
+export function robotsDisallow(txt: string): string[] {
+  const out: string[] = [];
+  let applies = false;
+  let lastWasAgent = false;
+  for (const raw of txt.split(/\r?\n/)) {
+    const line = raw.replace(/#.*/, "").trim();
+    const m = /^([a-z-]+)\s*:\s*(.*)$/i.exec(line);
+    if (!m) continue;
+    const key = m[1].toLowerCase();
+    if (key === "user-agent") {
+      applies = (lastWasAgent && applies) || m[2].trim() === "*";
+      lastWasAgent = true;
+      continue;
+    }
+    lastWasAgent = false;
+    if (applies && key === "disallow" && m[2].trim()) out.push(m[2].trim());
+  }
+  return out;
+}
+
+/**
+ * Reads up to `maxPages` pages of one public website (starting page first, then its same-site links),
+ * respecting robots.txt, and saves each page with real text as its own knowledge document.
+ */
+export async function importWebsite(access: OrgAccess, agentId: string, startUrl: string, maxPages = 10, req?: Request) {
+  const a = await loadAgent(access.organizationId, agentId);
+  const limit = Math.min(MAX_CRAWL_PAGES, Math.max(1, maxPages), MAX_DOCUMENTS - a.documents.length);
+  if (limit <= 0) throw new ApiError("VALIDATION_ERROR", `This agent already has ${MAX_DOCUMENTS} documents. Remove some first.`);
+  const started = Date.now();
+  let disallow: string[] = [];
+  try {
+    const origin = new URL(startUrl.trim()).origin;
+    disallow = robotsDisallow((await fetchPublicPage(`${origin}/robots.txt`)).html.replace(/&lt;/g, "<"));
+  } catch {
+    /* no robots.txt → allowed */
+  }
+  const blocked = (u: string) => disallow.some((d) => new URL(u).pathname.startsWith(d));
+  const known = new Set((await db.aiDocument.findMany({ where: { agentId: a.id }, select: { sourceUrl: true } })).map((d) => d.sourceUrl.replace(/\/$/, "")));
+  const queue = [startUrl.trim()];
+  const seen = new Set<string>();
+  const added: { id: string; name: string; sourceUrl: string }[] = [];
+  const skipped: { url: string; reason: string }[] = [];
+  let host = "";
+  while (queue.length && added.length < limit) {
+    if (Date.now() - started > CRAWL_BUDGET_MS) {
+      skipped.push({ url: queue[0], reason: "Time limit reached — run it again to read more pages." });
+      break;
+    }
+    const url = queue.shift()!;
+    const key = url.replace(/\/$/, "");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (seen.size > limit * 4) break; // don't wander through huge sites
+    if (blocked(url)) {
+      skipped.push({ url, reason: "Blocked by the site's robots.txt" });
+      continue;
+    }
+    let page: { url: string; html: string };
+    try {
+      page = await fetchPublicPage(url);
+    } catch (e) {
+      skipped.push({ url, reason: e instanceof Error ? e.message : "Couldn't read" });
+      if (!host) throw e; // the starting page itself failed
+      continue;
+    }
+    const final = new URL(page.url);
+    if (!host) host = final.hostname;
+    else if (final.hostname !== host) {
+      skipped.push({ url, reason: "Leads to another website" });
+      continue;
+    }
+    for (const l of sameSiteLinks(page.html, page.url)) if (!seen.has(l.replace(/\/$/, ""))) queue.push(l);
+    if (known.has(key) || known.has(page.url.replace(/\/$/, ""))) {
+      skipped.push({ url, reason: "Already in the knowledge base" });
+      continue;
+    }
+    let text: { title: string; text: string };
+    try {
+      text = pageText(page.html);
+    } catch (e) {
+      skipped.push({ url, reason: e instanceof Error ? e.message : "No text" });
+      continue;
+    }
+    const doc = await addDocument(access, a.id, { name: text.title || final.pathname || final.hostname, mimeType: "text/html", content: text.text, sourceUrl: url });
+    known.add(key);
+    added.push({ id: doc.id, name: doc.name, sourceUrl: url });
+  }
+  await audit({ action: "ai_agent.website_imported", actorUserId: access.user.id, organizationId: access.organizationId, targetType: "ai_agent", targetId: a.id, metadata: { url: startUrl, pages: added.length, crawl: true }, req });
+  return { added, skipped: skipped.slice(0, 30) };
 }
 
 // ---------------------------------------------------------------------------

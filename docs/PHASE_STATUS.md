@@ -306,3 +306,11 @@ See `docs/LIVE_FEATURES.md` and `docs/CONFIGURATION_REQUIRED.md`.
   crash mid-start adopts the already-started child instead of erroring, test runs skip the step.
 - No schema change (uses the execution context). Tests `tests/integration/automation-subflows.test.ts` (5).
   Suite 540/540, build OK, browser smoke OK.
+
+### Stage 15: AI reads a whole website ✅ (2026-11-04)
+- Knowledge → Website page → "Read the whole website": from a start link, follows same-site https links and saves
+  each page with real text as its own document (5 / 10 / 15 pages, within the 20-document limit).
+- Respects robots.txt (`User-agent: *` Disallow), skips login/cart/account/search pages, files (PDF, images…),
+  other websites and tracking parameters; every request goes through the SSRF guard; 45 s budget per run
+  ("run it again to read more"); pages already in the knowledge base are skipped. Rate limit 5 runs/hour.
+- Route `/ai/agents/[aid]/documents/crawl`. Tests `tests/integration/ai-crawl.test.ts` (4). Suite 544/544, build OK.

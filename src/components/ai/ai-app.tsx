@@ -496,7 +496,16 @@ function KnowledgeTab({ draft, setDraft, agent, base, disabled, onDocs }: { draf
           )}
         </CardBody>
       </Card>
-      {web ? <WebsiteModal url={`${base}/documents/import`} onClose={() => setWeb(false)} onAdded={(d) => { setWeb(false); onDocs([...agent.documents, d]); toast("Page added"); }} /> : null}
+      {web ? (
+        <WebsiteModal
+          url={`${base}/documents/import`}
+          crawlUrl={`${base}/documents/crawl`}
+          agentUrl={base}
+          onClose={() => setWeb(false)}
+          onAdded={(d) => { setWeb(false); onDocs([...agent.documents, d]); toast("Page added"); }}
+          onCrawled={(docs, added) => { setWeb(false); onDocs(docs); toast(added ? `${added} page(s) added` : "No new pages found"); }}
+        />
+      ) : null}
       {paste ? <PasteModal url={`${base}/documents`} onClose={() => setPaste(false)} onAdded={(d) => { setPaste(false); onDocs([...agent.documents, d]); toast("Document added"); }} /> : null}
     </div>
   );
@@ -511,13 +520,28 @@ const DOC_LABEL: Record<string, string> = {
   "text/html": "HTML",
 };
 
-function WebsiteModal({ url, onClose, onAdded }: { url: string; onClose: () => void; onAdded: (d: Doc) => void }) {
+function WebsiteModal({ url, crawlUrl, agentUrl, onClose, onAdded, onCrawled }: { url: string; crawlUrl: string; agentUrl: string; onClose: () => void; onAdded: (d: Doc) => void; onCrawled: (docs: Doc[], added: number) => void }) {
   const [link, setLink] = React.useState("");
+  const [whole, setWhole] = React.useState(false);
+  const [pages, setPages] = React.useState(10);
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [skipped, setSkipped] = React.useState<{ url: string; reason: string }[]>([]);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+    setError("");
+    if (whole) {
+      const r = await apiFetch<{ added: { id: string }[]; skipped: { url: string; reason: string }[] }>(crawlUrl, { method: "POST", body: { url: link.trim(), maxPages: pages } });
+      if (!r.ok) {
+        setBusy(false);
+        return setError(Object.values(r.details ?? {})[0]?.[0] ?? r.error);
+      }
+      const ag = await apiFetch<{ agent: { documents: Doc[] } }>(agentUrl);
+      setBusy(false);
+      if (!r.data.added.length) return setSkipped(r.data.skipped);
+      return ag.ok ? onCrawled(ag.data.agent.documents, r.data.added.length) : onClose();
+    }
     const r = await apiFetch<{ document: Doc }>(url, { method: "POST", body: { url: link.trim() } });
     setBusy(false);
     if (!r.ok) return setError(Object.values(r.details ?? {})[0]?.[0] ?? r.error);
@@ -527,13 +551,26 @@ function WebsiteModal({ url, onClose, onAdded }: { url: string; onClose: () => v
     <Modal open onClose={onClose} title="Add a website page">
       <form onSubmit={submit} className="space-y-4">
         {error ? <Alert tone="danger">{error}</Alert> : null}
-        <p className="text-small text-app-muted">The agent reads the text of one public page — your services, menu, price list or FAQ page. Add each important page separately, and use Refresh when it changes.</p>
-        <Field id="web-url" label="Page link">
-          <Input type="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://yourshop.in/services" maxLength={2000} />
+        <p className="text-small text-app-muted">The agent reads the text of public pages — your services, menu, price list or FAQ. Use Refresh on a page when it changes.</p>
+        <Field id="web-url" label={whole ? "Website link (start page)" : "Page link"}>
+          <Input type="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder={whole ? "https://yourshop.in" : "https://yourshop.in/services"} maxLength={2000} />
         </Field>
+        <Checkbox checked={whole} onChange={(e) => setWhole(e.target.checked)} label="Read the whole website" description="Follows links on the same site and adds each useful page as its own document. Respects the site's robots.txt; skips login, cart and file links." />
+        {whole ? (
+          <Field id="web-pages" label="Up to how many pages">
+            <Select value={String(pages)} onChange={(e) => setPages(Number(e.target.value))} className="w-32">
+              {[5, 10, 15].map((n) => <option key={n} value={n}>{n} pages</option>)}
+            </Select>
+          </Field>
+        ) : null}
+        {skipped.length ? (
+          <Alert tone="warning" title="No new pages were added">
+            <ul className="mt-1 space-y-0.5 text-caption">{skipped.slice(0, 6).map((x) => <li key={x.url} className="truncate">{x.url} — {x.reason}</li>)}</ul>
+          </Alert>
+        ) : null}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={busy} disabled={!/^https:\/\/\S+\.\S+/.test(link.trim())}>Read page</Button>
+          <Button type="submit" loading={busy} disabled={!/^https:\/\/\S+\.\S+/.test(link.trim())}>{whole ? (busy ? "Reading pages…" : "Read website") : "Read page"}</Button>
         </div>
       </form>
     </Modal>
