@@ -294,3 +294,15 @@ See `docs/LIVE_FEATURES.md` and `docs/CONFIGURATION_REQUIRED.md`.
   Immediate "payment failed" notice was already there. True automatic card/UPI re-charging needs a Razorpay recurring
   mandate (🔧 not set up), so reminders carry the pay link instead.
 - Tests `tests/integration/billing-annual-trial.test.ts` (7). Suite 535/535, build OK, browser smoke OK.
+
+### Stage 14: Automation sub-flows ✅ (2026-11-04)
+- New step **Run automation**: starts another published automation of the workspace for the same contact (a
+  reusable "component"). "Wait until it finishes" (default) keeps the step until that run ends (woken by the child,
+  hourly safety re-check, 7-day limit); a failed/stopped sub-flow fails the step so "If it fails" decides.
+  Without waiting it just starts it and moves on.
+- New trigger **Started by another automation** for components (never fires from events).
+- Guards: an automation can't run itself or anything already in its chain (A → B → A stops at B), nesting ≤ 3
+  levels, publish refuses missing/unpublished targets, one live run per contact per automation still applies, a
+  crash mid-start adopts the already-started child instead of erroring, test runs skip the step.
+- No schema change (uses the execution context). Tests `tests/integration/automation-subflows.test.ts` (5).
+  Suite 540/540, build OK, browser smoke OK.

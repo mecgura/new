@@ -33,6 +33,8 @@ export type Lists = {
   members: { userId: string; name: string; role: string }[];
   tags: string[];
   accounts: { id: string; displayName: string; phoneNumber: string; isDemo: boolean }[];
+  automations: { id: string; name: string; published: boolean; triggerType: string }[];
+  selfId: string;
 };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -81,6 +83,7 @@ export function NodeInspector({ node, onChange, onDelete, lists, readOnly, webho
       {node.type === "delay" ? <DelayForm d={node.data as NodeDataMap["delay"]} set={set} fid={fid} /> : null}
       {node.type === "condition" ? <ConditionForm d={node.data as NodeDataMap["condition"]} set={set} lists={lists} fid={fid} /> : null}
       {node.type === "switch" ? <SwitchForm d={node.data as NodeDataMap["switch"]} set={set} fid={fid} /> : null}
+      {node.type === "run_automation" ? <RunAutomationForm d={node.data as NodeDataMap["run_automation"]} set={set} lists={lists} fid={fid} /> : null}
       {node.type === "approval" ? <ApprovalForm d={node.data as NodeDataMap["approval"]} set={set} lists={lists} fid={fid} /> : null}
       {node.type === "tag" ? (
         <>
@@ -621,6 +624,33 @@ function ApprovalForm({ d, set, lists, fid }: { d: NodeDataMap["approval"]; set:
         </Field>
       </div>
       <p className="text-caption text-app-muted">Approvers get a notification and decide from Automations → Approvals. The owner can always decide.</p>
+    </>
+  );
+}
+
+/** Reuse another automation (a "component") for this contact. */
+function RunAutomationForm({ d, set, lists, fid }: { d: NodeDataMap["run_automation"]; set: (p: Record<string, unknown>) => void; lists: Lists; fid: (k: string) => string }) {
+  const options = lists.automations.filter((a) => a.id !== lists.selfId);
+  const chosen = options.find((a) => a.id === d.automationId);
+  return (
+    <>
+      <Field id={fid("ra-id")} label="Automation to run" hint="Tip: build shared steps once (e.g. “Qualify lead”) with the trigger “Started by another automation”, then reuse them here.">
+        <Select value={d.automationId} onChange={(e) => set({ automationId: e.target.value })}>
+          <option value="">Choose…</option>
+          {options.map((a) => (
+            <option key={a.id} value={a.id}>{a.name}{a.published ? "" : " (not published)"}{a.triggerType === "subflow" ? " · component" : ""}</option>
+          ))}
+        </Select>
+      </Field>
+      {chosen && !chosen.published ? <Alert tone="warning">Publish “{chosen.name}” before publishing this automation.</Alert> : null}
+      <Checkbox checked={d.wait} onChange={(e) => set({ wait: e.target.checked })} label="Wait until it finishes" description="Continue here after the other automation completes (up to 7 days). Off = start it and move on straight away." />
+      <Field id={fid("ra-err")} label="If it fails">
+        <Select value={d.onError} onChange={(e) => set({ onError: e.target.value })}>
+          <option value="stop">Stop this automation</option>
+          <option value="continue">Continue anyway</option>
+        </Select>
+      </Field>
+      <p className="text-caption text-app-muted">Runs for the same contact. Loops are blocked and nesting stops at 3 levels. In test runs this step is skipped — test the other automation on its own.</p>
     </>
   );
 }

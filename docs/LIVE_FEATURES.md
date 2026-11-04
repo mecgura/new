@@ -11,7 +11,7 @@ Full build notes per stage: `docs/PHASE_STATUS.md`. What still needs keys/approv
   (Hot/Warm/Cold).
 - **Campaigns** (gated WhatsApp automation): compliance review, frequency cap, cost estimate, A/B testing with a
   significance check, ROI and attribution, failure explanations, recommendations, performance page.
-- **Automations**: visual builder with 12 step types incl. **Switch** (many paths) and **Approval** (owner/manager
+- **Automations**: visual builder with 13 step types incl. **Switch** (many paths), **Run automation** (reusable sub-flows) and **Approval** (owner/manager
   decides), drip templates, versions, test runs, retries, logs, analytics with branch split.
 - **AI Agent** (gated): knowledge from FAQs, PDF/Word/TXT/CSV/HTML files and website pages, relevant-passage search
   for big documents, versions with restore, 👍/👎 on replies, usage & estimated cost. *Live AI needs
@@ -30,5 +30,5 @@ one-by-one WhatsApp), site editor.
 - **Billing**: monthly or yearly plans, free trials, payment reminders before and after the due date.
 
 ## Not built yet (on the list)
-Automatic card/UPI re-charging (needs a Razorpay recurring mandate); reusable automation sub-flows; multi-page
+Automatic card/UPI re-charging (needs a Razorpay recurring mandate); multi-page
 website crawling for AI; OpenAI as an alternative AI-agent model.

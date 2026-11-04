@@ -5,6 +5,7 @@ import {
   Flag,
   GitBranch,
   ShieldCheck,
+  Boxes,
   Split,
   MessageSquare,
   Tag,
@@ -40,6 +41,7 @@ export const NODE_ICON: Record<NodeType, LucideIcon> = {
   update_contact: UserPen,
   webhook: Webhook,
   ai_response: Bot,
+  run_automation: Boxes,
   end: Flag,
 };
 
@@ -57,6 +59,7 @@ export const NODE_ACCENT: Record<NodeType, string> = {
   update_contact: "text-orange-300 bg-orange-400/15 border-l-orange-400",
   webhook: "text-cyan-300 bg-cyan-400/15 border-l-cyan-400",
   ai_response: "text-fuchsia-300 bg-fuchsia-400/15 border-l-fuchsia-400",
+  run_automation: "text-indigo-300 bg-indigo-400/15 border-l-indigo-400",
   end: "text-app-muted bg-app-hover border-l-app-border-strong",
 };
 
@@ -72,13 +75,14 @@ export const PALETTE: { type: NodeType; hint: string }[] = [
   { type: "update_contact", hint: "Change a contact field" },
   { type: "webhook", hint: "Send data to another app" },
   { type: "ai_response", hint: "Reply with AI" },
+  { type: "run_automation", hint: "Reuse another automation (a component)" },
   { type: "end", hint: "Stop here" },
 ];
 
 const unit = (d: NodeDataMap["delay"]) => `${d.amount} ${d.amount === 1 ? d.unit.replace(/s$/, "") : d.unit}`;
 
 /** One-line, human summary shown on the canvas card. */
-export function summarize(n: FlowNode, names: { templates: Record<string, string>; users: Record<string, string> }): string {
+export function summarize(n: FlowNode, names: { templates: Record<string, string>; users: Record<string, string>; automations?: Record<string, string> }): string {
   switch (n.type) {
     case "trigger": {
       const d = n.data as TriggerData;
@@ -139,6 +143,10 @@ export function summarize(n: FlowNode, names: { templates: Record<string, string
     case "ai_response": {
       const d = n.data as NodeDataMap["ai_response"];
       return d.instructions ? d.instructions.slice(0, 70) : "Add instructions";
+    }
+    case "run_automation": {
+      const d = n.data as NodeDataMap["run_automation"];
+      return d.automationId ? `${names.automations?.[d.automationId] ?? "Automation"}${d.wait ? " · waits until done" : ""}` : "Choose an automation";
     }
     case "end":
       return "Automation ends";

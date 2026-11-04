@@ -10,7 +10,7 @@ import { NODE_ACCENT, NODE_ICON, nodeTitle, summarize } from "@/components/autom
 export type BuilderInfo = {
   issues: Record<string, string[]>;
   stats: Record<string, Record<string, number>> | null;
-  names: { templates: Record<string, string>; users: Record<string, string> };
+  names: { templates: Record<string, string>; users: Record<string, string>; automations?: Record<string, string> };
   activeNodeId: string | null;
 };
 

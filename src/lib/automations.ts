@@ -1,7 +1,7 @@
 // Automation graph model. Pure module (no DB / Node APIs): the builder UI,
 // the API validation and the execution engine share these definitions.
 
-export const NODE_TYPES = ["trigger", "message", "template", "delay", "condition", "switch", "approval", "tag", "assign", "update_contact", "webhook", "ai_response", "end"] as const;
+export const NODE_TYPES = ["trigger", "message", "template", "delay", "condition", "switch", "approval", "tag", "assign", "update_contact", "webhook", "ai_response", "run_automation", "end"] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
 
 export const NODE_LABELS: Record<NodeType, string> = {
@@ -17,10 +17,11 @@ export const NODE_LABELS: Record<NodeType, string> = {
   update_contact: "Update contact",
   webhook: "Webhook",
   ai_response: "AI response",
+  run_automation: "Run automation",
   end: "End",
 };
 
-export const TRIGGER_TYPES = ["new_contact", "incoming_message", "keyword", "button_click", "template_reply", "flow_submission", "webhook", "schedule", "tag_added", "lead_status"] as const;
+export const TRIGGER_TYPES = ["new_contact", "incoming_message", "keyword", "button_click", "template_reply", "flow_submission", "webhook", "schedule", "tag_added", "lead_status", "subflow"] as const;
 export type TriggerType = (typeof TRIGGER_TYPES)[number];
 
 export const TRIGGER_LABELS: Record<TriggerType, string> = {
@@ -34,6 +35,7 @@ export const TRIGGER_LABELS: Record<TriggerType, string> = {
   schedule: "Schedule",
   tag_added: "Tag added",
   lead_status: "Lead status changed",
+  subflow: "Started by another automation",
 };
 
 export const CONDITION_FIELDS = ["message", "contact_name", "contact_email", "contact_phone", "custom", "tag", "lead_status", "source", "consent", "date", "time"] as const;
@@ -131,6 +133,8 @@ export type NodeDataMap = {
   update_contact: { field: "name" | "email" | "leadStatus" | "lifecycle" | "custom"; key: string; value: string };
   webhook: { url: string; onError: OnError };
   ai_response: { instructions: string; sendReply: boolean; saveToField: string; onError: OnError };
+  /** Starts another automation (a reusable "component") for the same contact; optionally waits for it to finish. */
+  run_automation: { automationId: string; wait: boolean; onError: OnError };
   end: { label?: string };
 };
 
@@ -156,6 +160,7 @@ export function defaultData<T extends NodeType>(type: T): NodeDataMap[T] {
     update_contact: { field: "leadStatus", key: "", value: "contacted" },
     webhook: { url: "", onError: "continue" },
     ai_response: { instructions: "", sendReply: true, saveToField: "", onError: "continue" },
+    run_automation: { automationId: "", wait: true, onError: "stop" },
     end: {},
   };
   return structuredClone(d[type]);
@@ -367,6 +372,9 @@ export function nodeProblems(n: FlowNode): string[] {
     }
     case "webhook":
       if (!isHttpsUrl((n.data as NodeDataMap["webhook"]).url)) p.push("Enter an https:// URL.");
+      break;
+    case "run_automation":
+      if (!(n.data as NodeDataMap["run_automation"]).automationId) p.push("Choose the automation to run.");
       break;
     case "ai_response": {
       const d = n.data as NodeDataMap["ai_response"];

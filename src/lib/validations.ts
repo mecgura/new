@@ -508,7 +508,7 @@ export const flowNodeSchema = z.discriminatedUnion("type", [
     type: z.literal("trigger"),
     data: z.object({
       label,
-      trigger: z.enum(["new_contact", "incoming_message", "keyword", "button_click", "template_reply", "flow_submission", "webhook", "schedule", "tag_added", "lead_status"]),
+      trigger: z.enum(["new_contact", "incoming_message", "keyword", "button_click", "template_reply", "flow_submission", "webhook", "schedule", "tag_added", "lead_status", "subflow"]),
       keywords: z.array(z.string().trim().max(60)).max(30).default([]),
       match: z.enum(["exact", "contains", "starts_with"]).default("exact"),
       buttonText: short(40),
@@ -574,6 +574,7 @@ export const flowNodeSchema = z.discriminatedUnion("type", [
   z.object({ ...nodeBase, type: z.literal("update_contact"), data: z.object({ label, field: z.enum(["name", "email", "leadStatus", "lifecycle", "custom"]), key: short(40), value: short(500) }) }),
   z.object({ ...nodeBase, type: z.literal("webhook"), data: z.object({ label, url: short(2000), onError: z.enum(["stop", "continue"]).default("continue") }) }),
   z.object({ ...nodeBase, type: z.literal("ai_response"), data: z.object({ label, instructions: short(4000), sendReply: z.boolean().default(true), saveToField: short(40), onError: z.enum(["stop", "continue"]).default("continue") }) }),
+  z.object({ ...nodeBase, type: z.literal("run_automation"), data: z.object({ label, automationId: short(64), wait: z.boolean().default(true), onError: z.enum(["stop", "continue"]).default("stop") }) }),
   z.object({ ...nodeBase, type: z.literal("end"), data: z.object({ label }) }),
 ]);
 

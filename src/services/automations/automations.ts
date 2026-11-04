@@ -164,7 +164,7 @@ export async function updateAutomation(
 }
 
 /** Checks references against this workspace: templates approved, people still members. */
-async function referenceProblems(organizationId: string, g: Graph) {
+async function referenceProblems(organizationId: string, g: Graph, selfId?: string) {
   const issues: { nodeId?: string; message: string }[] = [];
   for (const n of g.nodes) {
     const d = n.data as Record<string, unknown>;
@@ -176,6 +176,12 @@ async function referenceProblems(organizationId: string, g: Graph) {
       else if (n.type === "message" && templateSlots(toDef(t)).some((s) => !(s.part === "body" && s.index === 1))) {
         issues.push({ nodeId: n.id, message: `Fallback template “${t.name}” can have at most one variable ({{1}} = first name).` });
       }
+    }
+    if (n.type === "run_automation" && d.automationId) {
+      const t = await db.automation.findFirst({ where: { id: String(d.automationId), organizationId }, select: { id: true, name: true, publishedVersionId: true } });
+      if (!t) issues.push({ nodeId: n.id, message: "The automation to run no longer exists." });
+      else if (t.id === selfId) issues.push({ nodeId: n.id, message: "An automation can't run itself." });
+      else if (!t.publishedVersionId) issues.push({ nodeId: n.id, message: `Publish “${t.name}” first — only published automations can be run.` });
     }
     if (n.type === "assign" && d.mode === "user" && d.userId) {
       const m = await db.organizationMember.findFirst({ where: { organizationId, userId: String(d.userId) } });
@@ -189,7 +195,7 @@ export async function publishAutomation(access: OrgAccess, id: string, note: str
   const a = await load(access.organizationId, id);
   const graph = parseGraph(a.graph);
   const { errors, warnings } = validateGraph(graph);
-  errors.push(...(await referenceProblems(access.organizationId, graph)));
+  errors.push(...(await referenceProblems(access.organizationId, graph, a.id)));
   if (errors.length) {
     throw new ApiError("VALIDATION_ERROR", "Fix the highlighted steps before publishing.", {
       details: Object.fromEntries(errors.map((e, i) => [e.nodeId ? `node.${e.nodeId}.${i}` : `graph.${i}`, [e.message]])),
@@ -263,7 +269,7 @@ export async function testAutomation(access: OrgAccess, id: string, input: { con
   if (!contact) throw new ApiError("VALIDATION_ERROR", "Choose a contact for the test.", { details: { contactId: ["Unknown contact"] } });
   const graph = parseGraph(a.graph);
   const { errors } = validateGraph(graph);
-  errors.push(...(await referenceProblems(access.organizationId, graph)));
+  errors.push(...(await referenceProblems(access.organizationId, graph, a.id)));
   if (errors.length) throw new ApiError("VALIDATION_ERROR", "Fix the highlighted steps before testing.", { details: Object.fromEntries(errors.map((e, i) => [e.nodeId ? `node.${e.nodeId}.${i}` : `graph.${i}`, [e.message]])) });
   const ex = await startExecution(a, { contactId: contact.id, triggerData: { type: "test", text: "" }, test: { graph, skipDelays: input.skipDelays } });
   if (!ex) throw new ApiError("CONFLICT", "The test couldn't start.");

@@ -138,7 +138,7 @@ function Builder({ orgId, automation, accounts, canManage }: { orgId: string; au
   const [stats, setStats] = React.useState<Record<string, Record<string, number>> | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [lists, setLists] = React.useState<Lists>({ templates: [], members: [], tags: [], accounts });
+  const [lists, setLists] = React.useState<Lists>({ templates: [], members: [], tags: [], accounts, automations: [], selfId: automation.id });
 
   // History (undo/redo) — snapshots of the graph, taken before each change.
   const past = React.useRef<Snapshot[]>([]);
@@ -195,12 +195,14 @@ function Builder({ orgId, automation, accounts, canManage }: { orgId: string; au
       apiFetch<{ templates: TemplateView[] }>(`/api/organizations/${orgId}/templates?status=approved`),
       apiFetch<{ members: TeamMember[] }>(`/api/organizations/${orgId}/team`),
       apiFetch<{ tags: Tag[] }>(`/api/organizations/${orgId}/tags`),
-    ]).then(([t, m, tg]) =>
+      apiFetch<{ automations: { id: string; name: string; published: boolean; triggerType: string }[] }>(`/api/organizations/${orgId}/automations?status=&q=`),
+    ]).then(([t, m, tg, au]) =>
       setLists((l) => ({
         ...l,
         templates: t.ok ? t.data.templates.filter((x) => x.category !== "AUTHENTICATION").map((x) => ({ id: x.id, name: x.name, language: x.language, category: x.category, slots: x.slots, numbers: x.waba.numbers.map((nn) => nn.id) })) : [],
         members: m.ok ? m.data.members.map((x) => ({ userId: x.userId, name: x.name, role: x.role })) : [],
         tags: tg.ok ? tg.data.tags.map((x) => x.name) : [],
+        automations: au.ok ? au.data.automations.map((x) => ({ id: x.id, name: x.name, published: x.published, triggerType: x.triggerType })) : [],
       }))
     );
   }, [orgId]);
@@ -245,7 +247,7 @@ function Builder({ orgId, automation, accounts, canManage }: { orgId: string; au
     () => ({
       issues: issuesByNode,
       stats: showStats ? stats ?? {} : null,
-      names: { templates: Object.fromEntries(lists.templates.map((t) => [t.id, `${t.name} (${t.language})`])), users: Object.fromEntries(lists.members.map((m) => [m.userId, m.name])) },
+      names: { templates: Object.fromEntries(lists.templates.map((t) => [t.id, `${t.name} (${t.language})`])), users: Object.fromEntries(lists.members.map((m) => [m.userId, m.name])), automations: Object.fromEntries(lists.automations.map((a) => [a.id, a.name])) },
       activeNodeId,
     }),
     [issuesByNode, showStats, stats, lists, activeNodeId]

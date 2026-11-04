@@ -70,7 +70,10 @@ export type AutomationEvent =
   | { type: "tag_added"; contactId: string; tagName: string }
   | { type: "lead_status"; contactId: string; from: string; to: string };
 
-type Ctx = { reply?: string; replied?: boolean; replyTimedOut?: boolean; ai?: string; webhook?: unknown; inflight?: string | null; conversationId?: string };
+type Ctx = { reply?: string; replied?: boolean; replyTimedOut?: boolean; ai?: string; webhook?: unknown; inflight?: string | null; conversationId?: string; sub?: Record<string, string>; parentExecutionId?: string; parentNodeId?: string };
+
+/** How long a parent waits for a sub-flow before giving up. */
+export const SUBFLOW_WAIT_MS = 7 * 86_400_000;
 
 const parse = <T>(raw: string, fallback: T): T => {
   try {
@@ -163,7 +166,7 @@ export async function dispatch(organizationId: string, ev: AutomationEvent, orig
   return handled;
 }
 
-type StartInput = { contactId: string | null; conversationId?: string | null; triggerData: unknown; dedupeKey?: string; origin?: Origin; test?: { graph: Graph; skipDelays: boolean } };
+type StartInput = { contactId: string | null; conversationId?: string | null; triggerData: unknown; dedupeKey?: string; origin?: Origin; test?: { graph: Graph; skipDelays: boolean }; parent?: { executionId: string; nodeId: string } };
 
 /** Creates an execution (guarded against duplicates, concurrency and runaway re-entry) and starts it. */
 export async function startExecution(a: Automation, input: StartInput): Promise<AutomationExecution | null> {
@@ -203,7 +206,7 @@ export async function startExecution(a: Automation, input: StartInput): Promise<
         conversationId: input.conversationId ?? null,
         triggerType: (trigger.data as TriggerData).trigger,
         triggerData: JSON.stringify(input.triggerData ?? {}).slice(0, 20_000),
-        context: JSON.stringify({ chain: [...(input.origin?.chain ?? []), a.id] }),
+        context: JSON.stringify({ chain: [...(input.origin?.chain ?? []), a.id], ...(input.parent ? { parentExecutionId: input.parent.executionId, parentNodeId: input.parent.nodeId } : {}) }),
         currentNodeId: trigger.id,
         nextRunAt: new Date(),
         depth: input.origin?.depth ?? 0, // origin.depth is already the child's depth
@@ -240,7 +243,7 @@ async function resumeWaitingForReply(organizationId: string, ev: Extract<Automat
 
 type Outcome =
   | { kind: "next"; handle?: string; output?: Record<string, unknown>; status?: "completed" | "skipped" }
-  | { kind: "wait"; state: "delay" | "reply" | "approval"; until: Date; output?: Record<string, unknown> }
+  | { kind: "wait"; state: "delay" | "reply" | "approval" | "subflow"; until: Date; output?: Record<string, unknown> }
   | { kind: "end" };
 
 type RunCtx = {
@@ -340,7 +343,7 @@ export async function runExecution(id: string, budgetMs = 20_000): Promise<strin
     }
     if (outcome.kind === "wait") {
       // An Approval step stays on itself: when the decision (or the timeout) comes, it picks the branch.
-      const next = outcome.state === "approval" ? node.id : nextOf(graph, node.id, "next");
+      const next = outcome.state === "approval" || outcome.state === "subflow" ? node.id : nextOf(graph, node.id, "next");
       await recordStep(ex, node, outcome.state === "delay" ? "completed" : "waiting", { ...outcome.output, until: outcome.until.toISOString() }, "", ex.attempts + 1);
       await db.automationExecution.update({
         where: { id },
@@ -380,6 +383,12 @@ async function finish(ex: AutomationExecution, automation: Automation, status: "
   });
   if (!ex.isTest) await db.automation.update({ where: { id: automation.id }, data: { lastRunAt: new Date() } });
   publish(ex.organizationId, { type: "automation.updated", automationId: automation.id });
+  // A parent waiting on this run as a sub-flow continues now.
+  const parentId = parse<Ctx>(ex.context, {}).parentExecutionId;
+  if (parentId) {
+    const woke = await db.automationExecution.updateMany({ where: { id: parentId, status: "running", waitState: "subflow" }, data: { waitState: "", nextRunAt: new Date() } });
+    if (woke.count) runAfterResponse(() => runExecution(parentId));
+  }
   return status;
 }
 
@@ -425,6 +434,8 @@ async function runNode(r: RunCtx): Promise<Outcome> {
     }
     case "approval":
       return approvalStep(r);
+    case "run_automation":
+      return runAutomationStep(r);
     case "tag":
       return tagStep(r);
     case "assign":
@@ -471,6 +482,59 @@ async function approvalStep(r: RunCtx): Promise<Outcome> {
   if (existing.status === "pending") await db.automationApproval.updateMany({ where: { id: existing.id, status: "pending" }, data: { status: "expired", decidedAt: new Date() } });
   return { kind: "next", handle: d.onTimeout, output: { decision: d.onTimeout, timedOut: true } };
 }
+
+/**
+ * Run automation: starts another published automation of this workspace for the same contact
+ * (a reusable "component"). With "wait", this step stays put until that run finishes; a failed
+ * sub-flow fails this step (so "On error" decides). Loops are refused: an automation never runs
+ * itself or anything already in its chain, and nesting stops at MAX_DEPTH.
+ */
+async function runAutomationStep(r: RunCtx): Promise<Outcome> {
+  const { ex, node, ctx } = r;
+  const d = node.data as NodeDataMap["run_automation"];
+  const existingId = ctx.sub?.[node.id];
+  if (existingId) {
+    const child = await db.automationExecution.findUnique({ where: { id: existingId }, select: { id: true, status: true, error: true, createdAt: true } });
+    if (!child) throw new StepError("The sub-flow run was deleted.", false);
+    if (child.status === "completed") return { kind: "next", output: { subflowExecutionId: child.id, result: "completed" } };
+    if (child.status === "failed" || child.status === "stopped") throw new StepError(`The sub-flow ${child.status === "stopped" ? "was stopped" : `failed: ${child.error || "unknown error"}`}`, false);
+    if (child.createdAt.getTime() + SUBFLOW_WAIT_MS <= Date.now()) throw new StepError("The sub-flow didn't finish within 7 days.", false);
+    return { kind: "wait", state: "subflow", until: recheck(child.createdAt), output: { subflowExecutionId: child.id, waitingFor: "subflow" } };
+  }
+  if (ex.isTest) return { kind: "next", status: "skipped", output: { skipped: "Sub-flows don't run in test runs — test that automation on its own." } };
+  const target = await db.automation.findFirst({ where: { id: d.automationId, organizationId: ex.organizationId } });
+  if (!target) throw new StepError("The automation to run no longer exists.", false);
+  const chain = parse<{ chain?: string[] }>(ex.context, {}).chain ?? [r.automation.id];
+  if (target.id === r.automation.id || chain.includes(target.id)) throw new StepError("An automation can't run itself (that would loop).", false);
+  if (ex.depth + 1 > MAX_DEPTH) throw new StepError(`Sub-flows can be nested at most ${MAX_DEPTH} levels deep.`, false);
+  if (!target.publishedVersionId) throw new StepError(`“${target.name}” isn't published.`, false);
+  const child = await startExecution(target, {
+    contactId: ex.contactId,
+    conversationId: ex.conversationId,
+    triggerData: { type: "subflow", from: r.automation.name, fromAutomationId: r.automation.id, trigger: r.trigger },
+    dedupeKey: `${ex.id}:sub:${node.id}`,
+    origin: originOf(r),
+    parent: d.wait ? { executionId: ex.id, nodeId: node.id } : undefined,
+  });
+  if (!child && d.wait) {
+    // Started on an earlier attempt that crashed before it was recorded: adopt that run.
+    const earlier = await db.automationExecution.findUnique({ where: { dedupeKey: `${ex.id}:sub:${node.id}` }, select: { id: true, createdAt: true } });
+    if (earlier) {
+      ctx.sub = { ...(ctx.sub ?? {}), [node.id]: earlier.id };
+      return { kind: "wait", state: "subflow", until: recheck(earlier.createdAt), output: { subflowExecutionId: earlier.id, waitingFor: "subflow" } };
+    }
+  }
+  if (!child) {
+    if (!d.wait) return { kind: "next", status: "skipped", output: { skipped: `“${target.name}” is already running for this contact.` } };
+    throw new StepError(`“${target.name}” couldn't start (it may already be running for this contact).`, false);
+  }
+  if (!d.wait) return { kind: "next", output: { subflowExecutionId: child.id, started: target.name } };
+  ctx.sub = { ...(ctx.sub ?? {}), [node.id]: child.id };
+  return { kind: "wait", state: "subflow", until: recheck(child.createdAt), output: { subflowExecutionId: child.id, waitingFor: "subflow", started: target.name } };
+}
+
+/** The sub-flow wakes its parent when it ends; an hourly re-check is the safety net (and enforces the 7-day limit). */
+const recheck = (childCreatedAt: Date) => new Date(Math.min(Date.now() + 3_600_000, childCreatedAt.getTime() + SUBFLOW_WAIT_MS));
 
 async function requireContact(r: RunCtx) {
   const c = await loadContact(r.ex.organizationId, r.ex.contactId);
