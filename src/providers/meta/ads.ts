@@ -61,6 +61,19 @@ export type CtwaInput = {
   startAt: Date;
   endAt: Date | null;
   locations: AdLocation[];
+  /** Also show on WhatsApp Status (Updates tab). Falls back to Facebook + Instagram if Meta doesn't allow it for the account. */
+  whatsappStatus?: boolean;
+};
+
+/**
+ * Manual placements that add WhatsApp Status. Meta requires Instagram Stories alongside it (no Status-only ads)
+ * and supports single image / video creatives there.
+ */
+export const WHATSAPP_STATUS_PLACEMENTS = {
+  publisher_platforms: ["facebook", "instagram", "whatsapp"],
+  facebook_positions: ["feed", "story", "facebook_reels"],
+  instagram_positions: ["stream", "story", "reels", "explore"],
+  whatsapp_positions: ["status"],
 };
 
 /** Runs one creation step; a Meta error says which step failed (campaign, ad set, creative, ad). */
@@ -87,31 +100,40 @@ export async function createCtwaAd(adAccountId: string, token: string, input: Ct
   );
   ids.campaign = campaign.id;
   onStep?.({ ...ids });
-  const adset = await step("Ad set", () => graph<Id>(`${act}/adsets`, {
-    token,
-    method: "POST",
-    body: {
-      name: `${input.name} — ad set`,
-      campaign_id: campaign.id,
-      daily_budget: input.dailyBudgetPaise,
-      billing_event: "IMPRESSIONS",
-      optimization_goal: "CONVERSATIONS",
-      bid_strategy: "LOWEST_COST_WITHOUT_CAP",
-      destination_type: "WHATSAPP",
-      promoted_object: { page_id: input.pageId, whatsapp_phone_number: input.whatsappNumberE164 },
-      targeting: {
-        geo_locations: geoTargeting(input.locations),
-        age_min: input.ageMin,
-        age_max: input.ageMax,
-        ...(input.gender === "male" ? { genders: [1] } : input.gender === "female" ? { genders: [2] } : {}),
-        // Meta requires an explicit Advantage+ audience choice; 0 = use exactly the age, gender and places chosen here.
-        targeting_automation: { advantage_audience: 0 },
-      },
-      start_time: input.startAt.toISOString(),
-      ...(input.endAt ? { end_time: input.endAt.toISOString() } : {}),
-      status: "PAUSED",
+  const adsetBody = (withStatus: boolean) => ({
+    name: `${input.name} — ad set`,
+    campaign_id: campaign.id,
+    daily_budget: input.dailyBudgetPaise,
+    billing_event: "IMPRESSIONS",
+    optimization_goal: "CONVERSATIONS",
+    bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+    destination_type: "WHATSAPP",
+    promoted_object: { page_id: input.pageId, whatsapp_phone_number: input.whatsappNumberE164 },
+    targeting: {
+      geo_locations: geoTargeting(input.locations),
+      age_min: input.ageMin,
+      age_max: input.ageMax,
+      ...(input.gender === "male" ? { genders: [1] } : input.gender === "female" ? { genders: [2] } : {}),
+      // Meta requires an explicit Advantage+ audience choice; 0 = use exactly the age, gender and places chosen here.
+      targeting_automation: { advantage_audience: 0 },
+      ...(withStatus ? WHATSAPP_STATUS_PLACEMENTS : {}),
     },
-  }));
+    start_time: input.startAt.toISOString(),
+    ...(input.endAt ? { end_time: input.endAt.toISOString() } : {}),
+    status: "PAUSED",
+  });
+  let whatsappStatus = Boolean(input.whatsappStatus);
+  let placementNote = "";
+  let adset: Id;
+  try {
+    adset = await step("Ad set", () => graph<Id>(`${act}/adsets`, { token, method: "POST", body: adsetBody(whatsappStatus) }));
+  } catch (e) {
+    if (!whatsappStatus || !(e instanceof MetaApiError)) throw e;
+    // WhatsApp Status isn't open for every account or country yet: run on Facebook + Instagram instead, and say why.
+    whatsappStatus = false;
+    placementNote = `WhatsApp Status not available for this ad account yet (${e.userMessage || e.message}). Running on Facebook and Instagram.`.slice(0, 500);
+    adset = await step("Ad set", () => graph<Id>(`${act}/adsets`, { token, method: "POST", body: adsetBody(false) }));
+  }
   ids.adset = adset.id;
   onStep?.({ ...ids });
   const creative = await step("Creative", () => graph<Id>(`${act}/adcreatives`, {
@@ -142,7 +164,7 @@ export async function createCtwaAd(adAccountId: string, token: string, input: Ct
   );
   ids.ad = ad.id;
   onStep?.({ ...ids });
-  return ids;
+  return { ...ids, whatsappStatus, placementNote };
 }
 
 /** Sets the delivery status of one Meta object (campaign, ad set or ad). */
@@ -173,7 +195,7 @@ export async function getAdStatus(adId: string, token: string): Promise<AdStatus
   return { effectiveStatus: r.effective_status ?? "", note: [...review, ...issues].join(" · ").slice(0, 1000) };
 }
 
-export const PREVIEW_FORMATS = ["MOBILE_FEED_STANDARD", "INSTAGRAM_STANDARD", "INSTAGRAM_STORY", "DESKTOP_FEED_STANDARD"] as const;
+export const PREVIEW_FORMATS = ["MOBILE_FEED_STANDARD", "INSTAGRAM_STANDARD", "INSTAGRAM_STORY", "WHATSAPP_STATUS_MEDIA", "DESKTOP_FEED_STANDARD"] as const;
 export type PreviewFormat = (typeof PREVIEW_FORMATS)[number];
 
 /**

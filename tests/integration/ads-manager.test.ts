@@ -37,7 +37,7 @@ async function tenant(opts: { service?: boolean } = {}) {
 }
 
 type Call = { path: string; method: string; body?: Record<string, unknown> };
-function graph(calls: Call[], opts: { failAt?: string; ad?: Record<string, unknown>; preview?: string } = {}) {
+function graph(calls: Call[], opts: { failAt?: string; ad?: Record<string, unknown>; preview?: string; rejectStatus?: boolean } = {}) {
   let seq = 0;
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -46,6 +46,7 @@ function graph(calls: Call[], opts: { failAt?: string; ad?: Record<string, unkno
     const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : undefined;
     calls.push({ path, method, body });
     const reply = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
+    if (opts.rejectStatus && path.endsWith("/adsets") && JSON.stringify(body).includes("whatsapp_positions")) return reply({ error: { message: "Invalid parameter", code: 100, error_user_title: "Placement unavailable", error_user_msg: "WhatsApp Status isn't available for this ad account." } }, 400);
     if (opts.failAt && path.endsWith(opts.failAt) && method === "POST") return reply({ error: { message: "Invalid parameter", code: 100, error_subcode: 1870227, error_user_title: "Advantage audience flag required", error_user_msg: "Set targeting_automation.advantage_audience to 0 or 1." } }, 400);
     if (method === "GET" && /^act_\d+$/.test(path)) return reply({ id: path, name: "Shop Ads", currency: "INR", account_status: 1 });
     if (method === "GET" && path === "search") return reply({ data: [{ key: "1035921", name: "Ludhiana", type: "city", region: "Punjab" }, { key: "1748", name: "Punjab", type: "region" }, { key: "IN", name: "India", type: "country" }] });
@@ -263,5 +264,38 @@ describe("location targeting", () => {
     expect((await previewRoute.GET(req("/x"), P(t.org.id, { adId: ad.id }))).status).toBe(409);
     actAs(t.agent);
     expect((await previewRoute.GET(req("/x"), P(t.org.id, { adId: ad.id }))).status).toBe(403);
+  });
+
+  it("adds WhatsApp Status (with Instagram Stories) by default, and falls back to Facebook + Instagram when Meta refuses it", async () => {
+    const t = await tenant();
+    let calls: Call[] = [];
+    graph(calls);
+    await connect(t);
+    actAs(t.owner);
+    const r = await json(await campaigns.POST(post(adBody(t)), P(t.org.id)));
+    expect(r.status).toBe(201);
+    const targeting = calls.find((c) => c.path.endsWith("/adsets"))!.body!.targeting as Record<string, string[]>;
+    expect(targeting.publisher_platforms).toEqual(["facebook", "instagram", "whatsapp"]);
+    expect(targeting.whatsapp_positions).toEqual(["status"]);
+    expect(targeting.instagram_positions).toContain("story");
+    expect(r.body.ad).toMatchObject({ whatsappStatus: true, placementNote: "" });
+
+    vi.restoreAllMocks();
+    calls = [];
+    graph(calls, { rejectStatus: true });
+    const fb = await json(await campaigns.POST(post(adBody(t, { name: "Fallback ad" })), P(t.org.id)));
+    expect(fb.status).toBe(201);
+    const adsets = calls.filter((c) => c.path.endsWith("/adsets"));
+    expect(adsets).toHaveLength(2);
+    expect(JSON.stringify(adsets[1].body)).not.toContain("whatsapp_positions");
+    expect(fb.body.ad).toMatchObject({ whatsappStatus: false, status: "paused" });
+    expect((fb.body.ad as { placementNote: string }).placementNote).toContain("WhatsApp Status isn't available");
+
+    // Unticked: no WhatsApp placement asked for at all (automatic Facebook + Instagram placements).
+    vi.restoreAllMocks();
+    calls = [];
+    graph(calls);
+    await campaigns.POST(post(adBody(t, { name: "FB only", whatsappStatus: false })), P(t.org.id));
+    expect(JSON.stringify(calls.find((c) => c.path.endsWith("/adsets"))!.body)).not.toContain("publisher_platforms");
   });
 });

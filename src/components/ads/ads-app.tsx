@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Eye, Megaphone, Pause, Play, RefreshCw, Trash2 } from "lucide-react";
-import { Alert, Badge, Button, Card, CardBody, CardHeader, ConfirmationDialog, EmptyState, ErrorState, Field, Input, LoadingState, Modal, PageHeader, Select, Textarea, useToast } from "@/components/ds";
+import { Alert, Badge, Button, Card, CardBody, CardHeader, Checkbox, ConfirmationDialog, EmptyState, ErrorState, Field, Input, LoadingState, Modal, PageHeader, Select, Textarea, useToast } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
 import { formatINR } from "@/lib/catalog";
 
@@ -19,6 +19,8 @@ type Ad = {
   lastError: string;
   metaStatus: string;
   reviewNote: string;
+  whatsappStatus: boolean;
+  placementNote: string;
   syncedAt: string | null;
 };
 type Overview = {
@@ -162,7 +164,8 @@ export function AdsApp({ orgId, canManage, canConnect }: { orgId: string; canMan
                         {a.costPerChat !== null ? ` · ${formatINR(a.costPerChat)} per chat` : ""}
                       </p>
                       {a.lastError ? <p className="mt-1 text-small text-red-400">{a.lastError}</p> : null}
-                      {a.status !== "failed" ? <p className="mt-1 text-caption text-app-subtle">Synced with Meta {ago(a.syncedAt)}</p> : null}
+                      {a.status !== "failed" ? <p className="mt-1 text-caption text-app-subtle">{a.whatsappStatus ? "Facebook · Instagram · WhatsApp Status" : "Facebook · Instagram"} · synced with Meta {ago(a.syncedAt)}</p> : null}
+                      {a.placementNote ? <p className="mt-1 text-caption text-amber-300">{a.placementNote}</p> : null}
                     </div>
                     {canManage ? (
                       <div className="flex flex-wrap gap-2">
@@ -266,6 +269,7 @@ function ConnectCard({ base, onDone }: { base: string; onDone: () => void }) {
 function CreateModal({ open, onClose, base, numbers, onDone, onFailed }: { open: boolean; onClose: () => void; base: string; numbers: Overview["numbers"]; onDone: () => void; onFailed: () => void }) {
   const toast = useToast();
   const empty = { name: "", whatsappAccountId: "", dailyBudgetRupees: "500", message: "", headline: "", ageMin: "18", ageMax: "55", gender: "all" };
+  const [onStatus, setOnStatus] = React.useState(true);
   const [f, setF] = React.useState(empty);
   const [hash, setHash] = React.useState("");
   const [uploading, setUploading] = React.useState(false);
@@ -293,7 +297,7 @@ function CreateModal({ open, onClose, base, numbers, onDone, onFailed }: { open:
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    const body = { name: f.name, whatsappAccountId: f.whatsappAccountId || numbers[0]?.id, dailyBudgetRupees: Number(f.dailyBudgetRupees), message: f.message, headline: f.headline, imageHash: hash, ageMin: Number(f.ageMin), ageMax: Number(f.ageMax), gender: f.gender, locations: places.map(({ key, name, type, radiusKm }) => ({ key, name, type, ...(type === "city" ? { radiusKm: radiusKm ?? 25 } : {}) })) };
+    const body = { name: f.name, whatsappAccountId: f.whatsappAccountId || numbers[0]?.id, dailyBudgetRupees: Number(f.dailyBudgetRupees), message: f.message, headline: f.headline, imageHash: hash, ageMin: Number(f.ageMin), ageMax: Number(f.ageMax), gender: f.gender, whatsappStatus: onStatus, locations: places.map(({ key, name, type, radiusKm }) => ({ key, name, type, ...(type === "city" ? { radiusKm: radiusKm ?? 25 } : {}) })) };
     const r = await apiFetch(`${base}/campaigns`, { method: "POST", body });
     setSaving(false);
     if (!r.ok) {
@@ -350,6 +354,7 @@ function CreateModal({ open, onClose, base, numbers, onDone, onFailed }: { open:
         </div>
         <PlacePicker base={base} value={places} onChange={setPlaces} error={err.locations?.[0]} />
         <p className="text-caption text-app-subtle">The daily budget is charged by Meta, between ₹100 and ₹10,000.</p>
+        <Checkbox id="ad-wa-status" label="Also show on WhatsApp Status" description="Adds the WhatsApp Updates tab (with Instagram Stories, as Meta requires). If Meta hasn't opened it for your ad account yet, the ad still runs on Facebook and Instagram and tells you why." checked={onStatus} onChange={(e) => setOnStatus(e.target.checked)} />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={saving} disabled={!hash || !numbers.length}>Create ad</Button>
@@ -446,6 +451,7 @@ const FORMATS = [
   { id: "MOBILE_FEED_STANDARD", label: "Facebook feed" },
   { id: "INSTAGRAM_STANDARD", label: "Instagram feed" },
   { id: "INSTAGRAM_STORY", label: "Instagram story" },
+  { id: "WHATSAPP_STATUS_MEDIA", label: "WhatsApp Status" },
 ] as const;
 
 /** Meta's own rendering of the ad, shown in a sandboxed frame from facebook.com. */
@@ -465,7 +471,7 @@ function PreviewModal({ base, ad, onClose }: { base: string; ad: Ad; onClose: ()
   return (
     <Modal open onClose={onClose} title={`Preview: ${ad.name}`} description="Exactly how Meta renders the ad. It can take a moment to load." size="lg">
       <div className="mb-3 flex flex-wrap gap-2" role="tablist" aria-label="Placement">
-        {FORMATS.map((f) => (
+        {FORMATS.filter((f) => f.id !== "WHATSAPP_STATUS_MEDIA" || ad.whatsappStatus).map((f) => (
           <button key={f.id} type="button" role="tab" aria-selected={format === f.id} onClick={() => setFormat(f.id)} className={`rounded-full px-3 py-1 text-small ${format === f.id ? "bg-app-primary text-app-on-primary" : "text-app-muted hover:text-app-text"}`}>{f.label}</button>
         ))}
       </div>

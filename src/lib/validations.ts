@@ -871,6 +871,7 @@ export const adCreateSchema = z
     ageMin: z.number().int().min(18).max(65).default(18),
     ageMax: z.number().int().min(18).max(65).default(55),
     gender: z.enum(["all", "male", "female"]).default("all"),
+    whatsappStatus: z.boolean().default(true),
     startAt: z.coerce.date().nullable().default(null),
     endAt: z.coerce.date().nullable().default(null),
     locations: z

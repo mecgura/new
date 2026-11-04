@@ -1646,6 +1646,8 @@ model AdCampaign {
   lastError         String    @default("")
   metaStatus        String    @default("") // Meta's effective_status at the last sync: PENDING_REVIEW | ACTIVE | DISAPPROVED | PAUSED | WITH_ISSUES …
   reviewNote        String    @default("") // Meta's rejection / issue text, if any
+  whatsappStatus    Boolean   @default(false) // placed on WhatsApp Status (Updates tab) as well as Facebook / Instagram
+  placementNote     String    @default("") // e.g. why WhatsApp Status couldn't be used for this ad
   spend             Int       @default(0) // paise, from Meta insights
   impressions       Int       @default(0)
   clicks            Int       @default(0)
