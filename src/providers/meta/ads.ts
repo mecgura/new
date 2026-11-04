@@ -1,4 +1,4 @@
-import { graph } from "@/providers/meta/graph";
+import { graph, MetaApiError } from "@/providers/meta/graph";
 
 /**
  * Meta Marketing API calls for click-to-WhatsApp ads. Everything here is created PAUSED; activating is a separate call.
@@ -63,18 +63,31 @@ export type CtwaInput = {
   locations: AdLocation[];
 };
 
+/** Runs one creation step; a Meta error says which step failed (campaign, ad set, creative, ad). */
+async function step<T>(name: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (e) {
+    if (e instanceof MetaApiError) throw new MetaApiError(`${name}: ${e.message}`, e.status, e.code, e.subcode, e.fbtraceId, e.userMessage);
+    throw e;
+  }
+}
+
 /** Campaign → ad set → creative → ad, all PAUSED. Returns every id created so a partial failure can be cleaned up. */
 export async function createCtwaAd(adAccountId: string, token: string, input: CtwaInput, onStep?: (ids: Partial<{ campaign: string; adset: string; creative: string; ad: string }>) => void) {
   const act = `act_${adAccountId}`;
   const ids: Partial<{ campaign: string; adset: string; creative: string; ad: string }> = {};
-  const campaign = await graph<Id>(`${act}/campaigns`, {
-    token,
-    method: "POST",
-    body: { name: input.name, objective: "OUTCOME_ENGAGEMENT", status: "PAUSED", special_ad_categories: [] },
-  });
+  // Budget lives on the ad set, so Meta (v23+) requires saying budgets are NOT shared across ad sets.
+  const campaign = await step("Campaign", () =>
+    graph<Id>(`${act}/campaigns`, {
+      token,
+      method: "POST",
+      body: { name: input.name, objective: "OUTCOME_ENGAGEMENT", status: "PAUSED", special_ad_categories: [], is_adset_budget_sharing_enabled: false },
+    })
+  );
   ids.campaign = campaign.id;
   onStep?.({ ...ids });
-  const adset = await graph<Id>(`${act}/adsets`, {
+  const adset = await step("Ad set", () => graph<Id>(`${act}/adsets`, {
     token,
     method: "POST",
     body: {
@@ -91,15 +104,17 @@ export async function createCtwaAd(adAccountId: string, token: string, input: Ct
         age_min: input.ageMin,
         age_max: input.ageMax,
         ...(input.gender === "male" ? { genders: [1] } : input.gender === "female" ? { genders: [2] } : {}),
+        // Meta requires an explicit Advantage+ audience choice; 0 = use exactly the age, gender and places chosen here.
+        targeting_automation: { advantage_audience: 0 },
       },
       start_time: input.startAt.toISOString(),
       ...(input.endAt ? { end_time: input.endAt.toISOString() } : {}),
       status: "PAUSED",
     },
-  });
+  }));
   ids.adset = adset.id;
   onStep?.({ ...ids });
-  const creative = await graph<Id>(`${act}/adcreatives`, {
+  const creative = await step("Creative", () => graph<Id>(`${act}/adcreatives`, {
     token,
     method: "POST",
     body: {
@@ -115,14 +130,16 @@ export async function createCtwaAd(adAccountId: string, token: string, input: Ct
         },
       },
     },
-  });
+  }));
   ids.creative = creative.id;
   onStep?.({ ...ids });
-  const ad = await graph<Id>(`${act}/ads`, {
-    token,
-    method: "POST",
-    body: { name: input.name, adset_id: adset.id, creative: { creative_id: creative.id }, status: "PAUSED" },
-  });
+  const ad = await step("Ad", () =>
+    graph<Id>(`${act}/ads`, {
+      token,
+      method: "POST",
+      body: { name: input.name, adset_id: adset.id, creative: { creative_id: creative.id }, status: "PAUSED" },
+    })
+  );
   ids.ad = ad.id;
   onStep?.({ ...ids });
   return ids;

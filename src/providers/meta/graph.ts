@@ -7,7 +7,9 @@ export class MetaApiError extends Error {
     readonly status: number,
     readonly code?: number,
     readonly subcode?: number,
-    readonly fbtraceId?: string
+    readonly fbtraceId?: string,
+    /** Meta's detailed, user-facing explanation (error_user_title / error_user_msg), when it sends one. */
+    readonly userMessage: string = ""
   ) {
     super(message);
     this.name = "MetaApiError";
@@ -45,10 +47,11 @@ export async function graph<T>(path: string, opts: GraphOptions = {}): Promise<T
   } catch {
     throw new MetaApiError("Couldn't reach Meta. Please try again in a moment.", 0);
   }
-  const data = (await res.json().catch(() => ({}))) as { error?: { message?: string; code?: number; error_subcode?: number; fbtrace_id?: string } };
+  const data = (await res.json().catch(() => ({}))) as { error?: { message?: string; code?: number; error_subcode?: number; fbtrace_id?: string; error_user_title?: string; error_user_msg?: string } };
   if (!res.ok || data.error) {
     const e = data.error ?? {};
-    throw new MetaApiError(e.message ?? `Meta returned HTTP ${res.status}`, res.status, e.code, e.error_subcode, e.fbtrace_id);
+    const detail = [e.error_user_title, e.error_user_msg].filter(Boolean).join(": ");
+    throw new MetaApiError(e.message ?? `Meta returned HTTP ${res.status}`, res.status, e.code, e.error_subcode, e.fbtrace_id, detail);
   }
   return data as T;
 }

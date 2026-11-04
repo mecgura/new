@@ -44,7 +44,7 @@ function graph(calls: Call[], opts: { failAt?: string } = {}) {
     const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : undefined;
     calls.push({ path, method, body });
     const reply = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
-    if (opts.failAt && path.endsWith(opts.failAt) && method === "POST") return reply({ error: { message: "Invalid parameter", code: 100 } }, 400);
+    if (opts.failAt && path.endsWith(opts.failAt) && method === "POST") return reply({ error: { message: "Invalid parameter", code: 100, error_subcode: 1870227, error_user_title: "Advantage audience flag required", error_user_msg: "Set targeting_automation.advantage_audience to 0 or 1." } }, 400);
     if (method === "GET" && /^act_\d+$/.test(path)) return reply({ id: path, name: "Shop Ads", currency: "INR", account_status: 1 });
     if (method === "GET" && path === "search") return reply({ data: [{ key: "1035921", name: "Ludhiana", type: "city", region: "Punjab" }, { key: "1748", name: "Punjab", type: "region" }, { key: "IN", name: "India", type: "country" }] });
     if (method === "GET" && /insights$/.test(path)) return reply({ data: [{ spend: "123.45", impressions: "5000", clicks: "210" }] });
@@ -101,6 +101,9 @@ describe("Ads Manager", () => {
     const adset = posts[1].body as { daily_budget: number; destination_type: string; promoted_object: { page_id: string; whatsapp_phone_number: string }; optimization_goal: string };
     expect(adset).toMatchObject({ daily_budget: 50_000, destination_type: "WHATSAPP", optimization_goal: "CONVERSATIONS", promoted_object: { page_id: "987654321", whatsapp_phone_number: t.wa.phoneNumber } });
     expect(JSON.stringify(posts[2].body)).toContain("WHATSAPP_MESSAGE");
+    // Fields Meta (v23+) requires: no budget sharing across ad sets, explicit Advantage+ audience choice.
+    expect(posts[0].body).toMatchObject({ is_adset_budget_sharing_enabled: false, objective: "OUTCOME_ENGAGEMENT" });
+    expect((posts[1].body as { targeting: { targeting_automation: { advantage_audience: number } } }).targeting.targeting_automation).toEqual({ advantage_audience: 0 });
 
     // Starting needs the confirmation.
     expect((await status.POST(post({ action: "activate" }), P(t.org.id, { adId: ad.id }))).status).toBe(400);
@@ -119,10 +122,10 @@ describe("Ads Manager", () => {
     actAs(t.owner);
     const r = await json(await campaigns.POST(post(adBody(t)), P(t.org.id)));
     expect(r.status).toBe(400);
-    expect(String(r.body.error)).toContain("Invalid parameter");
+    expect(String(r.body.error)).toBe("Meta: Creative: Invalid parameter — Advantage audience flag required: Set targeting_automation.advantage_audience to 0 or 1.");
     const row = await db.adCampaign.findFirstOrThrow({ where: { organizationId: t.org.id } });
     expect(row).toMatchObject({ status: "failed" });
-    expect(row.lastError).toContain("Invalid parameter");
+    expect(row.lastError).toContain("Creative: Invalid parameter — Advantage audience flag required");
     expect(calls.some((c) => c.body?.status === "ARCHIVED")).toBe(true);
   });
 

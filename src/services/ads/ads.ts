@@ -10,7 +10,8 @@ import { assertServiceEnabled } from "@/services/whatsapp/guards";
 export const MIN_DAILY_BUDGET = 10_000; // ₹100
 export const MAX_DAILY_BUDGET = 1_000_000; // ₹10,000
 
-const metaError = (e: unknown, fallback: string) => (e instanceof MetaApiError ? `Meta: ${e.message}` : fallback);
+/** Meta's own explanation when it sends one (e.g. "Ad set: Invalid parameter — Advantage audience flag required"). */
+const metaError = (e: unknown, fallback: string) => (e instanceof MetaApiError ? `Meta: ${e.message}${e.userMessage && e.userMessage !== e.message ? ` — ${e.userMessage}` : ""}` : fallback);
 
 async function token(organizationId: string) {
   const c = await db.adConnection.findUnique({ where: { organizationId } });

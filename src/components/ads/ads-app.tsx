@@ -151,7 +151,7 @@ export function AdsApp({ orgId, canManage, canConnect }: { orgId: string; canMan
         )
       ) : null}
 
-      <CreateModal open={creating} onClose={() => setCreating(false)} base={base} numbers={data.numbers} onDone={() => { setCreating(false); void load(); }} />
+      <CreateModal open={creating} onClose={() => setCreating(false)} base={base} numbers={data.numbers} onDone={() => { setCreating(false); void load(); }} onFailed={() => void load()} />
       <ConfirmationDialog
         open={Boolean(starting)}
         onClose={() => setStarting(null)}
@@ -212,7 +212,7 @@ function ConnectCard({ base, onDone }: { base: string; onDone: () => void }) {
   );
 }
 
-function CreateModal({ open, onClose, base, numbers, onDone }: { open: boolean; onClose: () => void; base: string; numbers: Overview["numbers"]; onDone: () => void }) {
+function CreateModal({ open, onClose, base, numbers, onDone, onFailed }: { open: boolean; onClose: () => void; base: string; numbers: Overview["numbers"]; onDone: () => void; onFailed: () => void }) {
   const toast = useToast();
   const empty = { name: "", whatsappAccountId: "", dailyBudgetRupees: "500", message: "", headline: "", ageMin: "18", ageMax: "55", gender: "all" };
   const [f, setF] = React.useState(empty);
@@ -247,6 +247,7 @@ function CreateModal({ open, onClose, base, numbers, onDone }: { open: boolean; 
     setSaving(false);
     if (!r.ok) {
       setErr(r.details ?? {});
+      onFailed(); // the failed attempt (with Meta's reason) shows in the list
       return toast(r.error, "error");
     }
     toast("Ad created (paused)");
