@@ -1,4 +1,4 @@
-import { Activity, BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, LayoutTemplate, LifeBuoy, Mail, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, Users, UsersRound, Webhook, Workflow, type LucideIcon } from "lucide-react";
+import { Activity, BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, LayoutTemplate, LifeBuoy, Mail, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, TrendingUp, Users, UsersRound, Webhook, Workflow, type LucideIcon } from "lucide-react";
 
 export type NavService = "WHATSAPP_AUTOMATION" | "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "SOCIAL_MEDIA" | "LOYALTY" | "REVIEWS" | "LANDING_PAGES";
 
@@ -74,6 +74,7 @@ export const ADMIN_NAV: NavSection[] = [
       { label: "Users", icon: Users, href: "/admin/users" },
       { label: "WhatsApp Accounts", icon: MessageCircle, href: "/admin/whatsapp" },
       { label: "Billing & Plans", icon: CreditCard, href: "/admin/billing" },
+      { label: "Revenue", icon: TrendingUp, href: "/admin/revenue" },
       { label: "Meta balance", icon: Landmark, href: "/admin/meta-balance" },
       { label: "Agreements", icon: FileSignature, href: "/admin/agreements" },
       { label: "Usage", icon: Gauge, href: "/admin/usage" },

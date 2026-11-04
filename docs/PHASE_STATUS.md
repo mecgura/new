@@ -139,3 +139,16 @@ _(newest last)_
   (scheduler, every 15 min).
 - UI: client `/support` ("Help & support" in the sidebar), admin `/admin/support` and `/admin/health`.
 - Tests `tests/integration/support.test.ts` (5). Suite 493/493, build OK, browser smoke OK.
+
+### Stage 6: Revenue analytics ✅ (2026-11-04)
+- Builds on the existing billing overview (`src/services/billing/admin.ts`: monthly paid revenue, MRR split,
+  receivables, failed payments, new/cancelled subscriptions), which stays as is.
+- Service `src/services/billing/revenue.ts`: IST month windows, MRR per client at any moment, 12-month MRR trend,
+  ARR, ARPA, MRR movements (new / expansion / contraction / churned, clients won/lost), client churn, revenue churn and
+  net revenue retention (per month + 3-month average), renewal rate (renewal invoices, last 90 days), MRR by plan,
+  revenue by client (paid invoices, 12 months), wallet ledger (top-ups, usage, refunds, corrections, 30 days),
+  reconciliation (payment received but invoice open, amount differs, gateway-paid invoice without a payment).
+- API `/api/admin/revenue`, `/api/admin/revenue/csv` (formula-injection safe, audited `revenue.exported`).
+- UI `/admin/revenue` (admin sidebar "Revenue").
+- Not built (needs billing-cycle changes, planned separately): annual plans, trials, automatic failed-payment retries.
+- Tests `tests/integration/revenue.test.ts` (2). Suite 495/495, build OK, page smoke OK.
