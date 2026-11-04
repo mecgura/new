@@ -5,7 +5,7 @@ import { syncInsights } from "@/services/ads/ads";
 
 type Ctx = { params: Promise<{ orgId: string; adId: string }> };
 
-/** Refreshes spend, impressions and clicks for one ad from Meta. */
+/** Refreshes the live status, review result, spend, impressions and clicks for one ad from Meta. */
 export const POST = handle<Ctx>(async (req, { params }) => {
   const { access, ids } = await orgRoute(req, params, "ads:read");
   enforceRateLimit(`ads-sync:${access.user.id}`, 60, 60 * 60_000);

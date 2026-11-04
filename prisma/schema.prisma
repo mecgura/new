@@ -1644,6 +1644,8 @@ model AdCampaign {
   metaCreativeId    String    @default("")
   metaAdId          String    @default("")
   lastError         String    @default("")
+  metaStatus        String    @default("") // Meta's effective_status at the last sync: PENDING_REVIEW | ACTIVE | DISAPPROVED | PAUSED | WITH_ISSUES …
+  reviewNote        String    @default("") // Meta's rejection / issue text, if any
   spend             Int       @default(0) // paise, from Meta insights
   impressions       Int       @default(0)
   clicks            Int       @default(0)

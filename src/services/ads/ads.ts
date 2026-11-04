@@ -4,7 +4,7 @@ import { audit } from "@/lib/audit";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import type { OrgAccess } from "@/lib/session";
 import { MetaApiError } from "@/providers/meta/graph";
-import { createCtwaAd, getAdAccount, getAdInsights, getPage, searchLocations, setStatus, uploadAdImage, type AdLocation, type CtwaInput } from "@/providers/meta/ads";
+import { createCtwaAd, getAdAccount, getAdInsights, getAdPreviewUrl, getAdStatus, getPage, searchLocations, setStatus, uploadAdImage, type AdLocation, type CtwaInput, type PreviewFormat } from "@/providers/meta/ads";
 import { assertServiceEnabled } from "@/services/whatsapp/guards";
 
 export const MIN_DAILY_BUDGET = 10_000; // ₹100
@@ -47,6 +47,8 @@ function toDto(c: CampaignRow, chats: number) {
     endAt: c.endAt,
     metaAdId: c.metaAdId,
     lastError: c.lastError,
+    metaStatus: c.metaStatus,
+    reviewNote: c.reviewNote,
     spend: c.spend,
     impressions: c.impressions,
     clicks: c.clicks,
@@ -159,20 +161,60 @@ export async function changeStatus(access: OrgAccess, id: string, action: "activ
   return (await getOverview(orgId)).campaigns.find((x) => x.id === id) ?? null;
 }
 
-/** Pulls spend, impressions and clicks from Meta for one ad. */
+/** Meta's delivery status → MECGURA's own status (review states keep the status the user chose). */
+function localStatus(current: string, effective: string): string {
+  if (effective === "ACTIVE") return "active";
+  if (["PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED"].includes(effective)) return "paused";
+  if (["ARCHIVED", "DELETED"].includes(effective)) return "archived";
+  return current; // PENDING_REVIEW, IN_PROCESS, DISAPPROVED, WITH_ISSUES, PREAPPROVED…: shown via metaStatus
+}
+
+/** Pulls the live status, review result and results (spend, views, clicks) from Meta for one ad. */
 export async function syncInsights(access: OrgAccess, id: string) {
   const orgId = access.organizationId;
   await assertServiceEnabled(orgId, "ADS_MANAGER");
   const row = await db.adCampaign.findFirst({ where: { id, organizationId: orgId } });
   if (!row?.metaAdId) throw new ApiError("NOT_FOUND", "Ad not found.");
   const { token: t } = await token(orgId);
-  try {
-    const i = await getAdInsights(row.metaAdId, t);
-    await db.adCampaign.update({ where: { id }, data: { spend: i.spendPaise, impressions: i.impressions, clicks: i.clicks, syncedAt: new Date() } });
-  } catch (e) {
-    throw new ApiError("CONFLICT", metaError(e, "Could not read results from Meta."));
-  }
+  await syncRow(row.id, row.status, row.metaAdId, t, true);
   return (await getOverview(orgId)).campaigns.find((x) => x.id === id)!;
+}
+
+async function syncRow(id: string, current: string, metaAdId: string, t: string, strict: boolean) {
+  try {
+    const [st, i] = await Promise.all([getAdStatus(metaAdId, t), getAdInsights(metaAdId, t)]);
+    await db.adCampaign.update({ where: { id }, data: { metaStatus: st.effectiveStatus, reviewNote: st.note, status: localStatus(current, st.effectiveStatus), spend: i.spendPaise, impressions: i.impressions, clicks: i.clicks, syncedAt: new Date() } });
+    return true;
+  } catch (e) {
+    if (strict) throw new ApiError("CONFLICT", metaError(e, "Could not read the ad from Meta."));
+    return false;
+  }
+}
+
+/** Syncs every live ad (paused / active) of the workspace — used when the Ads page opens. */
+export async function syncAll(access: OrgAccess) {
+  const orgId = access.organizationId;
+  await assertServiceEnabled(orgId, "ADS_MANAGER");
+  const rows = await db.adCampaign.findMany({ where: { organizationId: orgId, status: { in: ["paused", "active"] }, metaAdId: { not: "" } }, orderBy: { createdAt: "desc" }, take: 20 });
+  if (!rows.length) return { synced: 0, failed: 0, overview: await getOverview(orgId) };
+  const { token: t } = await token(orgId);
+  let synced = 0;
+  for (const r of rows) if (await syncRow(r.id, r.status, r.metaAdId, t, false)) synced++;
+  return { synced, failed: rows.length - synced, overview: await getOverview(orgId) };
+}
+
+/** Meta's own preview of the ad (an https facebook.com URL to show in a frame). */
+export async function adPreview(access: OrgAccess, id: string, format: PreviewFormat) {
+  const orgId = access.organizationId;
+  await assertServiceEnabled(orgId, "ADS_MANAGER");
+  const row = await db.adCampaign.findFirst({ where: { id, organizationId: orgId } });
+  if (!row?.metaAdId) throw new ApiError("NOT_FOUND", "This ad was not created on Meta.");
+  const { token: t } = await token(orgId);
+  try {
+    return { url: await getAdPreviewUrl(row.metaAdId, t, format), format };
+  } catch (e) {
+    throw new ApiError("CONFLICT", metaError(e, "Meta did not return a preview for this ad."));
+  }
 }
 
 /** Indian states and cities matching what the user typed, for ad targeting. */

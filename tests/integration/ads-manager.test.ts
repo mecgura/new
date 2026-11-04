@@ -8,6 +8,8 @@ import * as campaigns from "@/app/api/organizations/[orgId]/ads-manager/campaign
 import * as status from "@/app/api/organizations/[orgId]/ads-manager/campaigns/[adId]/status/route";
 import * as sync from "@/app/api/organizations/[orgId]/ads-manager/campaigns/[adId]/sync/route";
 import * as locations from "@/app/api/organizations/[orgId]/ads-manager/locations/route";
+import * as syncAllRoute from "@/app/api/organizations/[orgId]/ads-manager/sync/route";
+import * as previewRoute from "@/app/api/organizations/[orgId]/ads-manager/campaigns/[adId]/preview/route";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -35,7 +37,7 @@ async function tenant(opts: { service?: boolean } = {}) {
 }
 
 type Call = { path: string; method: string; body?: Record<string, unknown> };
-function graph(calls: Call[], opts: { failAt?: string } = {}) {
+function graph(calls: Call[], opts: { failAt?: string; ad?: Record<string, unknown>; preview?: string } = {}) {
   let seq = 0;
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -48,6 +50,8 @@ function graph(calls: Call[], opts: { failAt?: string } = {}) {
     if (method === "GET" && /^act_\d+$/.test(path)) return reply({ id: path, name: "Shop Ads", currency: "INR", account_status: 1 });
     if (method === "GET" && path === "search") return reply({ data: [{ key: "1035921", name: "Ludhiana", type: "city", region: "Punjab" }, { key: "1748", name: "Punjab", type: "region" }, { key: "IN", name: "India", type: "country" }] });
     if (method === "GET" && /insights$/.test(path)) return reply({ data: [{ spend: "123.45", impressions: "5000", clicks: "210" }] });
+    if (method === "GET" && path.endsWith("/previews")) return reply({ data: [{ body: opts.preview ?? '<iframe src="https://www.facebook.com/ads/api/preview_iframe.php?d=abc&amp;t=xyz" width="540" height="690"></iframe>' }] });
+    if (method === "GET" && /^ads_\d+$/.test(path) && opts.ad) return reply({ id: path, ...opts.ad });
     if (method === "GET") return reply({ id: path, name: "Shop Page" });
     if (path.endsWith("/adimages")) return reply({ images: { "a.png": { hash: "abc123hash" } } });
     if (/\/(campaigns|adsets|adcreatives|ads)$/.test(path)) return reply({ id: `${path.split("/").pop()}_${++seq}` });
@@ -217,5 +221,47 @@ describe("location targeting", () => {
     await connect(t);
     actAs(t.agent);
     expect((await locations.GET(req("/x?q=punjab"), P(t.org.id))).status).toBe(403);
+  });
+
+  it("syncs Meta's live status and review result: in review, then rejected with the reason", async () => {
+    const t = await tenant();
+    graph([], { ad: { effective_status: "PENDING_REVIEW" } });
+    await connect(t);
+    actAs(t.owner);
+    const ad = (await json(await campaigns.POST(post(adBody(t)), P(t.org.id)))).body.ad as { id: string };
+    await status.POST(post({ action: "activate", confirmBudget: true }), P(t.org.id, { adId: ad.id }));
+    const all = await json(await syncAllRoute.POST(post({}), P(t.org.id)));
+    expect(all.body).toMatchObject({ synced: 1, failed: 0 });
+    const row = (all.body.overview as { campaigns: { id: string; status: string; metaStatus: string; spend: number }[] }).campaigns.find((c) => c.id === ad.id)!;
+    expect(row).toMatchObject({ status: "active", metaStatus: "PENDING_REVIEW", spend: 12_345 });
+
+    vi.restoreAllMocks();
+    graph([], { ad: { effective_status: "DISAPPROVED", ad_review_feedback: { global: { LOW_QUALITY_OR_DISRUPTIVE_CONTENT: "Your ad wasn't approved because it uses misleading claims." } } } });
+    const one = await json(await sync.POST(post({}), P(t.org.id, { adId: ad.id })));
+    expect(one.body.ad).toMatchObject({ metaStatus: "DISAPPROVED" });
+    expect((one.body.ad as { reviewNote: string }).reviewNote).toContain("misleading claims");
+
+    // Paused on Meta (e.g. from Ads Manager) → MECGURA shows paused too.
+    vi.restoreAllMocks();
+    graph([], { ad: { effective_status: "CAMPAIGN_PAUSED" } });
+    const p = await json(await sync.POST(post({}), P(t.org.id, { adId: ad.id })));
+    expect(p.body.ad).toMatchObject({ status: "paused", metaStatus: "CAMPAIGN_PAUSED" });
+  });
+
+  it("previews: passes on only a facebook.com preview URL; agents can't see it", async () => {
+    const t = await tenant();
+    graph([]);
+    await connect(t);
+    actAs(t.owner);
+    const ad = (await json(await campaigns.POST(post(adBody(t)), P(t.org.id)))).body.ad as { id: string };
+    const r = await json(await previewRoute.GET(req("/x?format=INSTAGRAM_STORY"), P(t.org.id, { adId: ad.id })));
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ url: "https://www.facebook.com/ads/api/preview_iframe.php?d=abc&t=xyz", format: "INSTAGRAM_STORY" });
+    expect((await previewRoute.GET(req("/x?format=BOGUS"), P(t.org.id, { adId: ad.id }))).status).toBe(400);
+    vi.restoreAllMocks();
+    graph([], { preview: '<iframe src="https://evil.example.com/x"></iframe>' });
+    expect((await previewRoute.GET(req("/x"), P(t.org.id, { adId: ad.id }))).status).toBe(409);
+    actAs(t.agent);
+    expect((await previewRoute.GET(req("/x"), P(t.org.id, { adId: ad.id }))).status).toBe(403);
   });
 });

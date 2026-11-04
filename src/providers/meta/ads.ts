@@ -159,3 +159,31 @@ export async function getAdInsights(adId: string, token: string): Promise<AdInsi
   const d = r.data?.[0];
   return { spendPaise: Math.round(parseFloat(d?.spend ?? "0") * 100) || 0, impressions: Number(d?.impressions ?? 0) || 0, clicks: Number(d?.clicks ?? 0) || 0 };
 }
+
+export type AdStatusInfo = { effectiveStatus: string; note: string };
+
+/** The ad's live delivery status on Meta (e.g. PENDING_REVIEW, ACTIVE, DISAPPROVED) and Meta's reason when it was rejected or has an issue. */
+export async function getAdStatus(adId: string, token: string): Promise<AdStatusInfo> {
+  const r = await graph<{ effective_status?: string; ad_review_feedback?: Record<string, Record<string, string>>; issues_info?: { error_summary?: string; error_message?: string }[] }>(adId, {
+    token,
+    query: { fields: "effective_status,ad_review_feedback,issues_info" },
+  });
+  const review = Object.values(r.ad_review_feedback ?? {}).flatMap((group) => Object.entries(group ?? {}).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`));
+  const issues = (r.issues_info ?? []).map((i) => i.error_message || i.error_summary || "").filter(Boolean);
+  return { effectiveStatus: r.effective_status ?? "", note: [...review, ...issues].join(" · ").slice(0, 1000) };
+}
+
+export const PREVIEW_FORMATS = ["MOBILE_FEED_STANDARD", "INSTAGRAM_STANDARD", "INSTAGRAM_STORY", "DESKTOP_FEED_STANDARD"] as const;
+export type PreviewFormat = (typeof PREVIEW_FORMATS)[number];
+
+/**
+ * Meta's own rendering of the ad. The Graph API returns an <iframe> snippet; only its src (a facebook.com preview
+ * URL) is passed on, so no HTML from the API is ever injected into MECGURA pages.
+ */
+export async function getAdPreviewUrl(adId: string, token: string, format: PreviewFormat): Promise<string> {
+  const r = await graph<{ data?: { body?: string }[] }>(`${adId}/previews`, { token, query: { ad_format: format } });
+  const body = r.data?.[0]?.body ?? "";
+  const src = /src=["']([^"']+)["']/i.exec(body)?.[1]?.replace(/&amp;/g, "&") ?? "";
+  if (!/^https:\/\/(www|business)\.facebook\.com\//i.test(src)) throw new Error("Meta did not return a preview for this ad.");
+  return src;
+}

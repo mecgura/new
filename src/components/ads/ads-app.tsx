@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Megaphone, Pause, Play, RefreshCw, Trash2 } from "lucide-react";
+import { Eye, Megaphone, Pause, Play, RefreshCw, Trash2 } from "lucide-react";
 import { Alert, Badge, Button, Card, CardBody, CardHeader, ConfirmationDialog, EmptyState, ErrorState, Field, Input, LoadingState, Modal, PageHeader, Select, Textarea, useToast } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
 import { formatINR } from "@/lib/catalog";
@@ -17,6 +17,8 @@ type Ad = {
   chats: number;
   costPerChat: number | null;
   lastError: string;
+  metaStatus: string;
+  reviewNote: string;
   syncedAt: string | null;
 };
 type Overview = {
@@ -27,6 +29,27 @@ type Overview = {
 
 const TONE = { draft: "neutral", paused: "warning", active: "success", failed: "danger", archived: "neutral" } as const;
 
+/** Meta's delivery status (effective_status) in plain words — exactly what Meta reported at the last sync. */
+const META: Record<string, { label: string; tone: "success" | "warning" | "danger" | "neutral" | "info" }> = {
+  PENDING_REVIEW: { label: "In review on Meta", tone: "warning" },
+  IN_PROCESS: { label: "Processing on Meta", tone: "warning" },
+  PREAPPROVED: { label: "Pre-approved on Meta", tone: "info" },
+  ACTIVE: { label: "Live on Meta", tone: "success" },
+  DISAPPROVED: { label: "Rejected by Meta", tone: "danger" },
+  WITH_ISSUES: { label: "Has issues on Meta", tone: "danger" },
+  PAUSED: { label: "Paused on Meta", tone: "neutral" },
+  CAMPAIGN_PAUSED: { label: "Campaign paused on Meta", tone: "neutral" },
+  ADSET_PAUSED: { label: "Ad set paused on Meta", tone: "neutral" },
+  PENDING_BILLING_INFO: { label: "Meta needs payment details", tone: "danger" },
+  ARCHIVED: { label: "Archived on Meta", tone: "neutral" },
+  DELETED: { label: "Deleted on Meta", tone: "neutral" },
+};
+const ago = (d: string | null) => {
+  if (!d) return "never";
+  const m = Math.round((new Date().getTime() - new Date(d).getTime()) / 60_000);
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : new Date(d).toLocaleDateString("en-IN");
+};
+
 export function AdsApp({ orgId, canManage, canConnect }: { orgId: string; canManage: boolean; canConnect: boolean }) {
   const base = `/api/organizations/${orgId}/ads-manager`;
   const toast = useToast();
@@ -35,6 +58,7 @@ export function AdsApp({ orgId, canManage, canConnect }: { orgId: string; canMan
   const [creating, setCreating] = React.useState(false);
   const [starting, setStarting] = React.useState<Ad | null>(null);
   const [busy, setBusy] = React.useState("");
+  const [preview, setPreview] = React.useState<Ad | null>(null);
 
   const load = React.useCallback(async () => {
     const r = await apiFetch<Overview>(base);
@@ -42,10 +66,19 @@ export function AdsApp({ orgId, canManage, canConnect }: { orgId: string; canMan
     setError("");
     setData(r.data);
   }, [base]);
+  /** Reads the live status, review result and results of every ad from Meta. */
+  const syncAll = React.useCallback(async (quiet: boolean) => {
+    setBusy("sync-all");
+    const r = await apiFetch<{ synced: number; failed: number; overview: Overview }>(`${base}/sync`, { method: "POST", body: {} });
+    setBusy("");
+    if (!r.ok) return quiet ? undefined : toast(r.error, "error");
+    setData(r.data.overview);
+    if (!quiet) toast(r.data.failed ? `Synced ${r.data.synced}, ${r.data.failed} couldn't be read from Meta` : "Up to date with Meta", r.data.failed ? "error" : "success");
+  }, [base, toast]);
   React.useEffect(() => {
-    const id = window.setTimeout(() => void load(), 0);
+    const id = window.setTimeout(() => void load().then(() => syncAll(true)), 0);
     return () => window.clearTimeout(id);
-  }, [load]);
+  }, [load, syncAll]);
 
   async function act(ad: Ad, action: "activate" | "pause" | "archive") {
     setBusy(ad.id + action);
@@ -61,6 +94,7 @@ export function AdsApp({ orgId, canManage, canConnect }: { orgId: string; canMan
     const r = await apiFetch(`${base}/campaigns/${ad.id}/sync`, { method: "POST", body: {} });
     setBusy("");
     if (!r.ok) return toast(r.error, "error");
+    toast("Updated from Meta");
     void load();
   }
   async function disconnect() {
@@ -76,7 +110,14 @@ export function AdsApp({ orgId, canManage, canConnect }: { orgId: string; canMan
       <PageHeader
         title="Ads Manager"
         description="Create click-to-WhatsApp ads. Customers who tap the ad land in your inbox, with the ad they came from recorded."
-        actions={canManage && data.connection ? <Button onClick={() => setCreating(true)} disabled={!data.numbers.length}>Create ad</Button> : null}
+        actions={
+          data.connection ? (
+            <div className="flex flex-wrap gap-2">
+              {data.campaigns.length ? <Button variant="secondary" loading={busy === "sync-all"} onClick={() => void syncAll(false)}><RefreshCw aria-hidden="true" /> Sync with Meta</Button> : null}
+              {canManage ? <Button onClick={() => setCreating(true)} disabled={!data.numbers.length}>Create ad</Button> : null}
+            </div>
+          ) : null
+        }
       />
       <Alert tone="info" className="mb-4" title="How it works">
         Ads are created <strong>paused</strong> on your Meta ad account. You review the budget and start them yourself. Meta reviews every ad before it delivers, and Meta charges the ad spend to the payment method on the ad account.
@@ -112,12 +153,16 @@ export function AdsApp({ orgId, canManage, canConnect }: { orgId: string; canMan
                     <div className="min-w-0">
                       <p className="flex flex-wrap items-center gap-2 font-semibold text-app-text">
                         {a.name} <Badge tone={TONE[a.status]}>{a.status}</Badge>
+                        {a.metaStatus ? <Badge tone={META[a.metaStatus]?.tone ?? "neutral"} dot>{META[a.metaStatus]?.label ?? a.metaStatus.replace(/_/g, " ").toLowerCase()}</Badge> : null}
                       </p>
+                      {a.metaStatus === "PENDING_REVIEW" || a.metaStatus === "IN_PROCESS" ? <p className="mt-1 text-caption text-amber-300">Meta is reviewing this ad. It starts delivering automatically once approved (usually within 24 hours).</p> : null}
+                      {a.reviewNote ? <p className={`mt-1 text-small ${a.metaStatus === "DISAPPROVED" || a.metaStatus === "WITH_ISSUES" ? "text-red-400" : "text-app-muted"}`}>{a.reviewNote}</p> : null}
                       <p className="mt-1 text-small text-app-muted">
                         {formatINR(a.dailyBudget)} / day · spent {formatINR(a.spend)} · {a.impressions.toLocaleString("en-IN")} views · {a.clicks.toLocaleString("en-IN")} clicks · <strong className="text-app-text">{a.chats} chats</strong>
                         {a.costPerChat !== null ? ` · ${formatINR(a.costPerChat)} per chat` : ""}
                       </p>
                       {a.lastError ? <p className="mt-1 text-small text-red-400">{a.lastError}</p> : null}
+                      {a.status !== "failed" ? <p className="mt-1 text-caption text-app-subtle">Synced with Meta {ago(a.syncedAt)}</p> : null}
                     </div>
                     {canManage ? (
                       <div className="flex flex-wrap gap-2">
@@ -132,9 +177,14 @@ export function AdsApp({ orgId, canManage, canConnect }: { orgId: string; canMan
                           </Button>
                         ) : null}
                         {a.status === "paused" || a.status === "active" ? (
-                          <Button size="sm" variant="secondary" loading={busy === a.id + "sync"} onClick={() => refresh(a)}>
-                            <RefreshCw aria-hidden="true" /> Refresh results
-                          </Button>
+                          <>
+                            <Button size="sm" variant="secondary" loading={busy === a.id + "sync"} onClick={() => refresh(a)}>
+                              <RefreshCw aria-hidden="true" /> Sync
+                            </Button>
+                            <Button size="sm" variant="secondary" onClick={() => setPreview(a)}>
+                              <Eye aria-hidden="true" /> Preview
+                            </Button>
+                          </>
                         ) : null}
                         {a.status !== "active" ? (
                           <Button size="sm" variant="ghost" aria-label={`Archive ${a.name}`} onClick={() => act(a, "archive")}>
@@ -151,6 +201,7 @@ export function AdsApp({ orgId, canManage, canConnect }: { orgId: string; canMan
         )
       ) : null}
 
+      {preview ? <PreviewModal base={base} ad={preview} onClose={() => setPreview(null)} /> : null}
       <CreateModal open={creating} onClose={() => setCreating(false)} base={base} numbers={data.numbers} onDone={() => { setCreating(false); void load(); }} onFailed={() => void load()} />
       <ConfirmationDialog
         open={Boolean(starting)}
@@ -388,5 +439,42 @@ function PlacePicker({ base, value, onChange, error }: { base: string; value: Pl
       )}
       {error ? <p className="text-caption text-red-300">{error}</p> : null}
     </fieldset>
+  );
+}
+
+const FORMATS = [
+  { id: "MOBILE_FEED_STANDARD", label: "Facebook feed" },
+  { id: "INSTAGRAM_STANDARD", label: "Instagram feed" },
+  { id: "INSTAGRAM_STORY", label: "Instagram story" },
+] as const;
+
+/** Meta's own rendering of the ad, shown in a sandboxed frame from facebook.com. */
+function PreviewModal({ base, ad, onClose }: { base: string; ad: Ad; onClose: () => void }) {
+  const [format, setFormat] = React.useState<(typeof FORMATS)[number]["id"]>("MOBILE_FEED_STANDARD");
+  const [state, setState] = React.useState<{ format: string; url: string; error: string } | null>(null);
+  React.useEffect(() => {
+    let alive = true;
+    void apiFetch<{ url: string }>(`${base}/campaigns/${ad.id}/preview?format=${format}`).then((r) => {
+      if (alive) setState({ format, url: r.ok ? r.data.url : "", error: r.ok ? "" : r.error });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [base, ad.id, format]);
+  const current = state?.format === format ? state : null;
+  return (
+    <Modal open onClose={onClose} title={`Preview: ${ad.name}`} description="Exactly how Meta renders the ad. It can take a moment to load." size="lg">
+      <div className="mb-3 flex flex-wrap gap-2" role="tablist" aria-label="Placement">
+        {FORMATS.map((f) => (
+          <button key={f.id} type="button" role="tab" aria-selected={format === f.id} onClick={() => setFormat(f.id)} className={`rounded-full px-3 py-1 text-small ${format === f.id ? "bg-app-primary text-app-on-primary" : "text-app-muted hover:text-app-text"}`}>{f.label}</button>
+        ))}
+      </div>
+      {!current ? <LoadingState /> : current.error ? <Alert tone="warning">{current.error}</Alert> : (
+        <div className="flex flex-col items-center gap-2">
+          <iframe key={current.url} src={current.url} title={`Ad preview — ${format}`} className="h-[620px] w-full max-w-[420px] rounded-lg border border-app-border bg-white" sandbox="allow-scripts allow-same-origin allow-popups" referrerPolicy="no-referrer" />
+          <a href={current.url} target="_blank" rel="noopener noreferrer" className="text-caption text-app-primary hover:underline">Open preview in a new tab</a>
+        </div>
+      )}
+    </Modal>
   );
 }
