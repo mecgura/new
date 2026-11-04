@@ -1,28 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import {
-  Activity,
-  Ban,
-  Building2,
-  CheckCircle2,
-  Circle,
-  Contact,
-  Megaphone,
-  MessageCircle,
-  Inbox,
-  Phone,
-  Send,
-  UsersRound,
-  Workflow,
-} from "lucide-react";
+import { Ban, Building2, Contact, Inbox, Megaphone, MessageCircle, Phone, Send, UsersRound, Workflow } from "lucide-react";
 import { db } from "@/lib/db";
 import { getAppContext } from "@/lib/app-context";
-import { describeAction } from "@/lib/audit";
 import { roleHasPermission, ORG_ROLE_LABELS } from "@/lib/authz";
-import { Alert, Avatar, Badge, Card, CardBody, CardHeader, EmptyState, PageHeader, StatCard, UsageMeter, buttonVariants } from "@/components/ds";
-import { SERVICE_LABELS, ACTIVE_NUMBER_STATUSES } from "@/lib/catalog";
-import { ActivityChart, type DayCount } from "@/components/app/activity-chart";
+import { Alert, Avatar, Badge, Card, CardHeader, EmptyState, PageHeader, buttonVariants } from "@/components/ds";
+import { ACTIVE_NUMBER_STATUSES } from "@/lib/catalog";
+import { DonutCard, MessagesChart, PipelineChart, type MessageDay, type Slice, type StageBar } from "@/components/dashboard/dashboard-charts";
+import { GettingStarted } from "@/components/dashboard/getting-started";
+import { KpiTile } from "@/components/dashboard/kpi-tile";
 import { NumberSwitcher } from "@/components/app/number-switcher";
 import { readActiveNumber } from "@/lib/active-number";
 import { agreementProgress } from "@/services/agreements/agreements";
@@ -85,7 +72,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   const orgId = active.organizationId;
   const { since, days, since30 } = activityWindow();
-  const canSeeAudit = roleHasPermission(active.role, "audit:read");
 
   const usable = await db.whatsAppAccount.findMany({
     where: { organizationId: orgId, status: { in: ["connected", "demo"] } },
@@ -95,22 +81,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const activeId = await readActiveNumber(orgId, usable.map((a) => a.id));
   const activeNumber = usable.find((a) => a.id === activeId) ?? null;
   const scope = activeId ? { whatsappAccountId: activeId } : {};
+  const convScope = activeId ? { conversation: { whatsappAccountId: activeId } } : {};
   const msgIn = (direction: "inbound" | "outbound", accountId?: string) =>
     db.message.count({ where: { organizationId: orgId, direction, createdAt: { gte: since30 }, ...(accountId ?? activeId ? { conversation: { whatsappAccountId: accountId ?? activeId } } : {}) } });
 
-  const [memberCount, events, recent, subscription, services, numbers, openChats, sent, received, contacts, campaigns, runs, perNumber] = await Promise.all([
+  const [memberCount, subscription, numbers, openChats, sent, received, contacts, campaigns, runs, perNumber, recentMsgs, leadGroups, channelGroups, openDeals, stages, latestConvs, latestCampaigns] = await Promise.all([
     db.organizationMember.count({ where: { organizationId: orgId } }),
-    db.auditLog.findMany({ where: { organizationId: orgId, createdAt: { gte: since } }, select: { createdAt: true } }),
-    canSeeAudit
-      ? db.auditLog.findMany({
-          where: { organizationId: orgId },
-          orderBy: { createdAt: "desc" },
-          take: 6,
-          select: { id: true, action: true, createdAt: true, actor: { select: { name: true, email: true } } },
-        })
-      : Promise.resolve([]),
     db.subscription.findFirst({ where: { organizationId: orgId, status: "active" }, select: { plan: { select: { name: true, maxUsers: true, maxWhatsAppNumbers: true } } } }),
-    db.organizationService.findMany({ where: { organizationId: orgId, enabled: true }, select: { service: true } }),
     db.whatsAppAccount.count({ where: { organizationId: orgId, status: { in: ACTIVE_NUMBER_STATUSES } } }),
     db.conversation.count({ where: { organizationId: orgId, status: "open", ...scope } }),
     msgIn("outbound"),
@@ -126,14 +103,38 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         received: await msgIn("inbound", a.id),
       }))
     ),
+    db.message.findMany({ where: { organizationId: orgId, createdAt: { gte: since }, direction: { in: ["inbound", "outbound"] }, ...convScope }, select: { createdAt: true, direction: true }, take: 100_000 }),
+    db.contact.groupBy({ by: ["leadStatus"], where: { organizationId: orgId }, _count: { _all: true } }),
+    db.conversation.groupBy({ by: ["channel"], where: { organizationId: orgId, ...scope }, _count: { _all: true } }),
+    db.deal.groupBy({ by: ["stageId"], where: { organizationId: orgId, status: "open" }, _sum: { valuePaise: true }, _count: { _all: true } }),
+    db.pipelineStage.findMany({ where: { organizationId: orgId }, orderBy: { position: "asc" }, select: { id: true, name: true } }),
+    db.conversation.findMany({ where: { organizationId: orgId, ...scope }, orderBy: { lastMessageAt: "desc" }, take: 6, select: { id: true, channel: true, status: true, unreadCount: true, lastMessageAt: true, lastMessagePreview: true, contact: { select: { name: true, phone: true } } } }),
+    db.campaign.findMany({ where: { organizationId: orgId, ...scope }, orderBy: { createdAt: "desc" }, take: 5, select: { id: true, name: true, status: true, createdAt: true } }),
   ]);
+  const campaignStats = latestCampaigns.length
+    ? await db.campaignRecipient.groupBy({ by: ["campaignId"], where: { campaignId: { in: latestCampaigns.map((c) => c.id) } }, _count: { _all: true, sentAt: true, readAt: true, repliedAt: true } })
+    : [];
 
-  const counts = new Map<string, number>();
-  for (const e of events) counts.set(dayKey.format(e.createdAt), (counts.get(dayKey.format(e.createdAt)) ?? 0) + 1);
-  const series: DayCount[] = days.map((d) => {
-    const key = dayKey.format(d);
-    return { date: key, label: dayLabel.format(d), count: counts.get(key) ?? 0 };
-  });
+  // Messages per IST day (sent vs received).
+  const perDay = new Map<string, { sent: number; received: number }>();
+  for (const m of recentMsgs) {
+    const k = dayKey.format(m.createdAt);
+    const e = perDay.get(k) ?? { sent: 0, received: 0 };
+    if (m.direction === "outbound") e.sent++;
+    else e.received++;
+    perDay.set(k, e);
+  }
+  const messageSeries: MessageDay[] = days.map((d) => ({ label: dayLabel.format(d), ...(perDay.get(dayKey.format(d)) ?? { sent: 0, received: 0 }) }));
+  const LEAD_LABEL: Record<string, string> = { new: "New", contacted: "Contacted", qualified: "Qualified", proposal: "Proposal", won: "Won", lost: "Lost" };
+  const leadSlices: Slice[] = ["new", "contacted", "qualified", "proposal", "won", "lost"].map((k) => ({ key: k, label: LEAD_LABEL[k], value: leadGroups.find((g) => g.leadStatus === k)?._count._all ?? 0, href: `/contacts?leadStatus=${k}` }));
+  const CHANNEL_LABEL: Record<string, string> = { whatsapp: "WhatsApp", email: "Email", webchat: "Website chat", messenger: "Messenger", instagram: "Instagram" };
+  const channelSlices: Slice[] = channelGroups.sort((a, b) => b._count._all - a._count._all).map((g) => ({ key: g.channel, label: CHANNEL_LABEL[g.channel] ?? g.channel, value: g._count._all, href: "/inbox" }));
+  const pipeline: StageBar[] = stages
+    .map((s) => {
+      const g = openDeals.find((d) => d.stageId === s.id);
+      return { label: s.name, rupees: (g?._sum.valuePaise ?? 0) / 100, deals: g?._count._all ?? 0 };
+    })
+    .filter((s) => s.deals > 0);
 
   const orgScope = { organizationId: active.organizationId };
   const [approvedTemplates, contactCount, campaignCount, automationCount] = await Promise.all([
@@ -205,19 +206,100 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </div>
       )}
 
-      <section aria-label="Key metrics" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-12">
-        <StatCard featured className="xl:col-span-4" label="Open conversations" value={openChats} icon={MessageCircle} hint={activeNumber ? "On this number" : "Across all numbers"} />
-        <StatCard className="xl:col-span-3" label="Messages sent" value={sent} icon={Send} hint="Last 30 days" />
-        <StatCard className="xl:col-span-3" label="Messages received" value={received} icon={Inbox} hint="Last 30 days" />
-        <StatCard className="xl:col-span-2" label="Team members" value={memberCount} icon={UsersRound} hint="Live from your workspace" />
-        <StatCard className="xl:col-span-3" label="WhatsApp numbers" value={numbers} icon={Phone} source={numbers ? "live" : "not-connected"} hint={subscription ? `${numbers} of ${subscription.plan.maxWhatsAppNumbers} allowed by your plan` : "Manage in WhatsApp → Connection Center"} />
-        <StatCard className="xl:col-span-3" label="Contacts & leads" value={contacts} icon={Contact} hint={activeNumber ? "Who have chatted on this number" : "In your workspace"} />
-        <StatCard className="xl:col-span-3" label="Campaigns" value={campaigns} icon={Megaphone} hint={activeNumber ? "Sending from this number" : "All numbers"} />
-        <StatCard className="xl:col-span-3" label="Automation runs" value={runs} icon={Workflow} hint="Last 30 days" />
+      <GettingStarted orgId={orgId} items={checklist} />
+
+      <section aria-label="Key metrics" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KpiTile href="/inbox" accent="emerald" label="Open conversations" value={openChats} icon={MessageCircle} hint={activeNumber ? "On this number" : "Across all numbers"} />
+        <KpiTile href="/inbox" accent="sky" label="Messages sent" value={sent} icon={Send} hint="Last 30 days" />
+        <KpiTile href="/inbox" accent="violet" label="Messages received" value={received} icon={Inbox} hint="Last 30 days" />
+        <KpiTile href="/contacts" accent="amber" label="Contacts & leads" value={contacts} icon={Contact} hint={activeNumber ? "Chatted on this number" : "In your workspace"} />
+        <KpiTile href="/campaigns" accent="pink" label="Campaigns" value={campaigns} icon={Megaphone} hint={activeNumber ? "From this number" : "All numbers"} />
+        <KpiTile href="/automations" accent="orange" label="Automation runs" value={runs} icon={Workflow} hint="Last 30 days" />
+        <KpiTile href="/whatsapp/accounts" accent="teal" label="WhatsApp numbers" value={numbers} icon={Phone} hint={subscription ? `${numbers} of ${subscription.plan.maxWhatsAppNumbers < 0 ? "unlimited" : subscription.plan.maxWhatsAppNumbers} on your plan` : "Connection Center"} />
+        <KpiTile href="/team" accent="indigo" label="Team members" value={memberCount} icon={UsersRound} hint="In this workspace" />
       </section>
 
+      <div className="mt-6 grid gap-4 xl:grid-cols-3">
+        <MessagesChart data={messageSeries} />
+        <DonutCard title="Leads by status" description="Tap a slice to open those contacts" data={leadSlices} emptyTitle="No contacts yet" icon="users" centerLabel="contacts" />
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-3">
+        <DonutCard title="Conversations by channel" description="Where customers talk to you" data={channelSlices} emptyTitle="No conversations yet" centerLabel="conversations" />
+        <div className="xl:col-span-2"><PipelineChart data={pipeline} /></div>
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader title="Latest conversations" action={<Link href="/inbox" className="text-small text-app-primary hover:underline">Inbox →</Link>} />
+          {!latestConvs.length ? (
+            <EmptyState icon={MessageCircle} title="No conversations yet" className="py-8" />
+          ) : (
+            <ul className="divide-y divide-app-border">
+              {latestConvs.map((c) => (
+                <li key={c.id}>
+                  <Link href={`/inbox?c=${c.id}`} className="flex items-center gap-3 px-5 py-3 transition hover:bg-app-hover">
+                    <Avatar name={c.contact.name || c.contact.phone} size="sm" />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2 text-small font-medium text-app-text">
+                        <span className="truncate">{c.contact.name || c.contact.phone}</span>
+                        {c.unreadCount ? <Badge tone="success">{c.unreadCount} new</Badge> : null}
+                      </span>
+                      <span className="block truncate text-caption text-app-subtle">{c.lastMessagePreview || "—"}</span>
+                    </span>
+                    <span className="shrink-0 text-right text-caption text-app-subtle">
+                      <span className="block capitalize">{c.channel}</span>
+                      <time dateTime={c.lastMessageAt.toISOString()}>{dateTime.format(c.lastMessageAt)}</time>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+        <Card>
+          <CardHeader title="Recent campaigns" action={<Link href="/campaigns" className="text-small text-app-primary hover:underline">Campaigns →</Link>} />
+          {!latestCampaigns.length ? (
+            <EmptyState icon={Megaphone} title="No campaigns yet" description="Send an approved template to opted-in contacts." className="py-8" />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-small">
+                <thead>
+                  <tr className="border-b border-app-border text-left text-caption text-app-subtle">
+                    <th className="px-5 py-2 font-medium">Campaign</th>
+                    <th className="px-3 py-2 text-right font-medium">Sent</th>
+                    <th className="px-3 py-2 text-right font-medium">Read</th>
+                    <th className="px-5 py-2 text-right font-medium">Replies</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-app-border">
+                  {latestCampaigns.map((c) => {
+                    const st = campaignStats.find((x) => x.campaignId === c.id)?._count;
+                    const sentN = st?.sentAt ?? 0;
+                    const pct = (n: number) => (sentN ? ` · ${Math.round((n / sentN) * 100)}%` : "");
+                    return (
+                      <tr key={c.id} className="transition hover:bg-app-hover">
+                        <td className="px-5 py-2.5">
+                          <Link href={`/campaigns/${c.id}`} className="block">
+                            <span className="block truncate font-medium text-app-text">{c.name}</span>
+                            <span className="text-caption capitalize text-app-subtle">{c.status.replace(/_/g, " ")}</span>
+                          </Link>
+                        </td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-app-text">{sentN}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-app-text">{st?.readAt ?? 0}<span className="text-caption text-app-subtle">{pct(st?.readAt ?? 0)}</span></td>
+                        <td className="px-5 py-2.5 text-right tabular-nums text-app-text">{st?.repliedAt ?? 0}<span className="text-caption text-app-subtle">{pct(st?.repliedAt ?? 0)}</span></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      </div>
+
       {usable.length > 1 ? (
-        <Card className="mt-6">
+        <Card className="mt-4">
           <CardHeader title="Your WhatsApp numbers" description="Each number belongs to this workspace only. Pick one to focus the dashboard and inbox on it." />
           <ul className="divide-y divide-app-border">
             {usable.map((a) => {
@@ -241,100 +323,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </Card>
       ) : null}
 
-      <div className="mt-6 grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader title="Workspace activity" description="Workspace, team and access events — last 14 days" action={<Badge tone="success" dot>Live</Badge>} />
-          <CardBody>
-            {events.length === 0 ? (
-              <EmptyState icon={Activity} title="No activity yet" description="Actions in your workspace will appear here." className="py-8" />
-            ) : (
-              <ActivityChart data={series} title="Workspace activity, last 14 days" />
-            )}
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader title="Getting started" />
-          <CardBody>
-            <ul className="space-y-3">
-              {checklist.map((c) => (
-                <li key={c.label} className="flex items-start gap-3">
-                  {c.done ? (
-                    <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-app-success" aria-hidden="true" />
-                  ) : (
-                    <Circle className="mt-0.5 size-5 shrink-0 text-app-subtle" aria-hidden="true" />
-                  )}
-                  <div className="min-w-0 text-body">
-                    {c.href && !c.done ? (
-                      <Link href={c.href} className="text-app-text underline-offset-4 hover:underline">
-                        {c.label}
-                      </Link>
-                    ) : (
-                      <span className={c.done ? "text-app-muted line-through" : "text-app-text"}>{c.label}</span>
-                    )}
-                    <span className="sr-only">{c.done ? " (done)" : " (to do)"}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </CardBody>
-        </Card>
-      </div>
-
-      <div className="mt-6 grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader title="Recent activity" />
-          {!canSeeAudit ? (
-            <EmptyState icon={Activity} title="Visible to owners and managers" description="Ask your workspace owner if you need the activity log." className="py-8" />
-          ) : recent.length === 0 ? (
-            <EmptyState icon={Activity} title="No activity yet" className="py-8" />
-          ) : (
-            <ul className="divide-y divide-app-border">
-              {recent.map((r) => (
-                <li key={r.id} className="flex items-center gap-3 px-5 py-3">
-                  <Avatar name={r.actor?.name ?? r.actor?.email ?? "System"} size="sm" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-body text-app-text">{describeAction(r.action)}</p>
-                    <p className="truncate text-caption text-app-subtle">{r.actor?.name ?? r.actor?.email ?? "System"}</p>
-                  </div>
-                  <time dateTime={r.createdAt.toISOString()} className="shrink-0 text-caption text-app-subtle">
-                    {dateTime.format(r.createdAt)}
-                  </time>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-        <Card>
-          <CardHeader title="Plan & services" />
-          <CardBody className="space-y-4">
-            {subscription ? (
-              <>
-                <p className="text-body text-app-text">
-                  <span className="font-semibold">{subscription.plan.name}</span> plan
-                </p>
-                <UsageMeter label="Team seats" used={memberCount} limit={subscription.plan.maxUsers} />
-              </>
-            ) : (
-              <p className="text-small text-app-muted">No plan assigned yet — contact MECGURA.</p>
-            )}
-            <div>
-              <p className="mb-2 text-small text-app-muted">Enabled services</p>
-              <div className="flex flex-wrap gap-1.5">
-                {services.length ? (
-                  services.map((s) => (
-                    <Badge key={s.service} tone="primary">
-                      {SERVICE_LABELS[s.service as keyof typeof SERVICE_LABELS] ?? s.service}
-                    </Badge>
-                  ))
-                ) : (
-                  <span className="text-small text-app-subtle">None yet</span>
-                )}
-              </div>
-            </div>
-          </CardBody>
-        </Card>
-      </div>
     </>
   );
 }

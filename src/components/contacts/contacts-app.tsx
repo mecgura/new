@@ -69,11 +69,11 @@ export const CONSENT: Record<string, { label: string; tone: "success" | "danger"
   unknown: { label: "Unknown", tone: "neutral" },
 };
 
-export function ContactsApp({ orgId, perms }: { orgId: string; perms: InboxPerms }) {
+export function ContactsApp({ orgId, perms, initialLeadStatus = "" }: { orgId: string; perms: InboxPerms; initialLeadStatus?: string }) {
   const [tab, setTab] = React.useState("all");
   const [q, setQ] = React.useState("");
   const [tagId, setTagId] = React.useState("");
-  const [leadStatus, setLeadStatus] = React.useState("");
+  const [leadStatus, setLeadStatus] = React.useState(initialLeadStatus);
   const [page, setPage] = React.useState(1);
   const [data, setData] = React.useState<{ items: Contact[]; total: number; pageSize: number; counts: Record<string, number> } | null>(null);
   const [error, setError] = React.useState("");

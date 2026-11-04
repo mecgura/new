@@ -460,3 +460,35 @@ html[data-inbox-focus="1"] .app-sidebar { display: none !important; }
 .blog-prose code { font-size: 0.9em; padding: 0.1em 0.35em; border-radius: 0.3em; background: rgb(127 127 127 / 0.15); }
 .blog-prose hr { margin: 2em 0; border: 0; border-top: 1px solid rgb(127 127 127 / 0.3); }
 .blog-prose strong { font-weight: 700; }
+
+/* Dashboard charts — validated categorical palette (fixed order, never cycled). Light + dark steps. */
+.viz-root {
+  --series-1: #2a78d6; /* blue */
+  --series-2: #eb6834; /* orange */
+  --series-3: #1baf7a; /* aqua */
+  --series-4: #eda100; /* yellow */
+  --series-5: #e87ba4; /* magenta */
+  --series-6: #008300; /* green */
+  --viz-grid: rgba(0, 0, 0, 0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --viz-grid: rgba(255, 255, 255, 0.08);
+  }
+}
+:root[data-theme="dark"] .viz-root,
+.dark .viz-root {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --viz-grid: rgba(255, 255, 255, 0.08);
+}
