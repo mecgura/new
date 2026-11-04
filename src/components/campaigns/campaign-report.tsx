@@ -26,6 +26,7 @@ import {
   useToast,
 } from "@/components/ds";
 import { cn } from "@/lib/utils";
+import { CampaignInsights } from "./campaign-insights";
 import { apiFetch } from "@/lib/client-api";
 import { formatNumber } from "@/lib/catalog";
 import { useRealtime } from "@/components/inbox/use-realtime";
@@ -240,6 +241,7 @@ export function CampaignReport({ orgId, campaign, canManage }: { orgId: string; 
               </>
             )}
           </Card>
+          {c.status !== "draft" && c.status !== "scheduled" ? <CampaignInsights orgId={orgId} campaignId={c.id} refreshKey={`${a?.stats.sent ?? 0}-${a?.stats.replies ?? 0}-${c.status}`} /> : null}
           {c.review ? (
             <Card>
               <CardHeader title="Compliance review at launch" description="What was checked and removed before this campaign was sent." />
@@ -278,19 +280,6 @@ export function CampaignReport({ orgId, campaign, canManage }: { orgId: string; 
               )}
             </CardBody>
           </Card>
-          {a?.errors.length ? (
-            <Card>
-              <CardHeader title="Failure reasons" />
-              <ul className="divide-y divide-app-border">
-                {a.errors.map((e) => (
-                  <li key={e.error} className="flex justify-between gap-3 px-5 py-2.5 text-small">
-                    <span className="min-w-0 text-app-muted">{e.error}</span>
-                    <span className="tabular-nums text-app-text">{formatNumber(e.count)}</span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          ) : null}
           {c.isDemo && canManage && c.status !== "scheduled" ? <DemoSimulator orgId={orgId} campaignId={c.id} onDone={load} stats={s} /> : null}
         </aside>
       </div>

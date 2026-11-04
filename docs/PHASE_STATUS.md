@@ -152,3 +152,21 @@ _(newest last)_
 - UI `/admin/revenue` (admin sidebar "Revenue").
 - Not built (needs billing-cycle changes, planned separately): annual plans, trials, automatic failed-payment retries.
 - Tests `tests/integration/revenue.test.ts` (2). Suite 495/495, build OK, page smoke OK.
+
+### Stage 7: Campaign intelligence ✅ (2026-11-04)
+- Already existed and kept: compliance review with frequency cap (24 h), cost estimate vs wallet/package, delivery /
+  read / reply / opt-out stats, quality signals, top error strings.
+- Schema: `Campaign.abTemplateId/abVariables/abSplit`, `CampaignRecipient.variant`. Migration
+  `prisma/migrations/20261111090000_campaign_ab`.
+- A/B: version B = another approved template of the same category and WhatsApp account, sent to 10–50% of people
+  (stable hash per phone); compliance checks B and its variables; sender uses B's template and pauses if it stops
+  being approved; message payload records the variant.
+- `src/lib/campaign-insights.ts`: variant assignment, two-proportion z-test (winner only with ≥100 per arm and
+  p < 0.05), plain-language explanations of Meta error codes.
+- `src/services/campaigns/insights.ts`: per-campaign A/B results, estimated cost (Meta rate per delivered + MECGURA fee
+  per sent), attribution (deals opened ≤7 days, deals won and purchases ≤30 days), cost per reply/lead, ROI, grouped
+  failure diagnostics, recommendations (best IST hour from 90-day read rates, winning version, opt-outs, replies);
+  performance view comparing recent campaigns and templates.
+- API `/campaigns/[cid]/insights`, `/campaigns/performance`. UI: wizard A/B option (template step) and B variables,
+  report insights panel (cost & ROI, A/B, failures, next time), `/campaigns/performance`.
+- Tests `tests/integration/campaign-ab.test.ts` (4). Suite 499/499, build OK, smoke OK.

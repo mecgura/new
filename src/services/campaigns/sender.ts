@@ -41,7 +41,7 @@ export async function processCampaign(campaignId: string, budgetMs = 50_000): Pr
   const tally = { sent: 0, failed: 0, skipped: 0 };
   const c = await db.campaign.findUnique({
     where: { id: campaignId },
-    include: { template: true, whatsappAccount: { include: { connection: { select: { encryptedAccessToken: true } } } } },
+    include: { template: true, abTemplate: true, whatsappAccount: { include: { connection: { select: { encryptedAccessToken: true } } } } },
   });
   if (!c || c.status !== "sending") return { ...tally, done: true };
 
@@ -64,6 +64,15 @@ export async function processCampaign(campaignId: string, budgetMs = 50_000): Pr
   if (!t || t.status !== "approved") {
     await stop(c.id, c.organizationId, "paused", t ? `Template “${t.name}” is now ${t.status} — sending paused.` : "The template was deleted.");
     return { ...tally, done: false };
+  }
+
+  // A/B test: version B's template must still be approved while B recipients are waiting.
+  const tB = c.abTemplate;
+  if (c.abTemplateId && (await db.campaignRecipient.count({ where: { campaignId, status: "queued", variant: "B" } }))) {
+    if (!tB || tB.status !== "approved") {
+      await stop(c.id, c.organizationId, "paused", tB ? `Version B template “${tB.name}” is now ${tB.status} — sending paused.` : "Version B's template was deleted.");
+      return { ...tally, done: false };
+    }
   }
 
   // MECGURA's per-message fee: sending stops (paused, nothing lost) when the wallet can't cover the next message.
@@ -98,7 +107,8 @@ export async function processCampaign(campaignId: string, budgetMs = 50_000): Pr
         continue;
       }
 
-      const { payload, body, stored } = templateMessage(t, JSON.parse(r.variables) as SlotValues);
+      const tpl = r.variant === "B" && tB ? tB : t;
+      const { payload, body, stored } = templateMessage(tpl, JSON.parse(r.variables) as SlotValues);
       const now = new Date();
       const conv =
         (await db.conversation.findUnique({ where: { whatsappAccountId_contactId: { whatsappAccountId: acct.id, contactId: contact.id } } })) ??
@@ -110,7 +120,7 @@ export async function processCampaign(campaignId: string, budgetMs = 50_000): Pr
           direction: "outbound",
           type: "template",
           body,
-          payload: JSON.stringify({ ...stored, campaignId: c.id, campaignName: c.name }),
+          payload: JSON.stringify({ ...stored, campaignId: c.id, campaignName: c.name, ...(c.abTemplateId ? { variant: r.variant } : {}) }),
           status: "pending",
           senderUserId: c.createdById,
           isDemo: acct.isDemo,

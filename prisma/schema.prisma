@@ -760,7 +760,8 @@ model MessageTemplate {
   organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   waba         WhatsAppBusinessAccount @relation(fields: [wabaRecordId], references: [id], onDelete: Cascade)
   createdBy    User?                   @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  campaigns    Campaign[]
+  campaigns    Campaign[]              @relation("CampaignTemplate")
+  abCampaigns  Campaign[]              @relation("CampaignTemplateB")
 
   @@unique([wabaRecordId, name, language])
   @@index([organizationId, status])
@@ -792,6 +793,10 @@ model Campaign {
   description       String    @default("")
   whatsappAccountId String?
   templateId        String?
+  // A/B test: a second template sent to abSplit % of recipients (0 = no test). Variables mapped separately.
+  abTemplateId      String?
+  abVariables       String    @default("{}")
+  abSplit           Int       @default(0)
   segmentId         String?
   status            String    @default("draft") // draft | scheduled | sending | paused | completed | cancelled | failed
   step              Int       @default(1) // furthest wizard step reached
@@ -811,7 +816,8 @@ model Campaign {
 
   organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   whatsappAccount WhatsAppAccount?    @relation(fields: [whatsappAccountId], references: [id], onDelete: SetNull)
-  template        MessageTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  template        MessageTemplate?    @relation("CampaignTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+  abTemplate      MessageTemplate?    @relation("CampaignTemplateB", fields: [abTemplateId], references: [id], onDelete: SetNull)
   segment         Segment?            @relation(fields: [segmentId], references: [id], onDelete: SetNull)
   createdBy       User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
   recipients      CampaignRecipient[]
@@ -827,6 +833,7 @@ model CampaignRecipient {
   contactId      String?
   phone          String // E.164
   name           String    @default("")
+  variant        String    @default("A") // A/B test arm
   status         String    @default("queued") // queued | sending | sent | delivered | read | failed
   variables      String    @default("{}") // JSON: resolved values
   messageId      String?   @unique

@@ -28,6 +28,7 @@ export type CampaignView = {
   segment: { id: string; name: string } | null;
   audience: Audience;
   variables: Record<string, VariableMapping>;
+  ab: { template: { id: string; name: string; language: string; category: string; status: string; qualityScore: string } | null; variables: Record<string, VariableMapping>; split: number };
   scheduledAt: string | null;
   review: ComplianceReport | null;
   reviewedAt: string | null;

@@ -139,8 +139,8 @@ export function CampaignWizard({ orgId, campaign, accounts }: { orgId: string; c
         <div className="min-w-0">
           {step === 1 ? <DetailsStep c={c} accounts={accounts} onSave={(p) => save(p, 2)} /> : null}
           {step === 2 ? <AudienceStep c={c} api={api} onBack={() => setStep(1)} onSave={(audience) => save({ audience }, 3)} /> : null}
-          {step === 3 ? <TemplateStep c={c} api={api} onBack={() => setStep(2)} onSave={(templateId) => save({ templateId }, 4)} /> : null}
-          {step === 4 ? <VariablesStep c={c} api={api} onBack={() => setStep(3)} onSave={(variables) => save({ variables }, 5)} /> : null}
+          {step === 3 ? <TemplateStep c={c} api={api} onBack={() => setStep(2)} onSave={(templateId, ab) => save({ templateId, abTemplateId: ab ? ab.templateId : null, ...(ab ? { abSplit: ab.split } : {}) }, 4)} /> : null}
+          {step === 4 ? <VariablesStep c={c} api={api} onBack={() => setStep(3)} onSave={(variables, abVariables) => save({ variables, ...(abVariables ? { abVariables } : {}) }, 5)} /> : null}
           {step === 5 ? <ScheduleStep c={c} onBack={() => setStep(4)} onSave={(scheduledAt) => save({ scheduledAt }, 6)} /> : null}
           {step === 6 ? <ReviewStep c={c} api={api} onBack={() => setStep(5)} onReviewed={(review) => setC((x) => ({ ...x, review, reviewedAt: review.generatedAt }))} onNext={() => setStep(7)} /> : null}
           {step === 7 ? <SendStep c={c} api={api} pricing={pricing} onBack={() => setStep(6)} onLaunched={() => router.refresh()} /> : null}
@@ -422,10 +422,13 @@ function AudienceStep({ c, api, onBack, onSave }: { c: CampaignView; api: Api; o
 // 3. Template
 // ---------------------------------------------------------------------------
 
-function TemplateStep({ c, api, onBack, onSave }: { c: CampaignView; api: Api; onBack: () => void; onSave: (id: string) => Promise<boolean> }) {
+function TemplateStep({ c, api, onBack, onSave }: { c: CampaignView; api: Api; onBack: () => void; onSave: (id: string, ab: { templateId: string; split: number } | null) => Promise<boolean> }) {
   const [list, setList] = React.useState<TemplateView[] | null>(null);
   const [error, setError] = React.useState("");
   const [id, setId] = React.useState(c.template?.id ?? "");
+  const [abOn, setAbOn] = React.useState(Boolean(c.ab?.template));
+  const [abId, setAbId] = React.useState(c.ab?.template?.id ?? "");
+  const [split, setSplit] = React.useState(c.ab?.split || 50);
   const [busy, run] = useBusy();
   React.useEffect(() => {
     void api<{ templates: TemplateView[] }>("/templates?status=approved").then((r) => {
@@ -466,8 +469,34 @@ function TemplateStep({ c, api, onBack, onSave }: { c: CampaignView; api: Api; o
               ))}
             </fieldset>
           )}
+          {list && t ? (
+            <div className="mt-4 rounded-xl border border-app-border p-3">
+              <label className="flex cursor-pointer items-start gap-2.5 text-small text-app-text">
+                <input type="checkbox" className="mt-0.5 size-4 accent-[var(--color-app-primary)]" checked={abOn} onChange={(e) => setAbOn(e.target.checked)} />
+                <span>
+                  <span className="font-medium">A/B test with a second template</span>
+                  <span className="block text-caption text-app-muted">Part of the audience gets version B. The report shows which one gets more reads, replies and leads, and only calls a winner when the difference is real.</span>
+                </span>
+              </label>
+              {abOn ? (
+                <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_10rem]">
+                  <Field id="cw-ab-template" label="Version B template" hint="Same category, approved, on this WhatsApp account.">
+                    <Select value={abId} onChange={(e) => setAbId(e.target.value)}>
+                      <option value="">Choose…</option>
+                      {list.filter((x) => x.id !== id && x.category === t.category).map((x) => <option key={x.id} value={x.id}>{x.name} ({x.language})</option>)}
+                    </Select>
+                  </Field>
+                  <Field id="cw-ab-split" label="Send B to">
+                    <Select value={String(split)} onChange={(e) => setSplit(Number(e.target.value))}>
+                      {[10, 20, 30, 40, 50].map((p) => <option key={p} value={p}>{p}% of people</option>)}
+                    </Select>
+                  </Field>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <StepFooter onBack={onBack}>
-            <Button onClick={() => run(() => onSave(id))} loading={busy} disabled={!id}>
+            <Button onClick={() => run(() => onSave(id, abOn && abId ? { templateId: abId, split } : null))} loading={busy} disabled={!id || (abOn && !abId)}>
               Save & continue <ChevronRight aria-hidden="true" />
             </Button>
           </StepFooter>
@@ -491,26 +520,9 @@ function sampleValue(m: VariableMapping | undefined): string {
   return SAMPLE[m.field];
 }
 
-function VariablesStep({ c, api, onBack, onSave }: { c: CampaignView; api: Api; onBack: () => void; onSave: (v: Record<string, VariableMapping>) => Promise<boolean> }) {
-  const [t, setT] = React.useState<TemplateView | null>(null);
-  const [map, setMap] = React.useState<Record<string, VariableMapping>>(c.variables);
-  const [busy, run] = useBusy();
-  React.useEffect(() => {
-    if (c.template) void api<{ template: TemplateView }>(`/templates/${c.template.id}`).then((r) => r.ok && setT(r.data.template));
-  }, [api, c.template]);
-  if (!c.template) return <Alert tone="warning">Choose a template first.</Alert>;
-  if (!t) return <LoadingState />;
-  const values: SlotValues = Object.fromEntries(t.slots.map((s) => [s.key, sampleValue(map[s.key])]));
-  const complete = t.slots.every((s) => {
-    const m = map[s.key];
-    return m && (m.source === "static" ? m.value.trim() : m.field !== "custom" || m.key.trim());
-  });
+function MappingEditor({ t, map, setMap, idPrefix }: { t: TemplateView; map: Record<string, VariableMapping>; setMap: React.Dispatch<React.SetStateAction<Record<string, VariableMapping>>>; idPrefix: string }) {
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
-      <Card className="min-w-0">
-        <CardHeader title="4. Variables" description="Fill each {{variable}} from the contact's details or with the same text for everyone. Contacts missing a value (and no fallback) are removed in review." />
-        <CardBody className="space-y-4">
-          {!t.slots.length ? <p className="text-small text-app-muted">“{t.name}” has no variables — nothing to fill.</p> : null}
+    <>
           {t.slots.map((s) => {
             const m = map[s.key];
             const media = s.part === "header" && s.kind === "media";
@@ -519,7 +531,7 @@ function VariablesStep({ c, api, onBack, onSave }: { c: CampaignView; api: Api; 
               <div key={s.key} className="rounded-xl border border-app-border p-3">
                 <p className="mb-2 text-small font-medium text-app-text">{s.label}</p>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field id={`v-src-${s.key}`} label="Value from">
+                  <Field id={`${idPrefix}v-src-${s.key}`} label="Value from">
                     <Select
                       value={sourceValue}
                       onChange={(e) => {
@@ -541,17 +553,17 @@ function VariablesStep({ c, api, onBack, onSave }: { c: CampaignView; api: Api; 
                     </Select>
                   </Field>
                   {m?.source === "static" ? (
-                    <Field id={`v-val-${s.key}`} label={media ? "https:// link" : "Text"}>
+                    <Field id={`${idPrefix}v-val-${s.key}`} label={media ? "https:// link" : "Text"}>
                       <Input value={m.value} onChange={(e) => setMap((x) => ({ ...x, [s.key]: { source: "static", value: e.target.value } }))} placeholder={media ? "https://cdn.example.com/offer.jpg" : "e.g. DIWALI20"} />
                     </Field>
                   ) : m?.source === "field" ? (
                     <>
                       {m.field === "custom" ? (
-                        <Field id={`v-key-${s.key}`} label="Custom field name">
+                        <Field id={`${idPrefix}v-key-${s.key}`} label="Custom field name">
                           <Input value={m.key} onChange={(e) => setMap((x) => ({ ...x, [s.key]: { ...m, key: e.target.value } }))} placeholder="city" />
                         </Field>
                       ) : null}
-                      <Field id={`v-fb-${s.key}`} label="Fallback if empty" hint="Used when the contact has no value">
+                      <Field id={`${idPrefix}v-fb-${s.key}`} label="Fallback if empty" hint="Used when the contact has no value">
                         <Input value={m.fallback} onChange={(e) => setMap((x) => ({ ...x, [s.key]: { ...m, fallback: e.target.value } }))} placeholder={m.field === "first_name" || m.field === "name" ? "there" : ""} />
                       </Field>
                     </>
@@ -560,15 +572,62 @@ function VariablesStep({ c, api, onBack, onSave }: { c: CampaignView; api: Api; 
               </div>
             );
           })}
+    </>
+  );
+}
+
+const mappingComplete = (t: TemplateView, map: Record<string, VariableMapping>) =>
+  t.slots.every((s) => {
+    const m = map[s.key];
+    return m && (m.source === "static" ? m.value.trim() : m.field !== "custom" || m.key.trim());
+  });
+
+function VariablesStep({ c, api, onBack, onSave }: { c: CampaignView; api: Api; onBack: () => void; onSave: (v: Record<string, VariableMapping>, abV: Record<string, VariableMapping> | null) => Promise<boolean> }) {
+  const [t, setT] = React.useState<TemplateView | null>(null);
+  const [tB, setTB] = React.useState<TemplateView | null>(null);
+  const [map, setMap] = React.useState<Record<string, VariableMapping>>(c.variables);
+  const [mapB, setMapB] = React.useState<Record<string, VariableMapping>>(c.ab?.variables ?? {});
+  const [busy, run] = useBusy();
+  React.useEffect(() => {
+    if (c.template) void api<{ template: TemplateView }>(`/templates/${c.template.id}`).then((r) => r.ok && setT(r.data.template));
+    if (c.ab?.template) void api<{ template: TemplateView }>(`/templates/${c.ab.template.id}`).then((r) => r.ok && setTB(r.data.template));
+  }, [api, c.template, c.ab?.template]);
+  if (!c.template) return <Alert tone="warning">Choose a template first.</Alert>;
+  if (!t || (c.ab?.template && !tB)) return <LoadingState />;
+  const values: SlotValues = Object.fromEntries(t.slots.map((s) => [s.key, sampleValue(map[s.key])]));
+  const valuesB: SlotValues = tB ? Object.fromEntries(tB.slots.map((s) => [s.key, sampleValue(mapB[s.key])])) : {};
+  const complete = mappingComplete(t, map) && (!tB || mappingComplete(tB, mapB));
+  return (
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <Card className="min-w-0">
+        <CardHeader title="4. Variables" description="Fill each {{variable}} from the contact's details or with the same text for everyone. Contacts missing a value (and no fallback) are removed in review." />
+        <CardBody className="space-y-4">
+          {tB ? <p className="text-small font-semibold text-app-text">Version A · <span className="font-mono">{t.name}</span></p> : null}
+          {!t.slots.length ? <p className="text-small text-app-muted">“{t.name}” has no variables — nothing to fill.</p> : null}
+          <MappingEditor t={t} map={map} setMap={setMap} idPrefix="a-" />
+          {tB ? (
+            <>
+              <p className="border-t border-app-border pt-4 text-small font-semibold text-app-text">Version B · <span className="font-mono">{tB.name}</span></p>
+              {!tB.slots.length ? <p className="text-small text-app-muted">“{tB.name}” has no variables — nothing to fill.</p> : null}
+              <MappingEditor t={tB} map={mapB} setMap={setMapB} idPrefix="b-" />
+            </>
+          ) : null}
           <StepFooter onBack={onBack}>
-            <Button onClick={() => run(() => onSave(map))} loading={busy} disabled={!complete}>
+            <Button onClick={() => run(() => onSave(map, tB ? mapB : null))} loading={busy} disabled={!complete}>
               Save & continue <ChevronRight aria-hidden="true" />
             </Button>
           </StepFooter>
         </CardBody>
       </Card>
-      <div className="min-w-0">
+      <div className="min-w-0 space-y-3">
+        {tB ? <p className="text-center text-caption font-semibold text-app-muted">Version A</p> : null}
         <WaPreview t={t} values={values} />
+        {tB ? (
+          <>
+            <p className="text-center text-caption font-semibold text-app-muted">Version B</p>
+            <WaPreview t={tB} values={valuesB} />
+          </>
+        ) : null}
         <p className="mt-2 text-center text-caption text-app-subtle">Shown with a sample contact (Priya Sharma).</p>
       </div>
     </div>

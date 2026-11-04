@@ -36,7 +36,7 @@ export type ComplianceReport = {
   generatedAt: string;
 };
 
-export type EligibleRecipient = { contactId: string; phone: string; name: string; values: SlotValues };
+export type EligibleRecipient = { contactId: string; phone: string; name: string; values: SlotValues; valuesB?: SlotValues };
 
 const TIER_LIMITS: Record<string, number> = { TIER_50: 50, TIER_250: 250, TIER_1K: 1000, TIER_2K: 2000, TIER_10K: 10_000, TIER_100K: 100_000 };
 const E164 = /^\+[1-9]\d{7,14}$/;
@@ -82,7 +82,7 @@ function slotKind(s: Slot) {
 export async function runCompliance(campaignId: string): Promise<{ report: ComplianceReport; recipients: EligibleRecipient[] }> {
   const c = await db.campaign.findUniqueOrThrow({
     where: { id: campaignId },
-    include: { template: true, whatsappAccount: { include: { phone: true } } },
+    include: { template: true, abTemplate: true, whatsappAccount: { include: { phone: true } } },
   });
   const checks: ComplianceCheck[] = [];
   const check = (key: string, label: string, status: CheckStatus, detail: string) => checks.push({ key, label, status, detail });
@@ -109,6 +109,18 @@ export async function runCompliance(campaignId: string): Promise<{ report: Compl
   const mapping = JSON.parse(c.variables || "{}") as Record<string, VariableMapping>;
   const unmapped = slots.filter((s) => !mapping[s.key]);
   const badStatic = slots.filter((s) => mapping[s.key]?.source === "static" && paramProblem(resolveValue(mapping[s.key], { name: "", phone: "", email: "", customFields: "{}" }), slotKind(s)));
+
+  // 3b. A/B test: version B template + its own variables
+  const tB = c.abTemplateId && c.abSplit > 0 ? c.abTemplate : null;
+  const slotsB = tB ? templateSlots(toDef(tB)) : [];
+  const mappingB = JSON.parse(c.abVariables || "{}") as Record<string, VariableMapping>;
+  if (c.abTemplateId && c.abSplit > 0) {
+    if (!tB) check("ab", "A/B test", "fail", "Version B's template was deleted. Pick another or turn the test off.");
+    else if (tB.status !== "approved") check("ab", "A/B test", "fail", `Version B “${tB.name}” is ${tB.status}. Only approved templates can be sent.`);
+    else if (t && (tB.category !== t.category || tB.wabaRecordId !== t.wabaRecordId)) check("ab", "A/B test", "fail", "Version B must be the same category and WhatsApp account as version A.");
+    else if (slotsB.some((s) => !mappingB[s.key])) check("ab", "A/B test", "fail", "Fill version B's variables.");
+    else check("ab", "A/B test", "pass", `About ${c.abSplit}% get “${tB.name}” (B), the rest “${t?.name ?? "A"}” (A). Each person always gets one version.`);
+  }
 
   // 4. Audience
   const audience = parseAudience(c.audience);
@@ -161,8 +173,16 @@ export async function runCompliance(campaignId: string): Promise<{ report: Compl
         values[s.key] = resolveValue(mapping[s.key], ct);
         if (paramProblem(values[s.key], slotKind(s))) ok = false;
       }
+      let valuesB: SlotValues | undefined;
+      if (tB) {
+        valuesB = {};
+        for (const s of slotsB) {
+          valuesB[s.key] = resolveValue(mappingB[s.key], ct);
+          if (paramProblem(valuesB[s.key], slotKind(s))) ok = false;
+        }
+      }
       if (!ok) remove(ct, "missing_variable");
-      else recipients.push({ contactId: ct.id, phone: ct.phone, name: ct.name, values });
+      else recipients.push({ contactId: ct.id, phone: ct.phone, name: ct.name, values, ...(valuesB ? { valuesB } : {}) });
     }
     seen.add(ct.phone);
   }

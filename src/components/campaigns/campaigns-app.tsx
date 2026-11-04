@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarHeart, Filter, Megaphone, Plus, Trash2 } from "lucide-react";
+import { BarChart3, CalendarHeart, Filter, Megaphone, Plus, Trash2 } from "lucide-react";
 import {
   Alert,
   Badge,
@@ -82,6 +82,9 @@ export function CampaignsApp({ orgId, canManage, accounts, activeAccountId = "" 
         description="Send approved templates to opted-in contacts — with a compliance review before every send."
         actions={
           <>
+            <Link href="/campaigns/performance" className={buttonVariants({ variant: "secondary" })}>
+              <BarChart3 aria-hidden="true" /> Performance
+            </Link>
             <Link href="/campaigns/festivals" className={buttonVariants({ variant: "secondary" })}>
               <CalendarHeart aria-hidden="true" /> Festival campaigns
             </Link>

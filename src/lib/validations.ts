@@ -459,6 +459,9 @@ export const campaignUpdateSchema = z
     templateId: idSchema.nullable(),
     audience: audienceSchema,
     variables: z.record(z.string().max(64), variableMappingSchema),
+    abTemplateId: idSchema.nullable(),
+    abVariables: z.record(z.string().max(64), variableMappingSchema),
+    abSplit: z.number().int().refine((v) => v === 0 || (v >= 10 && v <= 50), "Send version B to 10–50% of people"),
     scheduledAt: z.coerce.date().nullable(),
     step: z.number().int().min(1).max(7),
   })

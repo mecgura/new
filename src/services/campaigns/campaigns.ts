@@ -12,6 +12,7 @@ import { applyStatusUpdate, receiveInbound } from "@/services/inbox/messaging";
 import { getTemplate } from "@/services/templates/templates";
 import { assertTagsInOrg, parseAudience, previewAudience } from "@/services/campaigns/audience";
 import { runCompliance, type ComplianceReport } from "@/services/campaigns/compliance";
+import { assignVariant } from "@/lib/campaign-insights";
 
 export const CAMPAIGN_STATUSES = ["draft", "scheduled", "sending", "paused", "completed", "cancelled", "failed"] as const;
 const MIN_LEAD_MS = 2 * 60 * 1000;
@@ -19,6 +20,7 @@ const MAX_LEAD_MS = 60 * 24 * 60 * 60 * 1000;
 
 const include = {
   template: { select: { id: true, name: true, language: true, category: true, status: true, qualityScore: true } },
+  abTemplate: { select: { id: true, name: true, language: true, category: true, status: true, qualityScore: true } },
   whatsappAccount: { select: { id: true, displayName: true, phoneNumber: true, status: true, isDemo: true } },
   segment: { select: { id: true, name: true } },
   createdBy: { select: { name: true, email: true } },
@@ -69,6 +71,7 @@ function toDto(c: Row, stats: CampaignStats) {
     segment: c.segment,
     audience: parseAudience(c.audience),
     variables: JSON.parse(c.variables || "{}") as Record<string, VariableMapping>,
+    ab: { template: c.abTemplate, variables: JSON.parse(c.abVariables || "{}") as Record<string, VariableMapping>, split: c.abTemplateId ? c.abSplit : 0 },
     scheduledAt: c.scheduledAt,
     review: c.reviewedAt ? (JSON.parse(c.review) as ComplianceReport) : null,
     reviewedAt: c.reviewedAt,
@@ -138,6 +141,9 @@ export type CampaignPatch = Partial<{
   templateId: string | null;
   audience: Audience;
   variables: Record<string, VariableMapping>;
+  abTemplateId: string | null;
+  abVariables: Record<string, VariableMapping>;
+  abSplit: number;
   scheduledAt: Date | null;
   step: number;
 }>;
@@ -158,6 +164,9 @@ export async function updateCampaign(access: OrgAccess, id: string, p: CampaignP
     if (current && current.wabaRecordId !== a.wabaRecordId && p.templateId === undefined) {
       data.templateId = null;
       data.variables = "{}";
+      data.abTemplateId = null;
+      data.abVariables = "{}";
+      data.abSplit = 0;
     }
   }
   if (p.templateId !== undefined) {
@@ -183,6 +192,30 @@ export async function updateCampaign(access: OrgAccess, id: string, p: CampaignP
     data.segmentId = a.mode === "segment" ? a.segmentId : null;
   }
   if (p.variables !== undefined) data.variables = JSON.stringify(p.variables);
+  // A/B test: version B must be a different approved template of the same category on the same WhatsApp account.
+  if (p.abTemplateId !== undefined) {
+    if (p.abTemplateId) {
+      const mainId = p.templateId !== undefined ? p.templateId : c.templateId;
+      if (!mainId) throw new ApiError("VALIDATION_ERROR", "Choose the main template first.", { details: { abTemplateId: ["No main template"] } });
+      if (p.abTemplateId === mainId) throw new ApiError("VALIDATION_ERROR", "Version B must be a different template.", { details: { abTemplateId: ["Same as version A"] } });
+      const [a, b] = await Promise.all([db.messageTemplate.findFirst({ where: { id: mainId, organizationId: access.organizationId } }), db.messageTemplate.findFirst({ where: { id: p.abTemplateId, organizationId: access.organizationId } })]);
+      if (!a || !b) throw new ApiError("VALIDATION_ERROR", "Template not found.", { details: { abTemplateId: ["Unknown template"] } });
+      if (b.status !== "approved") throw new ApiError("VALIDATION_ERROR", "Version B must be an approved template.", { details: { abTemplateId: [`Template is ${b.status}`] } });
+      if (b.category !== a.category || b.wabaRecordId !== a.wabaRecordId) throw new ApiError("VALIDATION_ERROR", "Version B must be the same category and WhatsApp account as version A, so the test is fair.", { details: { abTemplateId: ["Different category or account"] } });
+      if (p.abTemplateId !== c.abTemplateId) data.abVariables = "{}";
+    } else data.abVariables = "{}";
+    data.abTemplateId = p.abTemplateId;
+    if (!p.abTemplateId) data.abSplit = 0;
+    else if (p.abSplit === undefined && !c.abSplit) data.abSplit = 50;
+  }
+  if (p.abSplit !== undefined && (p.abTemplateId ?? c.abTemplateId)) data.abSplit = p.abSplit;
+  if (p.abVariables !== undefined) data.abVariables = JSON.stringify(p.abVariables);
+  // A new main template invalidates version B unless B was set in the same save.
+  if (p.templateId !== undefined && p.templateId !== c.templateId && p.abTemplateId === undefined && c.abTemplateId) {
+    data.abTemplateId = null;
+    data.abVariables = "{}";
+    data.abSplit = 0;
+  }
   if (p.scheduledAt !== undefined) {
     if (p.scheduledAt) {
       const lead = p.scheduledAt.getTime() - Date.now();
@@ -192,7 +225,7 @@ export async function updateCampaign(access: OrgAccess, id: string, p: CampaignP
     data.scheduledAt = p.scheduledAt;
   }
   if (p.step !== undefined) data.step = Math.max(c.step, p.step);
-  if (p.templateId !== undefined || p.audience !== undefined || p.variables !== undefined || p.whatsappAccountId !== undefined) {
+  if (p.templateId !== undefined || p.audience !== undefined || p.variables !== undefined || p.whatsappAccountId !== undefined || p.abTemplateId !== undefined || p.abVariables !== undefined || p.abSplit !== undefined) {
     data.reviewedAt = null;
     data.review = "{}";
   }
@@ -268,7 +301,10 @@ export async function launchCampaign(access: OrgAccess, id: string, req?: Reques
   await incrementUsage(c.organizationId, "campaigns_launched");
   for (let i = 0; i < recipients.length; i += 500) {
     await db.campaignRecipient.createMany({
-      data: recipients.slice(i, i + 500).map((r) => ({ organizationId: c.organizationId, campaignId: id, contactId: r.contactId, phone: r.phone, name: r.name, variables: JSON.stringify(r.values) })),
+      data: recipients.slice(i, i + 500).map((r) => {
+        const variant = c.abTemplateId && c.abSplit > 0 && r.valuesB ? assignVariant(id, r.phone, c.abSplit) : "A";
+        return { organizationId: c.organizationId, campaignId: id, contactId: r.contactId, phone: r.phone, name: r.name, variant, variables: JSON.stringify(variant === "B" ? r.valuesB : r.values) };
+      }),
     });
   }
   await audit({
