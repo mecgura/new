@@ -107,6 +107,7 @@ export const ORG_PERMISSIONS = {
   "analytics:read": ["CLIENT_OWNER", "MANAGER"],
   // Social media
   "social:manage": ["CLIENT_OWNER", "MANAGER"], // plan, schedule and publish posts
+  "social:approve": ["CLIENT_OWNER"], // approve posts when approval is required
 } as const satisfies Record<string, readonly OrgRole[]>;
 
 export type OrgPermission = keyof typeof ORG_PERMISSIONS;
@@ -122,6 +123,7 @@ export function canAssignRole(actorRole: OrgRole, target: OrgRole): boolean {
 
 /** Human-readable permission matrix for the Team page. */
 export const PERMISSION_LABELS: Partial<Record<OrgPermission, string>> = {
+  "social:approve": "Approve social media posts",
   "inbox:view_all": "See every conversation",
   "inbox:reply": "Reply to customers",
   "inbox:note": "Write internal notes",

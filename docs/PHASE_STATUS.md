@@ -204,3 +204,19 @@ _(newest last)_
 - Not built: OpenAI as an alternative agent model (the agent stays on Claude; OpenAI/Gemini remain for images and ad
   copy in the admin studio). Multi-page website crawling (add pages one by one instead).
 - Tests `tests/integration/ai-knowledge.test.ts` (8). Suite 511/511, build OK, browser smoke OK (real PDF upload).
+
+### Stage 10: Social approvals, AI captions, media library ✅ (2026-11-04)
+- Schema: `SocialPost.approvedAt/approvedById/reviewNote/submittedAt`, statuses `pending_approval` and
+  `changes_requested`, `SocialAsset`, `OrganizationSettings.social`. Migration
+  `prisma/migrations/20261114090000_social_approvals`. New permission `social:approve` (workspace owner).
+- Approval workflow (`src/services/social/workflow.ts`), off by default; only the owner can switch it on or off.
+  When on, a manager's (or MECGURA team's) scheduled post waits for the owner, who gets a notification and can
+  approve or request changes with a note. Any edit needs a fresh approval. Unapproved posts can't be published,
+  marked as posted, or picked up by the scheduler; posts scheduled before approval was switched on are held.
+- AI captions (`src/providers/anthropic/social.ts`): 3 caption + hashtag options from a short brief in English,
+  Hinglish, Punjabi (Roman or Gurmukhi) or Hindi, with tone, brand voice and always-included hashtags. It's told
+  never to invent offers or claims. Without `ANTHROPIC_API_KEY` it says Configuration required. Rate limit 30/hour.
+- Media library: up to 200 images / 150 MB per workspace, search by name or tag, pick into posts (the post keeps
+  its own copy, so deleting from the library never breaks a scheduled post).
+- Not built: post analytics (reach, likes). Needs Meta insights permissions on the connected Page. Marked 🔧.
+- Tests `tests/integration/social-approvals.test.ts` (6). Suite 517/517, build OK, browser smoke OK.

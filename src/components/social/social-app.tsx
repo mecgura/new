@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CalendarClock, CheckCircle2, ChevronLeft, ChevronRight, ImagePlus, Plus, Send, Trash2 } from "lucide-react";
+import { CalendarClock, CheckCircle2, ChevronLeft, ChevronRight, ImagePlus, Images, MessageSquareWarning, Plus, Send, Settings2, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
 import { Alert, Badge, Button, Card, CardBody, CardHeader, Checkbox, Field, Input, Modal, PageHeader, Textarea, useToast } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
+import { CaptionHelper, LibraryModal, SettingsModal, type SocialSettings } from "@/components/social/social-tools";
 
 type Channel = "facebook" | "instagram";
 type Post = {
@@ -14,10 +15,13 @@ type Post = {
   hasImage: boolean;
   imageUrl: string | null;
   scheduledAt: string | null;
-  status: "draft" | "scheduled" | "publishing" | "published" | "failed";
+  status: "draft" | "pending_approval" | "changes_requested" | "scheduled" | "publishing" | "published" | "failed";
   publishedAt: string | null;
   results: Partial<Record<Channel, { id?: string; error?: string }>> & { manual?: boolean };
+  approvedAt: string | null;
+  reviewNote: string;
 };
+type Data = { posts: Post[]; accounts: Accounts; settings: SocialSettings; canApprove: boolean };
 type Accounts = { facebook: { name: string } | null; instagram: { name: string } | null };
 type Festival = { name: string; emoji: string; start: string };
 
@@ -27,6 +31,8 @@ const timeFmt = new Intl.DateTimeFormat("en-IN", { timeZone: TZ, hour: "numeric"
 const monthFmt = new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
 const STATUS: Record<Post["status"], { label: string; tone: "neutral" | "info" | "success" | "danger" | "warning" }> = {
   draft: { label: "Draft", tone: "neutral" },
+  pending_approval: { label: "Waiting for approval", tone: "warning" },
+  changes_requested: { label: "Changes requested", tone: "danger" },
   scheduled: { label: "Scheduled", tone: "info" },
   publishing: { label: "Publishing…", tone: "warning" },
   published: { label: "Published", tone: "success" },
@@ -80,9 +86,13 @@ async function shrink(file: File): Promise<string> {
 /** Social Media: content calendar, composer and publishing to Facebook / Instagram. */
 export function SocialApp({ orgId, festivals }: { orgId: string; festivals: Festival[] }) {
   const toast = useToast();
-  const base = `/api/organizations/${orgId}/social/posts`;
+  const root = `/api/organizations/${orgId}/social`;
+  const base = `${root}/posts`;
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [libraryOpen, setLibraryOpen] = React.useState(false);
+  const deepLinked = React.useRef(false);
   const [month, setMonth] = React.useState(() => dayKey(new Date()).slice(0, 7));
-  const [data, setData] = React.useState<{ posts: Post[]; accounts: Accounts } | null>(null);
+  const [data, setData] = React.useState<Data | null>(null);
   const [editing, setEditing] = React.useState<Post | "new" | null>(null);
   const [newDay, setNewDay] = React.useState<string>("");
 
@@ -90,9 +100,16 @@ export function SocialApp({ orgId, festivals }: { orgId: string; festivals: Fest
     const days = monthDays(month);
     const from = new Date(`${days[0]}T00:00:00+05:30`).toISOString();
     const to = new Date(`${days[41]}T23:59:59+05:30`).toISOString();
-    const r = await apiFetch<{ posts: Post[]; accounts: Accounts }>(`${base}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+    const r = await apiFetch<Data>(`${base}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
     if (!r.ok) return toast(r.error, "error");
     setData(r.data);
+    // Opened from a notification: /social?post=<id>
+    if (!deepLinked.current) {
+      deepLinked.current = true;
+      const id = new URLSearchParams(window.location.search).get("post");
+      const hit = id ? r.data.posts.find((p) => p.id === id) : undefined;
+      if (hit) setEditing(hit);
+    }
   }, [base, month, toast]);
   React.useEffect(() => {
     const t = window.setTimeout(() => void load(), 0);
@@ -108,7 +125,8 @@ export function SocialApp({ orgId, festivals }: { orgId: string; festivals: Fest
     const k = dayKey(new Date(when));
     byDay.set(k, [...(byDay.get(k) ?? []), p]);
   }
-  const drafts = (data?.posts ?? []).filter((p) => !p.scheduledAt && !p.publishedAt);
+  const awaiting = (data?.posts ?? []).filter((p) => p.status === "pending_approval" || p.status === "changes_requested");
+  const drafts = (data?.posts ?? []).filter((p) => !p.scheduledAt && !p.publishedAt && !awaiting.includes(p));
   const festByDay = new Map(festivals.map((f) => [f.start, f]));
   const upcoming = festivals.filter((f) => f.start >= today).slice(0, 4);
 
@@ -118,9 +136,13 @@ export function SocialApp({ orgId, festivals }: { orgId: string; festivals: Fest
         title="Social Media"
         description="Plan, schedule and publish Facebook and Instagram posts from one calendar."
         actions={
-          <Button onClick={() => { setNewDay(""); setEditing("new"); }}>
-            <Plus aria-hidden="true" /> New post
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setLibraryOpen(true)}><Images aria-hidden="true" /> Media library</Button>
+            <Button variant="secondary" onClick={() => setSettingsOpen(true)} aria-label="Social media settings"><Settings2 aria-hidden="true" /></Button>
+            <Button onClick={() => { setNewDay(""); setEditing("new"); }}>
+              <Plus aria-hidden="true" /> New post
+            </Button>
+          </div>
         }
       />
       {data && !data.accounts.facebook && !data.accounts.instagram ? (
@@ -168,7 +190,7 @@ export function SocialApp({ orgId, festivals }: { orgId: string; festivals: Fest
                     <div className="mt-1 space-y-1">
                       {posts.map((p) => (
                         <button key={p.id} type="button" onClick={() => setEditing(p)} className="flex w-full items-center gap-1 truncate rounded bg-app-hover px-1 py-0.5 text-left text-[11px] text-app-text hover:ring-1 hover:ring-app-primary">
-                          <span className={`size-1.5 shrink-0 rounded-full ${p.status === "published" ? "bg-emerald-400" : p.status === "failed" ? "bg-red-400" : "bg-sky-400"}`} aria-hidden="true" />
+                          <span className={`size-1.5 shrink-0 rounded-full ${p.status === "published" ? "bg-emerald-400" : p.status === "failed" || p.status === "changes_requested" ? "bg-red-400" : p.status === "pending_approval" ? "bg-amber-400" : "bg-sky-400"}`} aria-hidden="true" />
                           <span className="shrink-0 text-app-muted">{timeFmt.format(new Date(p.publishedAt ?? p.scheduledAt!))}</span>
                           <span className="truncate">{p.caption || "Image post"}</span>
                         </button>
@@ -182,6 +204,27 @@ export function SocialApp({ orgId, festivals }: { orgId: string; festivals: Fest
         </Card>
 
         <div className="space-y-4">
+          {data?.settings.requireApproval || awaiting.length ? (
+            <Card>
+              <CardHeader title={<span className="flex items-center gap-2"><ShieldCheck className="size-4" aria-hidden="true" /> Approvals</span>} description={data?.canApprove ? "Posts waiting for your OK." : "Posts waiting for the owner."} />
+              <CardBody>
+                {awaiting.length ? (
+                  <ul className="space-y-2">
+                    {awaiting.map((p) => (
+                      <li key={p.id}>
+                        <button type="button" onClick={() => setEditing(p)} className="w-full rounded-lg border border-app-border p-2 text-left text-small hover:bg-app-hover">
+                          <span className="line-clamp-2 text-app-text">{p.caption || "Image post"}</span>
+                          <span className="mt-1 flex flex-wrap items-center gap-2 text-caption text-app-subtle"><Badge tone={STATUS[p.status].tone}>{STATUS[p.status].label}</Badge>{p.scheduledAt ? `${dayKey(new Date(p.scheduledAt))} ${timeFmt.format(new Date(p.scheduledAt))}` : ""}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-small text-app-muted">Nothing waiting.</p>
+                )}
+              </CardBody>
+            </Card>
+          ) : null}
           <Card>
             <CardHeader title="Drafts" description="Ideas not scheduled yet." />
             <CardBody>
@@ -227,15 +270,20 @@ export function SocialApp({ orgId, festivals }: { orgId: string; festivals: Fest
           day={newDay}
           festival={newDay ? festByDay.get(newDay) : undefined}
           accounts={data?.accounts ?? { facebook: null, instagram: null }}
+          root={root}
+          needsApproval={Boolean(data?.settings.requireApproval && !data.canApprove)}
+          canApprove={Boolean(data?.canApprove)}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); void load(); }}
         />
       ) : null}
+      {settingsOpen && data ? <SettingsModal root={root} settings={data.settings} canApprove={data.canApprove} onClose={() => setSettingsOpen(false)} onSaved={(settings) => { setSettingsOpen(false); setData({ ...data, settings }); }} /> : null}
+      {libraryOpen ? <LibraryModal root={root} onClose={() => setLibraryOpen(false)} /> : null}
     </>
   );
 }
 
-function Composer({ base, post, day, festival, accounts, onClose, onSaved }: { base: string; post: Post | null; day: string; festival?: Festival; accounts: Accounts; onClose: () => void; onSaved: () => void }) {
+function Composer({ base, root, post, day, festival, accounts, needsApproval, canApprove, onClose, onSaved }: { base: string; root: string; post: Post | null; day: string; festival?: Festival; accounts: Accounts; needsApproval: boolean; canApprove: boolean; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
   const locked = post?.status === "published" || post?.status === "publishing";
   const initialWhen = post?.scheduledAt ? new Date(post.scheduledAt) : null;
@@ -246,6 +294,9 @@ function Composer({ base, post, day, festival, accounts, onClose, onSaved }: { b
   const [image, setImage] = React.useState<string | undefined>(undefined); // undefined = unchanged
   const [preview, setPreview] = React.useState<string | null>(post?.imageUrl ?? null);
   const [busy, setBusy] = React.useState("");
+  const [assetId, setAssetId] = React.useState<string | undefined>(undefined);
+  const [picking, setPicking] = React.useState(false);
+  const [aiOpen, setAiOpen] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
 
   const toggle = (c: Channel) => setChannels((xs) => (xs.includes(c) ? xs.filter((x) => x !== c) : [...xs, c]));
@@ -256,6 +307,7 @@ function Composer({ base, post, day, festival, accounts, onClose, onSaved }: { b
     try {
       const url = await shrink(file);
       setImage(url);
+      setAssetId(undefined);
       setPreview(url);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not use that image.", "error");
@@ -264,11 +316,11 @@ function Composer({ base, post, day, festival, accounts, onClose, onSaved }: { b
 
   async function save(status: "draft" | "scheduled") {
     setBusy(status);
-    const body = { caption, channels, scheduledAt: status === "scheduled" ? whenIso : date ? whenIso : "", status, ...(image !== undefined ? { image } : {}) };
+    const body = { caption, channels, scheduledAt: status === "scheduled" ? whenIso : date ? whenIso : "", status, ...(assetId ? { assetId } : image !== undefined ? { image } : {}) };
     const r = await apiFetch<{ post: Post }>(post ? `${base}/${post.id}` : base, { method: post ? "PUT" : "POST", body });
     setBusy("");
     if (!r.ok) return toast(Object.values(r.details ?? {}).flat()[0] ?? r.error, "error");
-    toast(status === "scheduled" ? "Scheduled. It will be published automatically." : "Draft saved.");
+    toast(r.data.post.status === "pending_approval" ? "Sent to the owner for approval." : status === "scheduled" ? "Scheduled. It will be published automatically." : "Draft saved.");
     onSaved();
   }
 
@@ -284,6 +336,21 @@ function Composer({ base, post, day, festival, accounts, onClose, onSaved }: { b
     onSaved();
   }
 
+  async function review(kind: "approve" | "request-changes") {
+    if (!post) return;
+    let note = "";
+    if (kind === "request-changes") {
+      note = window.prompt("What should be changed?")?.trim() ?? "";
+      if (!note) return;
+    }
+    setBusy(kind);
+    const r = await apiFetch(`${base}/${post.id}/${kind}`, { method: "POST", body: kind === "approve" ? {} : { note } });
+    setBusy("");
+    if (!r.ok) return toast(r.error, "error");
+    toast(kind === "approve" ? "Approved." : "Sent back with your note.");
+    onSaved();
+  }
+
   async function remove() {
     if (!post || !window.confirm("Delete this post?")) return;
     const r = await apiFetch(`${base}/${post.id}`, { method: "DELETE" });
@@ -292,6 +359,8 @@ function Composer({ base, post, day, festival, accounts, onClose, onSaved }: { b
   }
 
   const connected = (c: Channel) => Boolean(accounts[c]);
+  // Without the owner's OK, a manager can't publish or mark as posted.
+  const blocked = needsApproval && !(post?.approvedAt && post.status !== "pending_approval" && post.status !== "changes_requested");
   return (
     <Modal open onClose={onClose} size="lg" title={post ? (locked ? "Published post" : "Edit post") : "New post"} description={festival ? `${festival.emoji} ${festival.name}` : undefined}
       footer={
@@ -301,18 +370,33 @@ function Composer({ base, post, day, festival, accounts, onClose, onSaved }: { b
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
             <div className="flex gap-2">
               {post ? <Button variant="ghost" onClick={() => void remove()} aria-label="Delete post"><Trash2 /></Button> : null}
-              {post ? <Button variant="ghost" loading={busy === "posted"} onClick={() => void act("posted")}><CheckCircle2 /> Mark as posted</Button> : null}
+              {post && !blocked ? <Button variant="ghost" loading={busy === "posted"} onClick={() => void act("posted")}><CheckCircle2 /> Mark as posted</Button> : null}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" loading={busy === "draft"} onClick={() => void save("draft")}>Save draft</Button>
-              {post ? <Button variant="secondary" loading={busy === "publish"} onClick={() => void act("publish")}><Send /> Publish now</Button> : null}
-              <Button loading={busy === "scheduled"} disabled={!date} onClick={() => void save("scheduled")}><CalendarClock /> Schedule</Button>
+              {post?.status === "pending_approval" && canApprove ? (
+                <>
+                  <Button variant="secondary" loading={busy === "request-changes"} onClick={() => void review("request-changes")}><MessageSquareWarning /> Request changes</Button>
+                  <Button loading={busy === "approve"} onClick={() => void review("approve")}><ShieldCheck /> Approve</Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="secondary" loading={busy === "draft"} onClick={() => void save("draft")}>Save draft</Button>
+                  {post && !blocked ? <Button variant="secondary" loading={busy === "publish"} onClick={() => void act("publish")}><Send /> Publish now</Button> : null}
+                  <Button loading={busy === "scheduled"} disabled={!date} onClick={() => void save("scheduled")}>{needsApproval ? <><ShieldCheck /> Send for approval</> : <><CalendarClock /> Schedule</>}</Button>
+                </>
+              )}
             </div>
           </div>
         )
       }
     >
       <div className="space-y-4">
+        {post?.status === "changes_requested" ? (
+          <Alert tone="warning" title="The owner asked for changes">{post.reviewNote}</Alert>
+        ) : null}
+        {post?.status === "pending_approval" ? (
+          <Alert tone="info" title="Waiting for approval">{canApprove ? "Check the post, then approve it or ask for changes." : "The owner has been notified. Editing it sends it for approval again."}</Alert>
+        ) : null}
         {post?.status === "failed" ? (
           <Alert tone="danger" title="Last publish failed">
             {Object.entries(post.results).map(([k, v]) => (typeof v === "object" && v?.error ? <span key={k} className="block">{k}: {v.error}</span> : null))}
@@ -322,6 +406,12 @@ function Composer({ base, post, day, festival, accounts, onClose, onSaved }: { b
           <Alert tone="success" title="Published">
             {post.results.manual ? "Marked as posted by hand." : Object.entries(post.results).map(([k, v]) => <span key={k} className="block">{k}: {typeof v === "object" && v?.id ? "posted ✓" : typeof v === "object" ? v?.error : ""}</span>)}
           </Alert>
+        ) : null}
+        {!locked ? (
+          <div>
+            <Button size="sm" variant="secondary" onClick={() => setAiOpen((v) => !v)}><Sparkles aria-hidden="true" /> {aiOpen ? "Hide AI captions" : "Write with AI"}</Button>
+            {aiOpen ? <div className="mt-2"><CaptionHelper root={root} platform={channels.length === 2 ? "both" : (channels[0] ?? "both")} onUse={(t) => { setCaption(t.slice(0, 2200)); setAiOpen(false); }} /></div> : null}
+          </div>
         ) : null}
         <Field id="sp-caption" label="Caption" hint={`${caption.length}/2200 · tip: 3–5 hashtags work best`}>
           <Textarea rows={6} value={caption} disabled={locked} maxLength={2200} onChange={(e) => setCaption(e.target.value)} placeholder="Write your post… #YourBrand" />
@@ -339,7 +429,8 @@ function Composer({ base, post, day, festival, accounts, onClose, onSaved }: { b
               <div className="flex flex-col gap-2">
                 <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => void pick(e.target.files?.[0])} />
                 <Button size="sm" variant="secondary" onClick={() => fileRef.current?.click()}>{preview ? "Change image" : "Add image"}</Button>
-                {preview ? <Button size="sm" variant="ghost" onClick={() => { setImage(""); setPreview(null); }}>Remove</Button> : null}
+                <Button size="sm" variant="secondary" onClick={() => setPicking(true)}><Images aria-hidden="true" /> From library</Button>
+                {preview ? <Button size="sm" variant="ghost" onClick={() => { setImage(""); setAssetId(undefined); setPreview(null); }}>Remove</Button> : null}
               </div>
             ) : null}
           </div>
@@ -358,6 +449,7 @@ function Composer({ base, post, day, festival, accounts, onClose, onSaved }: { b
           </Field>
         </div>
       </div>
+      {picking ? <LibraryModal root={root} onClose={() => setPicking(false)} onPick={(a) => { setAssetId(a.id); setImage(undefined); setPreview(a.url); setPicking(false); }} /> : null}
     </Modal>
   );
 }

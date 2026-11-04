@@ -78,6 +78,7 @@ model Organization {
   waCalls                 WaCall[]
   agreements              ClientAgreement[]
   socialPosts             SocialPost[]
+  socialAssets            SocialAsset[]
   jobs                    Job[]
   candidates              Candidate[]
   employees               Employee[]
@@ -315,6 +316,7 @@ model OrganizationSettings {
   inboxSla           String    @default("") // JSON first-response target, escalation, CSAT
   loyalty            String    @default("") // JSON loyalty + referral programme settings ("" = defaults, off)
   reviews            String    @default("") // JSON review-request settings ("" = defaults)
+  social             String    @default("") // JSON social settings: approval required, brand voice ("" = defaults)
   updatedAt          DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -1676,9 +1678,13 @@ model SocialPost {
   media          Bytes?
   mediaKey       String    @unique // random, so the public image URL can't be guessed
   scheduledAt    DateTime?
-  status         String    @default("draft") // draft | scheduled | publishing | published | failed
+  status         String    @default("draft") // draft | pending_approval | changes_requested | scheduled | publishing | published | failed
   publishedAt    DateTime?
   results        String    @default("{}") // JSON per channel: { id?, error? }
+  approvedAt     DateTime?
+  approvedById   String?
+  reviewNote     String    @default("") // approver's comment when changes are requested
+  submittedAt    DateTime?
   createdById    String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -1687,6 +1693,23 @@ model SocialPost {
 
   @@index([organizationId, scheduledAt])
   @@index([status, scheduledAt])
+}
+
+// Social media library: images uploaded once and reused in posts.
+model SocialAsset {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  mimeType       String
+  sizeBytes      Int
+  bytes          Bytes
+  tags           String   @default("")
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
 }
 
 // ATS: job openings and the people who applied.

@@ -8,6 +8,7 @@ import { siteConfig } from "@/config/site";
 import type { OrgAccess } from "@/lib/session";
 import { assertServiceEnabled } from "@/services/whatsapp/guards";
 import { publishFacebookPost, publishInstagramPost } from "@/providers/meta/social";
+import { assertMayPublish, canApprove, getSocialSettings, notifyApprovers, savedStatus } from "@/services/social/workflow";
 
 /**
  * Social Media Management: a content calendar for a client's Facebook Page and Instagram account. Posts are planned
@@ -34,6 +35,9 @@ export const postSchema = z.object({
     .max(Math.ceil(MAX_MEDIA_BYTES * 1.4))
     .refine((v) => v === "" || /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(v), "Use a JPG, PNG or WebP image.")
     .optional(),
+  /** Use an image from the media library instead of uploading one. */
+  assetId: z.string().min(1).max(40).optional(),
+  /** "scheduled" becomes "waiting for approval" when approval is required. */
   status: z.enum(["draft", "scheduled"]).default("draft"),
 });
 export type PostInput = z.infer<typeof postSchema>;
@@ -59,6 +63,9 @@ function toDto(p: Row) {
     status: p.status,
     publishedAt: p.publishedAt,
     results: parse<Partial<Record<SocialChannel, { id?: string; error?: string }>>>(p.results, {}),
+    approvedAt: p.approvedAt,
+    reviewNote: p.reviewNote,
+    submittedAt: p.submittedAt,
     createdAt: p.createdAt,
   };
 }
@@ -93,24 +100,46 @@ export async function socialAccounts(organizationId: string) {
 export async function listPosts(access: OrgAccess, range: { from: Date; to: Date }) {
   await assertServiceEnabled(access.organizationId, "SOCIAL_MEDIA");
   const rows = await db.socialPost.findMany({
-    where: { organizationId: access.organizationId, OR: [{ scheduledAt: { gte: range.from, lt: range.to } }, { publishedAt: { gte: range.from, lt: range.to } }, { scheduledAt: null, publishedAt: null }] },
+    where: { organizationId: access.organizationId, OR: [{ scheduledAt: { gte: range.from, lt: range.to } }, { publishedAt: { gte: range.from, lt: range.to } }, { scheduledAt: null, publishedAt: null }, { status: { in: ["pending_approval", "changes_requested"] } }] },
     orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
     take: 500,
   });
-  return { posts: rows.map(toDto), accounts: await socialAccounts(access.organizationId) };
+  return { posts: rows.map(toDto), accounts: await socialAccounts(access.organizationId), settings: await getSocialSettings(access.organizationId), canApprove: canApprove(access) };
+}
+
+async function assetMedia(organizationId: string, assetId: string) {
+  const a = await db.socialAsset.findFirst({ where: { id: assetId, organizationId }, select: { mimeType: true, bytes: true } });
+  if (!a) throw new ApiError("NOT_FOUND", "That image isn't in your media library.");
+  return { type: a.mimeType, bytes: new Uint8Array(a.bytes) };
+}
+
+/** Approval fields for a save: who approved, when it was sent for approval. */
+async function workflowData(access: OrgAccess, wanted: "draft" | "scheduled") {
+  const w = savedStatus(access, wanted, await getSocialSettings(access.organizationId));
+  return {
+    w,
+    data: {
+      status: w.status,
+      approvedAt: w.approved ? new Date() : null,
+      approvedById: w.approved ? access.user.id : null,
+      submittedAt: w.status === "pending_approval" ? new Date() : null,
+      reviewNote: "",
+    },
+  };
 }
 
 export async function createPost(access: OrgAccess, input: PostInput, req?: Request) {
   await assertServiceEnabled(access.organizationId, "SOCIAL_MEDIA");
-  const media = input.image ? decodeImage(input.image) : null;
+  const media = input.assetId ? await assetMedia(access.organizationId, input.assetId) : input.image ? decodeImage(input.image) : null;
   check(input, Boolean(media));
+  const { w, data: flow } = await workflowData(access, input.status);
   const p = await db.socialPost.create({
     data: {
       organizationId: access.organizationId,
       caption: input.caption,
       channels: JSON.stringify(input.channels),
       scheduledAt: input.scheduledAt,
-      status: input.status,
+      ...flow,
       mediaType: media?.type ?? "",
       media: media?.bytes ?? null,
       mediaKey: randomBytes(18).toString("base64url"),
@@ -118,6 +147,7 @@ export async function createPost(access: OrgAccess, input: PostInput, req?: Requ
     },
   });
   await audit({ action: "social.post_saved", actorUserId: access.user.id, organizationId: access.organizationId, targetType: "social_post", targetId: p.id, metadata: { status: p.status }, req });
+  if (w.status === "pending_approval") await notifyApprovers(access.organizationId, p.id, p.caption, access.user.id);
   return toDto(p);
 }
 
@@ -131,20 +161,23 @@ export async function updatePost(access: OrgAccess, id: string, input: PostInput
   await assertServiceEnabled(access.organizationId, "SOCIAL_MEDIA");
   const p = await load(access.organizationId, id);
   if (p.status === "published" || p.status === "publishing") throw new ApiError("CONFLICT", "This post is already published.");
-  const media = input.image ? decodeImage(input.image) : input.image === "" ? null : undefined;
+  const media = input.assetId ? await assetMedia(access.organizationId, input.assetId) : input.image ? decodeImage(input.image) : input.image === "" ? null : undefined;
   check(input, media === undefined ? Boolean(p.mediaType) : Boolean(media));
+  // Any edit needs a fresh approval (an approver's own save approves it again).
+  const { w, data: flow } = await workflowData(access, input.status);
   const u = await db.socialPost.update({
     where: { id },
     data: {
       caption: input.caption,
       channels: JSON.stringify(input.channels),
       scheduledAt: input.scheduledAt,
-      status: input.status,
+      ...flow,
       results: "{}",
       ...(media === undefined ? {} : { mediaType: media?.type ?? "", media: media?.bytes ?? null }),
     },
   });
   await audit({ action: "social.post_saved", actorUserId: access.user.id, organizationId: access.organizationId, targetType: "social_post", targetId: id, metadata: { status: u.status }, req });
+  if (w.status === "pending_approval") await notifyApprovers(access.organizationId, id, u.caption, access.user.id);
   return toDto(u);
 }
 
@@ -158,7 +191,7 @@ export async function deletePost(access: OrgAccess, id: string, req?: Request) {
 /** For posts made outside MECGURA (no connected account): records it as posted so the calendar stays true. */
 export async function markPosted(access: OrgAccess, id: string, req?: Request) {
   await assertServiceEnabled(access.organizationId, "SOCIAL_MEDIA");
-  await load(access.organizationId, id);
+  await assertMayPublish(access, await load(access.organizationId, id));
   const u = await db.socialPost.update({ where: { id }, data: { status: "published", publishedAt: new Date(), results: JSON.stringify({ manual: true }) } });
   await audit({ action: "social.post_published", actorUserId: access.user.id, organizationId: access.organizationId, targetType: "social_post", targetId: id, metadata: { manual: true }, req });
   return toDto(u);
@@ -196,9 +229,15 @@ export async function publishPost(organizationId: string, id: string, actorUserI
 
 /** Scheduler: publishes posts whose time has come. */
 export async function runDueSocialPosts(limit = 20) {
-  const due = await db.socialPost.findMany({ where: { status: "scheduled", scheduledAt: { lte: new Date() } }, orderBy: { scheduledAt: "asc" }, take: limit, select: { id: true, organizationId: true } });
+  const due = await db.socialPost.findMany({ where: { status: "scheduled", scheduledAt: { lte: new Date() } }, orderBy: { scheduledAt: "asc" }, take: limit, select: { id: true, organizationId: true, approvedAt: true, caption: true, createdById: true } });
   let published = 0;
   for (const d of due) {
+    // Scheduled before approval was switched on: hold it for the owner instead of publishing.
+    if (!d.approvedAt && (await getSocialSettings(d.organizationId)).requireApproval) {
+      await db.socialPost.update({ where: { id: d.id }, data: { status: "pending_approval", submittedAt: new Date() } });
+      await notifyApprovers(d.organizationId, d.id, d.caption, d.createdById ?? "");
+      continue;
+    }
     try {
       const r = await publishPost(d.organizationId, d.id, null);
       if (r.status === "published") published++;
