@@ -20,12 +20,15 @@ import { FestivalCalendar } from "@/components/festival/festival-calendar";
 import { FloatingChat } from "@/components/home/floating-chat";
 import { ScrollReveal } from "@/components/home/scroll-reveal";
 import { getBillingSettings } from "@/services/billing/settings";
+import { listPublished } from "@/services/site/blog";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: { absolute: "MECGURA: WhatsApp inbox, campaigns and AI for your business" },
   description: siteConfig.description,
   robots: { index: true, follow: true },
+  alternates: { canonical: "/" },
+  openGraph: { type: "website", url: siteConfig.url, siteName: "MECGURA", title: "MECGURA: WhatsApp inbox, campaigns and AI for your business", description: siteConfig.description },
 };
 
 const SERVICE_ICONS = [MessageCircle, Megaphone, Workflow, Bot, Sparkles, Smartphone, Mail, Globe];
@@ -78,6 +81,7 @@ const wa = (text: string) => `https://wa.me/${whatsappDigits}?text=${encodeURICo
 
 export default async function Landing({ searchParams }: { searchParams: Promise<{ festivalPreview?: string; phase?: string }> }) {
   const [plans, session, content, festivals, sp, hero, taxPercent] = await Promise.all([loadPlans(), auth().catch(() => null), getHomeContent(), getFestivals(), searchParams, getHero().catch(() => null), loadTaxPercent()]);
+  const latestPosts = (await listPublished(3)).map((p) => ({ slug: p.slug, title: p.title, excerpt: p.excerpt }));
   const heroSlides = (hero ?? []).filter((x) => x.enabled).map(({ id, category, business, headline, description, photoUrl, outcome, chat }) => ({ id, category, business, headline, description, photoUrl, outcome, chat }));
   const today = istToday();
   // ?festivalPreview=<id>&phase=pre|live lets the Super Admin see any festival's offer early; everyone else gets today's.
@@ -96,6 +100,16 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
   const appHref = signedIn ? "/dashboard" : "/login";
   return (
     <div className="wa-root min-h-dvh overflow-x-hidden" data-festival-theme={promo && promo.theme !== "none" ? promo.theme : undefined}>
+      <script
+        type="application/ld+json"
+        // Built from our own config; "<" escaped so nothing can close the script tag.
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify([
+            { "@context": "https://schema.org", "@type": "Organization", name: "MECGURA", url: siteConfig.url, email: siteConfig.contact.email, telephone: `+${whatsappDigits}`, logo: `${siteConfig.url}/icon.png` },
+            { "@context": "https://schema.org", "@type": "WebSite", name: "MECGURA", url: siteConfig.url },
+          ]).replace(/</g, "\\u003c"),
+        }}
+      />
       <ScrollReveal />
       <SiteTracker />
       {previewing ? (
@@ -112,6 +126,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
             <a href="#services" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Services</a>
             <a href="#channels" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Channels</a>
             {plans.length ? <a href="#pricing" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Pricing</a> : null}
+            <Link href="/blog" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Blog</Link>
             <a href="#contact" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Contact</a>
             <Link href={appHref} className="wa-btn !min-h-10 !px-5 text-small">{signedIn ? "Open workspace" : "Sign in"}</Link>
           </nav>
@@ -291,6 +306,24 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
           </div>
         </section>
 
+        {latestPosts.length ? (
+          <section aria-labelledby="blog-title" className="mx-auto max-w-6xl px-4 py-14">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <h2 id="blog-title" data-reveal className="font-display text-3xl font-bold sm:text-4xl">From the blog</h2>
+              <Link href="/blog" className="text-small font-semibold text-[#128c7e] hover:underline">All articles →</Link>
+            </div>
+            <ul className="mt-8 grid gap-5 md:grid-cols-3">
+              {latestPosts.map((p) => (
+                <li key={p.slug} data-reveal className="wa-card flex flex-col p-6">
+                  <h3 className="text-lg font-bold leading-snug"><Link href={`/blog/${p.slug}`} className="hover:underline">{p.title}</Link></h3>
+                  <p className="wa-muted mt-2 flex-1 text-small">{p.excerpt}</p>
+                  <Link href={`/blog/${p.slug}`} className="mt-4 text-small font-semibold text-[#128c7e] hover:underline">Read →</Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
         <section aria-labelledby="faq" className="mx-auto max-w-3xl px-4 py-14">
           <h2 id="faq" data-reveal className="text-center font-display text-3xl font-bold sm:text-4xl">Questions</h2>
           <div className="mt-8 space-y-3">
@@ -310,6 +343,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
             © {new Date().getFullYear()} MECGURA · <a href={`mailto:${siteConfig.contact.email}`} className="hover:underline">{siteConfig.contact.email}</a> · <a href={`tel:+${whatsappDigits}`} className="hover:underline">{phoneLabel}</a>
           </p>
           <nav aria-label="Legal" className="flex flex-wrap gap-5 font-semibold">
+            <Link href="/blog" className="hover:underline">Blog</Link>
             <Link href="/privacy" className="hover:underline">Privacy</Link>
             <Link href="/terms" className="hover:underline">Terms</Link>
             <Link href="/data-deletion" className="hover:underline">Data deletion</Link>

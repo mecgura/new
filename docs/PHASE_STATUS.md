@@ -329,3 +329,11 @@ admin edits are never overwritten; existing clients keep the price they signed u
 | Enterprise | ₹24,999 | from ₹19,999 | custom | — |
 
 Homepage pricing now shows the yearly option, savings, trial length and the GST note from Billing settings.
+
+## Blog + SEO (Nov 2026)
+- `BlogPost` model + migration `20261118090000_blog`; safe Markdown renderer (`src/lib/markdown.ts`, escapes everything, https/path links only).
+- Admin → Blog editor (Write/Preview, Google listing preview, slug/tags/author/cover). Publishing needs 150+ words and a description.
+- Public `/blog` and `/blog/[slug]` (canonical, Open Graph, BlogPosting + Breadcrumb JSON-LD, table of contents, CTA, related posts, view count).
+- `sitemap.xml` (home, blog, posts, legal, published landing pages) and robots.txt links it; homepage has Organization/WebSite JSON-LD and a “From the blog” section.
+- Seed publishes 4 starter articles once (marker `migration:blog_starters_2026_11`).
+- Tests: `tests/integration/blog.test.ts` (5).

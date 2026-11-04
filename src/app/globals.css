@@ -444,3 +444,19 @@ html[data-inbox-focus="1"] .app-sidebar { display: none !important; }
 @keyframes hero-zoom { from { transform: scale(1.08); } to { transform: scale(1); } }
 @keyframes hero-typing { from { width: 0.5rem; } to { width: 1.6rem; } }
 @keyframes hero-progress { from { width: 0; } to { width: 100%; } }
+
+/* Blog article typography (public blog + admin preview). Colours follow the surrounding theme. */
+.blog-prose { font-size: 1.0625rem; line-height: 1.75; }
+.blog-prose h2 { margin: 2.2em 0 0.6em; font-size: 1.5rem; font-weight: 700; line-height: 1.3; scroll-margin-top: 5rem; }
+.blog-prose h3 { margin: 1.6em 0 0.4em; font-size: 1.2rem; font-weight: 700; scroll-margin-top: 5rem; }
+.blog-prose p { margin: 0 0 1.1em; }
+.blog-prose ul, .blog-prose ol { margin: 0 0 1.1em; padding-left: 1.4em; }
+.blog-prose ul { list-style: disc; }
+.blog-prose ol { list-style: decimal; }
+.blog-prose li { margin: 0.3em 0; }
+.blog-prose a { color: #128c7e; text-decoration: underline; text-underline-offset: 2px; }
+.blog-prose blockquote { margin: 1.2em 0; padding: 0.6em 1em; border-left: 4px solid #25d366; background: rgb(37 211 102 / 0.08); border-radius: 0 0.5rem 0.5rem 0; }
+.blog-prose blockquote p { margin: 0; }
+.blog-prose code { font-size: 0.9em; padding: 0.1em 0.35em; border-radius: 0.3em; background: rgb(127 127 127 / 0.15); }
+.blog-prose hr { margin: 2em 0; border: 0; border-top: 1px solid rgb(127 127 127 / 0.3); }
+.blog-prose strong { font-weight: 700; }

@@ -208,6 +208,25 @@ model PasswordResetToken {
   @@index([expiresAt])
 }
 
+// Public blog on mecgura.tech (written by MECGURA's team in Admin → Blog). Body is Markdown.
+model BlogPost {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       String
+  excerpt     String    @default("") // meta description / card text (≤ 160 chars)
+  body        String    @default("")
+  tags        String    @default("") // comma-separated
+  author      String    @default("MECGURA Team")
+  coverUrl    String    @default("")
+  status      String    @default("draft") // draft | published
+  publishedAt DateTime?
+  views       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, publishedAt])
+}
+
 model SiteSetting {
   id        String   @id @default(cuid())
   key       String   @unique

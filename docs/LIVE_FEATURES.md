@@ -28,6 +28,8 @@ with alerts, WhatsApp accounts, marketing (leads, calendar, AI creatives), outre
 one-by-one WhatsApp), site editor.
 
 - **Billing**: monthly or yearly plans, free trials, payment reminders before and after the due date.
+- **Blog (mecgura.tech/blog)**: write, preview and publish SEO articles (Admin → Blog); sitemap.xml, robots.txt,
+  Google article/organisation data, homepage “From the blog”. 4 starter articles published.
 
 ## Not built yet (on the list)
 Automatic card/UPI re-charging (needs a Razorpay recurring mandate);

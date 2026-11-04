@@ -6,6 +6,7 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { demoWorkflow } from "../src/lib/automations";
+import { BLOG_STARTERS } from "./blog-starters";
 
 const dbUrl = process.env.DATABASE_URL ?? "file:./dev.db";
 const adapter = dbUrl.startsWith("postgres")
@@ -41,6 +42,7 @@ async function main() {
 
   await seedPlans();
   await repriceNov2026();
+  await seedBlogStarters();
   await backfillClientDefaults();
   await grandfatherAiAssistant();
   await seedDemoTenants();
@@ -91,6 +93,20 @@ async function repriceNov2026() {
   }
   await db.siteSetting.create({ data: { key, value: new Date().toISOString() } });
   if (changed) console.log(`Updated prices of ${changed} plan(s) (Nov 2026 pricing).`);
+}
+
+/** One time: publish the starter blog articles (skips any slug that already exists; admins can edit or delete them later). */
+async function seedBlogStarters() {
+  const key = "migration:blog_starters_2026_11";
+  if (await db.siteSetting.findUnique({ where: { key } })) return;
+  let added = 0;
+  for (const s of BLOG_STARTERS) {
+    if (await db.blogPost.findUnique({ where: { slug: s.slug } })) continue;
+    await db.blogPost.create({ data: { ...s, status: "published", publishedAt: new Date() } });
+    added++;
+  }
+  await db.siteSetting.create({ data: { key, value: new Date().toISOString() } });
+  console.log(`Published ${added} starter blog article(s).`);
 }
 
 /**
