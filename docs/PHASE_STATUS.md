@@ -254,3 +254,26 @@ _(newest last)_
 - Schema `IntegrationConnection`, `IntegrationEvent`. Migration `prisma/migrations/20261116090000_store_integrations`.
   Public route `/api/integrations/[provider]/[cid]` added to the security sweep allowlist.
 - Tests `tests/integration/store-integrations.test.ts` (5). Suite 528/528, build OK, browser smoke OK.
+
+## Programme status after Stage 12 (2026-11-04)
+
+| # | Area | Now |
+|---|------|-----|
+| A | Landing page builder | ✅ |
+| B | Advanced CRM | ✅ deals, stages, scoring |
+| C | Automation engine | ✅ + Switch, Approval, branch analytics |
+| D | AI agent studio | ✅ (live AI 🔧 `ANTHROPIC_API_KEY`) |
+| E | Omnichannel inbox | ✅ SLA, CSAT, collision, monitor, export |
+| F | Campaign intelligence | ✅ A/B, ROI, recommendations |
+| G | Referral & loyalty | ✅ |
+| H | Reviews & reputation | ✅ (GBP API 🔧) |
+| I | Google Business & local | 🔧 GBP / Google Ads approval; UTM ✅ |
+| J | Social media | ✅ approvals, AI captions, library (insights 🔧) |
+| K | AI calling | 🟡 practice mode until a provider 🔧 |
+| L | SaaS admin & revenue | ✅ analytics; annual plans / trials / retries ❌ |
+| M | Support & service health | ✅ |
+| N | Internal marketing | ✅ |
+| O | Internal outreach | ✅ |
+| — | Integrations | ✅ Shopify, WooCommerce, Zapier/Make/n8n; Google 🔧 |
+
+See `docs/LIVE_FEATURES.md` and `docs/CONFIGURATION_REQUIRED.md`.
