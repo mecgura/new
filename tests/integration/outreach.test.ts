@@ -50,6 +50,7 @@ describe("outreach", () => {
     expect((await searchRoute.POST(post({ city: "Ludhiana" }))).status).toBe(400);
 
     const known = phone();
+    const fresh = phone();
     await db.marketingLead.create({ data: { phone: known, business: "Known Salon", source: "maps" } });
     process.env.GOOGLE_MAPS_API_KEY = "test-key";
     const spy = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
@@ -58,7 +59,7 @@ describe("outreach", () => {
       return new Response(
         JSON.stringify({
           places: [
-            { id: "p1", displayName: { text: "Glow Salon" }, internationalPhoneNumber: "+91 98765 43210", websiteUri: "https://glow.example", rating: 4.6, userRatingCount: 120, businessStatus: "OPERATIONAL" },
+            { id: "p1", displayName: { text: "Glow Salon" }, internationalPhoneNumber: fresh, websiteUri: "https://glow.example", rating: 4.6, userRatingCount: 120, businessStatus: "OPERATIONAL" },
             { id: "p2", displayName: { text: "Known Salon" }, internationalPhoneNumber: known, businessStatus: "CLOSED_PERMANENTLY" },
           ],
           nextPageToken: "next-1",
@@ -70,7 +71,7 @@ describe("outreach", () => {
     const r = await json(await searchRoute.POST(post({ category: "Salon", city: "Ludhiana" })));
     expect(r.status).toBe(200);
     const results = r.body.results as { name: string; phone: string; alreadyLead: boolean; open: boolean; rating: number | null }[];
-    expect(results[0]).toMatchObject({ name: "Glow Salon", phone: "+919876543210", alreadyLead: false, open: true, rating: 4.6 });
+    expect(results[0]).toMatchObject({ name: "Glow Salon", phone: fresh, alreadyLead: false, open: true, rating: 4.6 });
     expect(results[1]).toMatchObject({ alreadyLead: true, open: false });
     expect(r.body.nextPageToken).toBe("next-1");
     // Search results are not stored.

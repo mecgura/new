@@ -234,6 +234,26 @@ export function validateGraph(g: Graph): { errors: GraphIssue[]; warnings: Graph
       for (const h of ["yes", "no"]) if (!g.edges.some((e) => e.source === n.id && e.sourceHandle === h)) warnings.push({ nodeId: n.id, message: `The “${h === "yes" ? "Yes" : "No"}” path isn't connected — the automation ends there.` });
     }
   }
+  // A message that can come a day or more after the start may land outside WhatsApp's 24-hour window.
+  const into = new Map<string, string[]>();
+  for (const e of g.edges) into.set(e.target, [...(into.get(e.target) ?? []), e.source]);
+  const byId = new Map(g.nodes.map((n) => [n.id, n]));
+  const longWait = (n: FlowNode) => (n.type === "delay" && delayMinutes(n.data as NodeDataMap["delay"]) >= 1440) || (n.type === "message" && (n.data as NodeDataMap["message"]).waitForReply && (n.data as NodeDataMap["message"]).replyTimeoutMinutes >= 1440);
+  for (const n of g.nodes) {
+    if (n.type !== "message" || (n.data as NodeDataMap["message"]).fallbackTemplateId) continue;
+    const seen = new Set<string>();
+    const stack = [...(into.get(n.id) ?? [])];
+    let late = false;
+    while (stack.length && !late) {
+      const id = stack.pop()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const m = byId.get(id);
+      if (m && longWait(m)) late = true;
+      else stack.push(...(into.get(id) ?? []));
+    }
+    if (late) warnings.push({ nodeId: n.id, message: "This message may go out a day or more after the customer's last message, when WhatsApp only allows templates. Choose a fallback template on this step." });
+  }
   return { errors, warnings };
 }
 

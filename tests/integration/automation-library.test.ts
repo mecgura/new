@@ -42,6 +42,29 @@ describe("ready-made automations", () => {
     expect(lq.nodes.filter((n) => n.type === "update_contact").length).toBeGreaterThanOrEqual(5);
   });
 
+  it("drips stop on a reply, end quietly after the last step, and warn where a fallback template is needed", () => {
+    for (const t of AUTOMATION_LIBRARY.filter((x) => x.id.startsWith("drip_"))) {
+      const g = t.graph();
+      const out = (id: string, h: string | null) => g.edges.find((e) => e.source === id && (e.sourceHandle ?? null) === h)?.target;
+      const steps = g.nodes.filter((n) => n.type === "message" && (n.data as { waitForReply: boolean }).waitForReply);
+      expect(steps.length, t.id).toBeGreaterThanOrEqual(2);
+      for (const s of steps) {
+        const check = out(s.id, null)!;
+        expect(out(check, "yes"), t.id).toBe("stop_q");
+      }
+      const last = steps.at(-1)!;
+      expect(out(`${last.id}_r`, "no"), t.id).toBe("tag_quiet");
+      // Every step after the first waits for "No" from the previous one.
+      for (let i = 1; i < steps.length; i++) expect(out(`${steps[i - 1].id}_r`, "no"), t.id).toBe(steps[i].id);
+      const warned = new Set(validateGraph(g).warnings.map((w) => w.nodeId));
+      for (const s of steps.slice(1)) expect(warned.has(s.id), `${t.id}:${s.id}`).toBe(true);
+    }
+    const nurture = AUTOMATION_LIBRARY.find((t) => t.id === "drip_lead_nurture")!.graph();
+    expect(validateGraph(nurture).warnings.some((w) => w.nodeId === "d0")).toBe(false);
+    const quote = AUTOMATION_LIBRARY.find((t) => t.id === "drip_quote_followup")!.graph();
+    expect(quote.edges.find((e) => e.source === "done" && e.sourceHandle === "no")?.target).toBe("q1");
+  });
+
   it("long flows are locked until the Ready-made automations add-on is on", async () => {
     actAs(agent);
     const list = await json(await library.GET(req("/x"), P(orgId)));
@@ -61,7 +84,7 @@ describe("ready-made automations", () => {
     actAs(owner);
     const items = (await json(await library.GET(req("/x"), P(orgId)))).body.templates as { id: string; locked: boolean }[];
     expect(items.every((t) => !t.locked)).toBe(true);
-    for (const id of ["lead_qualification", "appointment_booking", "product_enquiry", "feedback"]) {
+    for (const id of ["lead_qualification", "appointment_booking", "product_enquiry", "feedback", "drip_lead_nurture", "drip_quote_followup", "drip_win_back", "drip_festival"]) {
       const c = await json(await automations.POST(post({ name: id, start: id }), P(orgId)));
       expect(c.status, id).toBe(201);
       const aid = (c.body.automation as { id: string }).id;

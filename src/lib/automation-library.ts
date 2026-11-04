@@ -169,6 +169,109 @@ function feedback(): Graph {
   return b.graph();
 }
 
+
+// ---------------------------------------------------------------------------
+// Drip campaigns: a series of messages over days that stops as soon as the customer replies.
+// Each step waits for a reply; a reply hands the chat to the team, silence moves to the next step.
+// After 24 hours WhatsApp only allows approved templates, so every later step needs a fallback template.
+// ---------------------------------------------------------------------------
+const DAY = 1440;
+const replied: Partial<NodeDataMap["condition"]> = { match: "all", rules: [{ field: "message", key: "", operator: "is_not_empty", value: "" }] };
+const saidStop: Partial<NodeDataMap["condition"]> = replyHas("stop, not interested, no thanks, unsubscribe, band karo, nahi chahida");
+
+/** Shared ending for every drip: a reply stops the series, "stop" marks them not interested, anything else goes to the team. */
+function dripEnds(b: ReturnType<typeof builder>, x: number, y: number, hotTag: string) {
+  b.node("stop_q", "condition", x, y, { label: "Said stop?", ...saidStop });
+  b.node("tag_no", "tag", x - 200, y + 140, { label: "Tag: not interested", action: "add", tagName: "Not interested" });
+  b.node("st_lost", "update_contact", x - 200, y + 280, { label: "Status: lost", field: "leadStatus", value: "lost" });
+  b.node("bye_no", "message", x - 200, y + 420, { label: "Polite goodbye", text: "No problem at all, {{contact.first_name}} 🙏 We won't message you about this again." });
+  b.node("end_no", "end", x - 200, y + 560, { label: "End" });
+  b.node("tag_hot", "tag", x + 200, y + 140, { label: `Tag: ${hotTag}`, action: "add", tagName: hotTag });
+  b.node("assign", "assign", x + 200, y + 280, { label: "Assign team", mode: "auto" });
+  b.node("bye_hot", "message", x + 200, y + 420, { label: "Team will reply", text: "Thanks {{contact.first_name}}! 🙌 Someone from our team will reply here shortly." });
+  b.node("end_hot", "end", x + 200, y + 560, { label: "End" });
+  b.link("stop_q", "tag_no", "yes");
+  b.chain("tag_no", "st_lost", "bye_no", "end_no");
+  b.link("stop_q", "tag_hot", "no");
+  b.chain("tag_hot", "assign", "bye_hot", "end_hot");
+  return "stop_q";
+}
+
+type DripStep = { id: string; label: string; text: string; buttons?: string[]; waitDays: number };
+/** Lays out trigger → [step → replied?]… → no-reply ending, with every "replied" going to the shared ending. */
+function drip(trigger: Partial<NodeDataMap["trigger"]> & { label: string }, steps: DripStep[], hotTag: string, quietTag: string, before: ((b: ReturnType<typeof builder>) => [first: string, last: string, lastHandle: string]) | null = null): Graph {
+  const b = builder();
+  const M = 260;
+  b.node("t", "trigger", M, 0, trigger);
+  let prev = "t";
+  let prevHandle: string | null = null;
+  let y = 140;
+  if (before) {
+    const [first, last, lastHandle] = before(b);
+    b.link("t", first);
+    prev = last;
+    prevHandle = lastHandle;
+    y = 420;
+  }
+  const ends = dripEnds(b, M + 560, 140, hotTag);
+  for (const s of steps) {
+    b.node(s.id, "message", M, y, { label: s.label, ...ask(s.text, s.buttons ?? [], s.waitDays * DAY) });
+    b.node(`${s.id}_r`, "condition", M, y + 140, { label: "Replied?", ...replied });
+    b.link(prev, s.id, prevHandle);
+    b.link(s.id, `${s.id}_r`);
+    b.link(`${s.id}_r`, ends, "yes");
+    prev = `${s.id}_r`;
+    prevHandle = "no";
+    y += 280;
+  }
+  b.node("tag_quiet", "tag", M, y, { label: `Tag: ${quietTag}`, action: "add", tagName: quietTag });
+  b.node("end_quiet", "end", M, y + 140, { label: "End" });
+  b.link(prev, "tag_quiet", "no");
+  b.link("tag_quiet", "end_quiet");
+  return b.graph();
+}
+
+const leadNurture = () =>
+  drip({ label: "Tag added: New lead", trigger: "tag_added", tagName: "New lead" }, [
+    { id: "d0", label: "Day 0 · Welcome", text: "Hi {{contact.first_name}} 👋 Thanks for your interest in us! I'm happy to share prices, timings or anything else. What would you like to know?", buttons: ["Send details", "Call me", "Not now"], waitDays: 1 },
+    { id: "d1", label: "Day 1 · Why us (needs fallback template)", text: "Hi {{contact.first_name}}, a quick note on why customers choose us: (edit) fast service, fair prices, and real support on WhatsApp. Want me to send the details?", buttons: ["Yes, send", "Call me"], waitDays: 2 },
+    { id: "d3", label: "Day 3 · Customer story (needs fallback template)", text: "Hi {{contact.first_name}}, (edit) one of our customers in your city started with us last month and now saves hours every week. Happy to show you how. Shall we talk?", buttons: ["Yes", "Later"], waitDays: 4 },
+    { id: "d7", label: "Day 7 · Last check (needs fallback template)", text: "Hi {{contact.first_name}}, just checking one last time. If you'd like details or a call, reply here anytime. If not, no worries, reply STOP and we won't message again.", waitDays: 1 },
+  ], "Hot lead", "Nurture: no reply");
+
+const quoteFollowUp = () =>
+  drip(
+    { label: "Tag added: Quote sent", trigger: "tag_added", tagName: "Quote sent" },
+    [
+      { id: "q1", label: "Did you see the quote?", text: "Hi {{contact.first_name}}, did you get a chance to look at the quote we sent? Happy to answer any question or adjust it for you.", buttons: ["Go ahead", "Need a call", "Not now"], waitDays: 2 },
+      { id: "q2", label: "Gentle reminder (needs fallback template)", text: "Hi {{contact.first_name}}, a gentle reminder about your quote. (edit) Prices are held till the end of this week. Shall we go ahead?", buttons: ["Yes", "Call me"], waitDays: 3 },
+      { id: "q3", label: "Final follow-up (needs fallback template)", text: "Hi {{contact.first_name}}, closing your quote for now. If you'd like to restart anytime, just reply here 🙏", waitDays: 1 },
+    ],
+    "Quote: interested",
+    "Quote: no reply",
+    (b) => {
+      b.node("wait", "delay", 260, 140, { label: "Wait 1 day", amount: 1, unit: "days" });
+      b.node("done", "condition", 260, 280, { label: "Already won or lost?", match: "any", rules: [{ field: "lead_status", key: "", operator: "equals", value: "won" }, { field: "lead_status", key: "", operator: "equals", value: "lost" }] });
+      b.node("end_done", "end", 20, 420, { label: "End" });
+      b.link("wait", "done");
+      b.link("done", "end_done", "yes");
+      return ["wait", "done", "no"];
+    }
+  );
+
+const winBack = () =>
+  drip({ label: "Tag added: Win back", trigger: "tag_added", tagName: "Win back" }, [
+    { id: "w1", label: "We miss you (needs fallback template)", text: "Hi {{contact.first_name}}, it's been a while! 💚 (edit) Here's 10% off your next order, just for you. Reply YES to use it.", buttons: ["Yes, use it", "Not now"], waitDays: 4 },
+    { id: "w2", label: "Offer reminder (needs fallback template)", text: "Hi {{contact.first_name}}, your 10% offer ends in 3 days. Reply YES and we'll set it up for you.", buttons: ["Yes"], waitDays: 3 },
+  ], "Win back: interested", "Win back: no reply");
+
+const festivalDrip = () =>
+  drip({ label: "Tag added: Festival offer", trigger: "tag_added", tagName: "Festival offer" }, [
+    { id: "f1", label: "Offer launch (needs fallback template)", text: "Hi {{contact.first_name}} 🪔 Our festival offer is live! (edit) Flat ___% off on ___ till ___. Want me to reserve it for you?", buttons: ["Reserve it", "Show details", "Not now"], waitDays: 2 },
+    { id: "f2", label: "Few days left (needs fallback template)", text: "Hi {{contact.first_name}}, only a few days left on our festival offer. Reply and we'll book it for you before it ends.", buttons: ["Book it"], waitDays: 2 },
+    { id: "f3", label: "Last day (needs fallback template)", text: "Last day of the festival offer, {{contact.first_name}}! Reply now and we'll hold it for you 🙏", waitDays: 1 },
+  ], "Festival: interested", "Festival: no reply");
+
 export const AUTOMATION_LIBRARY: LibraryTemplate[] = [
   {
     id: "demo_welcome",
@@ -209,6 +312,38 @@ export const AUTOMATION_LIBRARY: LibraryTemplate[] = [
     steps: ["Wait 2 hours", "Ask rating", "Unhappy → assign + apology", "Happy → review link"],
     premium: true,
     graph: feedback,
+  },
+  {
+    id: "drip_lead_nurture",
+    name: "Drip: new lead nurture (7 days)",
+    description: "When you tag a contact “New lead”: messages on day 0, 1, 3 and 7. Stops the moment they reply and hands the chat to your team; “stop” marks them not interested.",
+    steps: ["Day 0 welcome", "Day 1 why us", "Day 3 customer story", "Day 7 last check", "Reply → team · Stop → not interested"],
+    premium: true,
+    graph: leadNurture,
+  },
+  {
+    id: "drip_quote_followup",
+    name: "Drip: quote follow-up",
+    description: "When you tag a contact “Quote sent”: waits a day, then up to 3 polite follow-ups. Skips anyone already marked won or lost, and stops when they reply.",
+    steps: ["Wait 1 day", "Did you see the quote?", "Reminder after 2 days", "Final follow-up", "Reply → team"],
+    premium: true,
+    graph: quoteFollowUp,
+  },
+  {
+    id: "drip_win_back",
+    name: "Drip: win back old customers",
+    description: "When you tag a contact “Win back”: a comeback offer, and a reminder before it ends. Replies go to your team.",
+    steps: ["Comeback offer", "Reminder after 4 days", "Reply → team · Stop → not interested"],
+    premium: true,
+    graph: winBack,
+  },
+  {
+    id: "drip_festival",
+    name: "Drip: festival offer (3 messages)",
+    description: "When you tag contacts “Festival offer”: launch, few-days-left and last-day messages. Anyone who replies is handed to your team and gets no more reminders.",
+    steps: ["Offer launch", "Few days left", "Last day", "Reply → team"],
+    premium: true,
+    graph: festivalDrip,
   },
 ];
 
