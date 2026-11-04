@@ -234,3 +234,23 @@ _(newest last)_
 - Analytics: "Which way people went" — split per Condition / Switch / Approval step (live runs).
 - Tests `tests/integration/automation-branching.test.ts` (6). Suite 523/523, build OK, browser smoke OK.
 - Not built: reusable sub-flows ("components") — copy a step group with Duplicate for now.
+
+### Stage 12: Integrations hub ✅ (2026-11-04)
+- New page `/integrations` (owners/managers; nav → Workspace → Integrations).
+- **Shopify — live.** Uses Shopify admin's own signed webhooks (Settings → Notifications → Webhooks), no app review.
+  Order creation/paid → contact created or updated (source api, lifecycle customer), purchase recorded (loyalty
+  points when Loyalty is on), tagged (default "Shopify customer"). Checkout creation without an order → tagged
+  "Abandoned cart" with `{{contact.custom.cart_url}}` / `cart_total`; the order later removes that tag.
+- **WooCommerce — live.** MECGURA generates the webhook secret (shown once). Order created/updated counted once
+  the status is processing/completed/on-hold; the WooCommerce "ping" on save is answered.
+- Every webhook is HMAC-SHA256 verified (constant-time); unknown connection and bad signature look the same (401).
+  Secrets encrypted at rest. One record per order/cart (`IntegrationEvent` unique), so store retries and
+  orders/paid after orders/create never double-count; a failed attempt is forgotten so the store's retry works.
+  Store events never mark anyone as opted in to WhatsApp marketing. Rate limit 600/min per connection.
+- **Zapier / Make / n8n — live** through the existing REST API (`/api/v1/contacts`…), automation Webhook trigger and
+  signed outbound Webhooks; the page has the setup steps.
+- **Google Business Profile, Google Ads — 🔧 Configuration required** (Google API approval / developer token);
+  shown honestly with what works today instead.
+- Schema `IntegrationConnection`, `IntegrationEvent`. Migration `prisma/migrations/20261116090000_store_integrations`.
+  Public route `/api/integrations/[provider]/[cid]` added to the security sweep allowlist.
+- Tests `tests/integration/store-integrations.test.ts` (5). Suite 528/528, build OK, browser smoke OK.

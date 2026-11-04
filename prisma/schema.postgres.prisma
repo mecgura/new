@@ -975,6 +975,42 @@ model AutomationExecutionStep {
   @@index([organizationId, nodeId])
 }
 
+// A store connected through its own signed webhooks (Shopify admin webhooks, WooCommerce webhooks).
+model IntegrationConnection {
+  id              String    @id @default(cuid())
+  organizationId  String
+  provider        String // shopify | woocommerce
+  name            String
+  encryptedSecret String // webhook signing secret (encrypted at rest)
+  status          String    @default("active") // active | disabled
+  settings        String    @default("{}") // JSON: tag names, record purchases
+  eventCount      Int       @default(0)
+  lastEventAt     DateTime?
+  lastError       String    @default("")
+  createdById     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  events IntegrationEvent[]
+
+  @@index([organizationId])
+}
+
+model IntegrationEvent {
+  id           String   @id @default(cuid())
+  connectionId String
+  topic        String
+  externalId   String
+  status       String // processed | skipped | failed
+  detail       String   @default("")
+  createdAt    DateTime @default(now())
+
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, topic, externalId])
+  @@index([connectionId, createdAt])
+}
+
 // A person's decision that an automation run is waiting for (Approval step).
 model AutomationApproval {
   id             String    @id @default(cuid())

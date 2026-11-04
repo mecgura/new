@@ -1,4 +1,4 @@
-import { Activity, BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, LayoutTemplate, LifeBuoy, Mail, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, TrendingUp, Users, UsersRound, Webhook, Workflow, type LucideIcon } from "lucide-react";
+import { Activity, BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, LayoutTemplate, LifeBuoy, Mail, Plug, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, TrendingUp, Users, UsersRound, Webhook, Workflow, type LucideIcon } from "lucide-react";
 
 export type NavService = "WHATSAPP_AUTOMATION" | "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "SOCIAL_MEDIA" | "LOYALTY" | "REVIEWS" | "LANDING_PAGES";
 
@@ -53,6 +53,7 @@ export const CLIENT_NAV: NavSection[] = [
       { label: "Team", icon: UsersRound, href: "/team" },
       { label: "API", icon: KeyRound, href: "/api" },
       { label: "Webhooks", icon: Webhook, href: "/webhooks" },
+      { label: "Integrations", icon: Plug, href: "/integrations" },
       { label: "Agreement & KYC", icon: FileSignature, href: "/onboarding" },
       { label: "Help & support", icon: LifeBuoy, href: "/support" },
       { label: "Billing", icon: CreditCard, href: "/billing" },
