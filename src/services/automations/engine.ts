@@ -6,6 +6,7 @@ import { publish } from "@/lib/realtime/broker";
 import { runAfterResponse } from "@/lib/background";
 import { assertPublicHttpsUrl, UnsafeUrlError } from "@/lib/safe-fetch";
 import {
+  defaultData,
   delayMinutes,
   evaluateCondition,
   evaluateSwitch,
@@ -71,7 +72,27 @@ export type AutomationEvent =
   | { type: "tag_added"; contactId: string; tagName: string }
   | { type: "lead_status"; contactId: string; from: string; to: string };
 
-type Ctx = { reply?: string; replied?: boolean; replyTimedOut?: boolean; ai?: string; webhook?: unknown; inflight?: string | null; conversationId?: string; sub?: Record<string, string>; parentExecutionId?: string; parentNodeId?: string };
+type Ctx = { reply?: string; replied?: boolean; replyTimedOut?: boolean; buttons?: string[]; langHelp?: boolean; ai?: string; webhook?: unknown; inflight?: string | null; conversationId?: string; sub?: Record<string, string>; parentExecutionId?: string; parentNodeId?: string };
+
+/** A question flow (one that waits for answers) doesn't restart for the same contact within this window. */
+export const QUESTION_FLOW_COOLDOWN_MS = 12 * 3_600_000;
+
+/** "I don't understand English" in Hindi / Punjabi / English: hand the chat to a person instead of asking more questions. */
+const LANG_HELP = /\b(english|angrezi|angreji)\b.{0,20}\b(nahi|nahin|nai|ni|nhi|not|na)\b|\bsamajh?\b.{0,15}\b(nahi|nahin|nai|ni|nhi)\b|\bsamj\b.{0,15}\b(nahi|nahin|nai|ni|nhi)\b|\b(hindi|punjabi)\s+(me|mein|main|ch|vich|wich)\b|don'?t understand|not understand/i;
+export const asksForOtherLanguage = (text: string) => LANG_HELP.test(text);
+export const LANG_HELP_REPLY = "Koi baat nahi 🙏 Hamari team aapse jaldi Hindi / Punjabi mein baat karegi.";
+
+/** A reply that is a sentence, a question or a number is not saved as the contact's name. */
+const NOT_NAME_WORDS = new Set(["english", "hindi", "punjabi", "samajh", "samaj", "nahi", "nahin", "nhi", "mujhe", "mainu", "aapki", "aap", "kya", "ki", "hai", "price", "rate", "list", "team", "talk", "product", "service", "hello", "hi", "hii", "hey", "what", "why", "how", "please", "details", "info", "ok", "okay", "yes", "no"]);
+export function looksLikeName(value: string): boolean {
+  const v = value.trim();
+  if (!v || v.length > 40 || /[\d?@/:]/.test(v)) return false;
+  const words = v.split(/\s+/);
+  if (words.length > 4) return false;
+  return !words.some((w) => NOT_NAME_WORDS.has(w.toLowerCase().replace(/[^a-z]/g, "")));
+}
+
+const sameButton = (a: string, b: string) => a.trim().slice(0, 20).toLowerCase() === b.trim().slice(0, 20).toLowerCase();
 
 /** How long a parent waits for a sub-flow before giving up. */
 export const SUBFLOW_WAIT_MS = 7 * 86_400_000;
@@ -143,6 +164,8 @@ export async function dispatch(organizationId: string, ev: AutomationEvent, orig
       }
       // A reply to an automation that is waiting for one continues that automation instead of starting new ones.
       if (await resumeWaitingForReply(organizationId, ev)) return true;
+      // A button tapped on an older question while a flow is still running belongs to that flow — it never starts new runs.
+      if (ev.messageType === "button" && (await db.automationExecution.count({ where: { organizationId, contactId: ev.contactId, status: { in: ["queued", "running"] }, isTest: false } }))) return true;
     }
     const types = candidates(ev);
     const autos = await db.automation.findMany({ where: { organizationId, status: "active", triggerType: { in: types }, publishedVersionId: { not: null } } });
@@ -186,6 +209,11 @@ export async function startExecution(a: Automation, input: StartInput): Promise<
     if (busy) return null; // one live run per contact per automation
     const settings = parse<{ reentry?: string }>(a.settings, {});
     if (settings.reentry === "once" && (await db.automationExecution.count({ where: { automationId: a.id, contactId: input.contactId, isTest: false } }))) return null;
+    // A question flow that just ran for this contact doesn't start over on their next message (no restart loops).
+    if (!input.parent && settings.reentry !== "once" && askesQuestions(graph)) {
+      const lastRun = await db.automationExecution.count({ where: { automationId: a.id, contactId: input.contactId, isTest: false, createdAt: { gte: new Date(Date.now() - QUESTION_FLOW_COOLDOWN_MS) } } });
+      if (lastRun) return null;
+    }
     const recent = await db.automationExecution.count({ where: { organizationId: a.organizationId, contactId: input.contactId, createdAt: { gte: new Date(Date.now() - 60_000) } } });
     if (recent >= CONTACT_RATE_LIMIT) {
       console.warn(`[automations] rate limit: contact ${input.contactId} started ${recent} runs in a minute — skipping ${a.id}`);
@@ -225,13 +253,19 @@ export async function startExecution(a: Automation, input: StartInput): Promise<
   return ex;
 }
 
+function askesQuestions(graph: string): boolean {
+  return parse<Graph>(graph, { nodes: [], edges: [] }).nodes.some((n) => n.type === "message" && (n.data as NodeDataMap["message"]).waitForReply);
+}
+
 async function resumeWaitingForReply(organizationId: string, ev: Extract<AutomationEvent, { type: "inbound" }>) {
   const waiting = await db.automationExecution.findMany({ where: { organizationId, contactId: ev.contactId, status: "running", waitState: "reply" }, orderBy: { createdAt: "asc" } });
   for (const ex of waiting) {
     const ctx = parse<Ctx>(ex.context, {});
+    // A tap on a button from an earlier question is not the answer to this one: keep waiting.
+    if (ev.messageType === "button" && ctx.buttons?.length && !ctx.buttons.some((b) => sameButton(b, ev.text))) continue;
     const r = await db.automationExecution.updateMany({
       where: { id: ex.id, waitState: "reply" },
-      data: { waitState: "", nextRunAt: new Date(), context: JSON.stringify({ ...ctx, reply: ev.text, replied: true, replyTimedOut: false }) },
+      data: { waitState: "", nextRunAt: new Date(), context: JSON.stringify({ ...ctx, buttons: undefined, reply: ev.text, replied: true, replyTimedOut: false, langHelp: asksForOtherLanguage(ev.text) || undefined }) },
     });
     if (r.count) runAfterResponse(() => runExecution(ex.id));
   }
@@ -282,8 +316,29 @@ export async function runExecution(id: string, budgetMs = 20_000): Promise<strin
   let ctx = parse<Ctx>(ex.context, {});
   const trigger = parse<Record<string, unknown>>(ex.triggerData, {});
 
-  // A reply wait that timed out continues with an empty reply.
-  if (ex.waitState === "reply") ctx = { ...ctx, reply: "", replied: false, replyTimedOut: true };
+  // A reply wait that timed out continues with an empty reply — but only into a step that checks the reply
+  // (Condition / Switch). Otherwise the customer didn't answer and we stop instead of asking the next question.
+  if (ex.waitState === "reply") {
+    ctx = { ...ctx, buttons: undefined, reply: "", replied: false, replyTimedOut: true };
+    const next = graph.nodes.find((n) => n.id === ex.currentNodeId);
+    if (next && next.type !== "condition" && next.type !== "switch") {
+      await db.automationExecution.update({ where: { id }, data: { context: JSON.stringify(ctx) } });
+      return finish({ ...ex, context: JSON.stringify(ctx) }, automation, "completed", "No reply — stopped so the customer isn't sent more questions.");
+    }
+  }
+
+  // The customer asked for another language: a person takes over (one short note, then the team is assigned).
+  if (ctx.langHelp) {
+    ctx.langHelp = undefined;
+    const base = { ex, automation, graph, ctx, trigger };
+    try {
+      await messageStep({ ...base, node: { id: "lang_help", type: "message", position: { x: 0, y: 0 }, data: { ...defaultData("message"), label: "Language help", text: LANG_HELP_REPLY } } as FlowNode });
+      await assignStep({ ...base, node: { id: "lang_help_assign", type: "assign", position: { x: 0, y: 0 }, data: { ...defaultData("assign"), label: "Assign team" } } as FlowNode });
+    } catch (e) {
+      console.error("[automations] language hand-over failed:", e);
+    }
+    return finish({ ...ex, context: JSON.stringify(ctx) }, automation, "completed", "Customer asked for Hindi / Punjabi — handed to the team.");
+  }
 
   // Crash recovery: a non-idempotent step that was mid-flight is not repeated (no duplicate messages/webhooks).
   if (ctx.inflight && ctx.inflight === ex.currentNodeId) {
@@ -567,6 +622,8 @@ async function updateContactStep(r: RunCtx): Promise<Outcome> {
   const c = await requireContact(r);
   const value = renderText(d.value, vars(r, c)).slice(0, 500);
   const before = await db.contact.findUniqueOrThrow({ where: { id: c.id } });
+  // "Mujhe English nahi aati" is not a name: keep the name we have.
+  if (d.field === "name" && !looksLikeName(value)) return { kind: "next", status: "skipped", output: { field: "name", skipped: "Reply doesn't look like a name — not saved." } };
   if (d.field === "custom") {
     await db.contact.update({ where: { id: c.id }, data: { customFields: JSON.stringify({ ...c.customFields, [d.key.trim()]: value }) } });
   } else if (d.field === "email") {
@@ -671,7 +728,10 @@ async function messageStep(r: RunCtx): Promise<Outcome> {
   } else {
     throw new StepError("The 24-hour window is closed. Add a fallback template to this step to reach customers who haven't messaged recently.");
   }
-  if (d.waitForReply) return { kind: "wait", state: "reply", until: new Date(Date.now() + d.replyTimeoutMinutes * 60_000), output: { messageId, via, waitingForReply: true } };
+  if (d.waitForReply) {
+    r.ctx.buttons = d.buttons.length ? d.buttons : undefined;
+    return { kind: "wait", state: "reply", until: new Date(Date.now() + d.replyTimeoutMinutes * 60_000), output: { messageId, via, waitingForReply: true } };
+  }
   return { kind: "next", output: { messageId, via } };
 }
 

@@ -480,7 +480,11 @@ export function renderText(text: string, vars: { contact: EvalContact | null; re
   return text.replace(/\{\{\s*([a-z_.]+[a-z0-9_]*)\s*\}\}/gi, (m, key: string) => {
     const k = key.toLowerCase();
     if (k === "contact.name") return c?.name || "there";
-    if (k === "contact.first_name") return c?.name.trim().split(/\s+/)[0] || "there";
+    // A WhatsApp handle like "akash701426" is not a first name.
+    if (k === "contact.first_name") {
+      const first = c?.name.trim().split(/\s+/)[0] ?? "";
+      return first && !/\d/.test(first) ? first : "there";
+    }
     if (k === "contact.phone") return c?.phone ?? "";
     if (k === "contact.email") return c?.email ?? "";
     if (k.startsWith("contact.custom.")) return c?.customFields[key.slice(15)] ?? "";

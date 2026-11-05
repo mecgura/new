@@ -704,7 +704,7 @@ function SettingsForm({ meta, setMeta, accounts, readOnly }: { meta: Meta; setMe
         </Select>
       </Field>
       <Alert tone="info" title="Built-in safety">
-        No loops (flows must end), max 100 steps per run, automations can trigger each other only 3 levels deep, retries are limited to 3, and opted-out or suppressed contacts are never messaged.
+        No loops (flows must end), max 100 steps per run, automations can trigger each other only 3 levels deep, retries are limited to 3, and opted-out or suppressed contacts are never messaged. Flows that ask questions don&apos;t restart for the same contact within 12 hours, ignore taps on old buttons, stop when the customer doesn&apos;t answer (unless the next step checks the reply), and hand the chat to your team when a customer asks for Hindi / Punjabi.
       </Alert>
     </fieldset>
   );
