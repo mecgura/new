@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { partialNoDefaults } from "@/lib/schema-utils";
 import { LIBRARY_IDS } from "@/lib/automation-library";
+import { HOUSE_SALES_ID } from "@/lib/house-sales";
 import { SERVICE_KEYS } from "@/lib/catalog";
 import { DEFAULT_AUTH_OPTIONS, HEADER_TYPES, TEMPLATE_CATEGORIES } from "@/lib/templates";
 
@@ -594,7 +595,7 @@ export const automationCreateSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
   description: z.string().trim().max(500).optional().default(""),
   whatsappAccountId: idSchema.nullable().optional(),
-  start: z.enum(["blank", ...LIBRARY_IDS]).default("blank"),
+  start: z.enum(["blank", HOUSE_SALES_ID, ...LIBRARY_IDS]).default("blank"),
 });
 
 export const automationUpdateSchema = z

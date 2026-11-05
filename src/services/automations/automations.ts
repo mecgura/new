@@ -9,6 +9,7 @@ import { publish } from "@/lib/realtime/broker";
 import type { OrgAccess } from "@/lib/session";
 import { defaultData, validateGraph, type Graph, type TriggerData } from "@/lib/automations";
 import { AUTOMATION_LIBRARY, libraryTemplate } from "@/lib/automation-library";
+import { HOUSE_SALES_ID, houseSalesGraph, type SalesPlan } from "@/lib/house-sales";
 import { assertServiceEnabled, isServiceEnabled } from "@/services/whatsapp/guards";
 import { templateSlots } from "@/lib/templates";
 import { graphSchema } from "@/lib/validations";
@@ -132,6 +133,16 @@ async function assertAccount(organizationId: string, id: string | null | undefin
 
 export async function createAutomation(access: OrgAccess, input: { name: string; description: string; whatsappAccountId?: string | null; start: string }, req?: Request) {
   await assertFeature(access.organizationId, "automations");
+  if (input.start === HOUSE_SALES_ID) {
+    // MECGURA's own sales chat: only for the workspace that owns MECGURA's number, priced from the live plans.
+    if (!(await isHouseOrg(access.organizationId))) throw new ApiError("VALIDATION_ERROR", "Unknown starting point.", { details: { start: ["Unknown"] } });
+    const accountId = await assertAccount(access.organizationId, input.whatsappAccountId);
+    const a = await db.automation.create({
+      data: { organizationId: access.organizationId, name: input.name, description: input.description, whatsappAccountId: accountId, graph: JSON.stringify(houseSalesGraph(await salesPlans())), createdById: access.user.id },
+    });
+    await audit({ action: "automation.created", organizationId: access.organizationId, actorUserId: access.user.id, targetType: "automation", targetId: a.id, metadata: { name: a.name, start: input.start }, req });
+    return getAutomation(access, a.id);
+  }
   const template = input.start === "blank" ? null : libraryTemplate(input.start);
   if (input.start !== "blank" && !template) throw new ApiError("VALIDATION_ERROR", "Unknown starting point.", { details: { start: ["Unknown"] } });
   if (template?.premium) await assertServiceEnabled(access.organizationId, "AUTOMATION_PACK");
@@ -463,7 +474,32 @@ export async function triggerFromWebhook(automationId: string, secret: string, i
 }
 
 /** The ready-made automations, with which ones this workspace can use. */
+/** The workspace that owns MECGURA's own WhatsApp number (website assistant / agreements sender). */
+export async function isHouseOrg(organizationId: string) {
+  const { houseNumberIds } = await import("@/services/marketing/capture");
+  const ids = await houseNumberIds();
+  if (!ids.length) return false;
+  return (await db.whatsAppAccount.count({ where: { id: { in: ids }, organizationId } })) > 0;
+}
+
+/** Live, public plan catalogue (what the website's pricing section shows). */
+export async function salesPlans(): Promise<SalesPlan[]> {
+  const rows = await db.plan.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { priceMonthly: "asc" }] });
+  return rows.map((p) => ({ ...p, features: parseFeatures(p.features) }));
+}
+const parseFeatures = (raw: string): string[] => {
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return Array.isArray(v) ? v.map(String) : [];
+  } catch {
+    return [];
+  }
+};
+
 export async function automationLibrary(organizationId: string) {
   const pack = await isServiceEnabled(organizationId, "AUTOMATION_PACK");
-  return AUTOMATION_LIBRARY.map((t) => ({ id: t.id, name: t.name, description: t.description, steps: t.steps, premium: t.premium, locked: t.premium && !pack, nodes: t.graph().nodes.length }));
+  const house = (await isHouseOrg(organizationId))
+    ? [{ id: HOUSE_SALES_ID, name: "MECGURA sales: plans, prices & demo", description: "For MECGURA's own number: welcome, how it works, live plan prices, plan + business, then books a free demo call (hot leads go to sales).", steps: ["Welcome", "Price / demo / how it works", "Live plan prices", "Plan + business", "Demo call → name + time → assign", "Chat or later → tag"], premium: false, locked: false, nodes: houseSalesGraph(await salesPlans()).nodes.length }]
+    : [];
+  return [...house, ...AUTOMATION_LIBRARY.map((t) => ({ id: t.id, name: t.name, description: t.description, steps: t.steps, premium: t.premium, locked: t.premium && !pack, nodes: t.graph().nodes.length }))];
 }
