@@ -21,11 +21,12 @@ export const NODE_LABELS: Record<NodeType, string> = {
   end: "End",
 };
 
-export const TRIGGER_TYPES = ["new_contact", "incoming_message", "keyword", "button_click", "template_reply", "flow_submission", "webhook", "schedule", "tag_added", "lead_status", "subflow"] as const;
+export const TRIGGER_TYPES = ["new_contact", "ad_click", "incoming_message", "keyword", "button_click", "template_reply", "flow_submission", "webhook", "schedule", "tag_added", "lead_status", "subflow"] as const;
 export type TriggerType = (typeof TRIGGER_TYPES)[number];
 
 export const TRIGGER_LABELS: Record<TriggerType, string> = {
   new_contact: "New contact",
+  ad_click: "Ad click (Click-to-WhatsApp)",
   incoming_message: "Incoming message",
   keyword: "Keyword",
   button_click: "Button click",
@@ -115,6 +116,8 @@ export type TriggerData = {
   tagName: string;
   leadStatus: string;
   sources: string[];
+  /** ad_click: Meta ad ids this automation answers (empty = any ad). */
+  adIds: string[];
   schedule: ScheduleConfig;
 };
 export type VariableMap = Record<string, { source: "static"; value: string } | { source: "field"; field: "name" | "first_name" | "phone" | "email" | "custom"; key: string; fallback: string }>;
@@ -148,7 +151,7 @@ export const MAX_REPLY_WAIT_MINUTES = 7 * 24 * 60;
 
 export function defaultData<T extends NodeType>(type: T): NodeDataMap[T] {
   const d: { [K in NodeType]: NodeDataMap[K] } = {
-    trigger: { trigger: "new_contact", keywords: [], match: "exact", buttonText: "", templateId: "", tagName: "", leadStatus: "", sources: ["whatsapp", "manual", "api"], schedule: { frequency: "daily", time: "10:00", days: [1, 2, 3, 4, 5], tagName: "" } },
+    trigger: { trigger: "new_contact", keywords: [], match: "exact", buttonText: "", templateId: "", tagName: "", leadStatus: "", sources: ["whatsapp", "manual", "api"], adIds: [], schedule: { frequency: "daily", time: "10:00", days: [1, 2, 3, 4, 5], tagName: "" } },
     message: { text: "", buttons: [], waitForReply: false, replyTimeoutMinutes: 1440, fallbackTemplateId: "", onError: "stop" },
     template: { templateId: "", variables: {}, onError: "stop" },
     delay: { amount: 5, unit: "minutes" },
@@ -475,7 +478,7 @@ export function evaluateSwitch(d: NodeDataMap["switch"], ctx: EvalContext): stri
 }
 
 /** {{contact.first_name}}, {{contact.name}}, {{contact.phone}}, {{contact.email}}, {{contact.custom.city}}, {{reply}}, {{ai.response}}, {{trigger.text}} */
-export function renderText(text: string, vars: { contact: EvalContact | null; reply: string; ai: string; trigger: string }): string {
+export function renderText(text: string, vars: { contact: EvalContact | null; reply: string; ai: string; trigger: string; ad?: string }): string {
   const c = vars.contact;
   return text.replace(/\{\{\s*([a-z_.]+[a-z0-9_]*)\s*\}\}/gi, (m, key: string) => {
     const k = key.toLowerCase();
@@ -491,6 +494,7 @@ export function renderText(text: string, vars: { contact: EvalContact | null; re
     if (k === "reply") return vars.reply;
     if (k === "ai.response") return vars.ai;
     if (k === "trigger.text") return vars.trigger;
+    if (k === "ad.headline") return vars.ad ?? "";
     return m;
   });
 }

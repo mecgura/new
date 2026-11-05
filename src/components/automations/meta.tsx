@@ -93,6 +93,7 @@ export function summarize(n: FlowNode, names: { templates: Record<string, string
       if (d.trigger === "schedule") return `${d.schedule.frequency === "daily" ? "Daily" : "Weekly"} at ${d.schedule.time} IST${d.schedule.tagName ? ` · ${d.schedule.tagName}` : ""}`;
       if (d.trigger === "button_click" && d.buttonText) return `${base}: “${d.buttonText}”`;
       if (d.trigger === "new_contact") return `${base} (${d.sources.join(", ")})`;
+      if (d.trigger === "ad_click") return (d.adIds ?? []).length ? `${base}: ${(d.adIds ?? []).length} ad${(d.adIds ?? []).length === 1 ? "" : "s"}` : `${base}: any ad`;
       return base;
     }
     case "message": {

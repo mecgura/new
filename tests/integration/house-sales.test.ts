@@ -36,8 +36,9 @@ async function drain() {
     if (!r.ran && !r.scheduled) return;
   }
 }
-async function say(from: string, body: string, type: "text" | "button" = "text") {
-  const r = await receiveInbound(houseOrg, houseAccount, { externalId: `t.${randomUUID()}`, fromPhone: from, profileName: "lead_99", type, body, at: new Date(), isDemo: true });
+const AD = { sourceType: "ad", sourceId: "120210000000001", sourceUrl: "https://fb.me/x", headline: "WhatsApp automation for your business", body: "", ctwaClid: "c1" };
+async function say(from: string, body: string, type: "text" | "button" = "text", fromAd = false) {
+  const r = await receiveInbound(houseOrg, houseAccount, { externalId: `t.${randomUUID()}`, fromPhone: from, profileName: "lead_99", type, body, at: new Date(), isDemo: true, ...(fromAd ? { referral: AD } : {}) });
   await drain();
   return r!;
 }
@@ -106,7 +107,7 @@ describe("MECGURA sales automation", () => {
     expect((await publishRoute.POST(post({}), P(houseOrg, { aid }))).status).toBe(200);
 
     const from = phone();
-    const first = await say(from, "Hi, I saw your ad");
+    const first = await say(from, "Hi, I saw your ad", "text", true);
     await say(from, "Price / plans", "button");
     let out = await sent(first.conversationId);
     expect(out.some((b) => b.startsWith("📋 *MECGURA plans*") && b.includes("₹"))).toBe(true);
@@ -125,13 +126,13 @@ describe("MECGURA sales automation", () => {
 
     // "Free demo" goes straight to booking.
     const from2 = phone();
-    const second = await say(from2, "Hello");
+    const second = await say(from2, "Hello", "text", true);
     await say(from2, "Free demo", "button");
     expect((await sent(second.conversationId)).at(-1)).toBe("Badhiya! 🙌 Call kis naam se karein?");
 
     // Silent after the welcome: tagged, nothing else sent.
     const from3 = phone();
-    const third = await say(from3, "Hi");
+    const third = await say(from3, "Hi", "text", true);
     const before = (await sent(third.conversationId)).length;
     await db.automationExecution.updateMany({ where: { contactId: third.contactId, status: "running" }, data: { nextRunAt: new Date(Date.now() - 1000) } });
     await drain();

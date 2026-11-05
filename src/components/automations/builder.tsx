@@ -138,7 +138,7 @@ function Builder({ orgId, automation, accounts, canManage }: { orgId: string; au
   const [stats, setStats] = React.useState<Record<string, Record<string, number>> | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [lists, setLists] = React.useState<Lists>({ templates: [], members: [], tags: [], accounts, automations: [], selfId: automation.id });
+  const [lists, setLists] = React.useState<Lists>({ templates: [], members: [], tags: [], accounts, automations: [], ads: [], selfId: automation.id });
 
   // History (undo/redo) — snapshots of the graph, taken before each change.
   const past = React.useRef<Snapshot[]>([]);
@@ -196,13 +196,15 @@ function Builder({ orgId, automation, accounts, canManage }: { orgId: string; au
       apiFetch<{ members: TeamMember[] }>(`/api/organizations/${orgId}/team`),
       apiFetch<{ tags: Tag[] }>(`/api/organizations/${orgId}/tags`),
       apiFetch<{ automations: { id: string; name: string; published: boolean; triggerType: string }[] }>(`/api/organizations/${orgId}/automations?status=&q=`),
-    ]).then(([t, m, tg, au]) =>
+      apiFetch<{ ads: Lists["ads"] }>(`/api/organizations/${orgId}/automations/ad-sources`),
+    ]).then(([t, m, tg, au, ad]) =>
       setLists((l) => ({
         ...l,
         templates: t.ok ? t.data.templates.filter((x) => x.category !== "AUTHENTICATION").map((x) => ({ id: x.id, name: x.name, language: x.language, category: x.category, slots: x.slots, numbers: x.waba.numbers.map((nn) => nn.id) })) : [],
         members: m.ok ? m.data.members.map((x) => ({ userId: x.userId, name: x.name, role: x.role })) : [],
         tags: tg.ok ? tg.data.tags.map((x) => x.name) : [],
         automations: au.ok ? au.data.automations.map((x) => ({ id: x.id, name: x.name, published: x.published, triggerType: x.triggerType })) : [],
+        ads: ad.ok ? ad.data.ads : [],
       }))
     );
   }, [orgId]);

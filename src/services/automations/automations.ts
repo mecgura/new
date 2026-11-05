@@ -474,6 +474,25 @@ export async function triggerFromWebhook(automationId: string, secret: string, i
 }
 
 /** The ready-made automations, with which ones this workspace can use. */
+/** Ads to choose from in an "Ad click" trigger: this workspace's ads plus ads customers have arrived from (made anywhere). */
+export async function listAdSources(organizationId: string) {
+  const [made, seen] = await Promise.all([
+    db.adCampaign.findMany({ where: { organizationId, metaAdId: { not: "" } }, orderBy: { createdAt: "desc" }, take: 50, select: { metaAdId: true, name: true, status: true } }),
+    db.adReferral.groupBy({ by: ["sourceId"], where: { organizationId, sourceId: { not: "" } }, _count: { _all: true }, _max: { createdAt: true }, orderBy: { _max: { createdAt: "desc" } }, take: 50 }),
+  ]);
+  const headlines = seen.length
+    ? await db.adReferral.findMany({ where: { organizationId, sourceId: { in: seen.map((x) => x.sourceId) }, headline: { not: "" } }, orderBy: { createdAt: "desc" }, select: { sourceId: true, headline: true } })
+    : [];
+  const out = new Map<string, { adId: string; name: string; leads: number; status: string }>();
+  for (const a of made) out.set(a.metaAdId, { adId: a.metaAdId, name: a.name, leads: 0, status: a.status });
+  for (const r of seen) {
+    const prev = out.get(r.sourceId);
+    const headline = headlines.find((h) => h.sourceId === r.sourceId)?.headline ?? "";
+    out.set(r.sourceId, { adId: r.sourceId, name: prev?.name || headline || `Ad ${r.sourceId}`, leads: r._count._all, status: prev?.status ?? "" });
+  }
+  return [...out.values()];
+}
+
 /** The workspace that owns MECGURA's own WhatsApp number (website assistant / agreements sender). */
 export async function isHouseOrg(organizationId: string) {
   const { houseNumberIds } = await import("@/services/marketing/capture");
@@ -499,7 +518,7 @@ const parseFeatures = (raw: string): string[] => {
 export async function automationLibrary(organizationId: string) {
   const pack = await isServiceEnabled(organizationId, "AUTOMATION_PACK");
   const house = (await isHouseOrg(organizationId))
-    ? [{ id: HOUSE_SALES_ID, name: "MECGURA sales: plans, prices & demo", description: "For MECGURA's own number: welcome, how it works, live plan prices, plan + business, then books a free demo call (hot leads go to sales).", steps: ["Welcome", "Price / demo / how it works", "Live plan prices", "Plan + business", "Demo call → name + time → assign", "Chat or later → tag"], premium: false, locked: false, nodes: houseSalesGraph(await salesPlans()).nodes.length }]
+    ? [{ id: HOUSE_SALES_ID, name: "MECGURA sales: plans, prices & demo", description: "For MECGURA's own number, runs only for people who tap your Click-to-WhatsApp ads (pick the ads in the trigger): welcome, how it works, live plan prices, plan + business, then books a free demo call (hot leads go to sales).", steps: ["Welcome", "Price / demo / how it works", "Live plan prices", "Plan + business", "Demo call → name + time → assign", "Chat or later → tag"], premium: false, locked: false, nodes: houseSalesGraph(await salesPlans()).nodes.length }]
     : [];
   return [...house, ...AUTOMATION_LIBRARY.map((t) => ({ id: t.id, name: t.name, description: t.description, steps: t.steps, premium: t.premium, locked: t.premium && !pack, nodes: t.graph().nodes.length }))];
 }

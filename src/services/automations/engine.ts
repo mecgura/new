@@ -56,7 +56,7 @@ export class StepError extends Error {
 type Origin = { executionId: string; automationId: string; depth: number; chain: string[] };
 
 export type AutomationEvent =
-  | { type: "new_contact"; contactId: string; source: string }
+  | { type: "new_contact"; contactId: string; source: string; adId?: string | null }
   | {
       type: "inbound";
       contactId: string;
@@ -68,6 +68,9 @@ export type AutomationEvent =
       replyToTemplateId: string | null;
       flowName: string | null;
       optOut: boolean;
+      /** Click-to-WhatsApp: the Meta ad the customer tapped (only on the message the ad opened). */
+      adId?: string | null;
+      adHeadline?: string;
     }
   | { type: "tag_added"; contactId: string; tagName: string }
   | { type: "lead_status"; contactId: string; from: string; to: string };
@@ -114,6 +117,7 @@ function candidates(ev: AutomationEvent): TriggerType[] {
   if (ev.type === "tag_added") return ["tag_added"];
   if (ev.type === "lead_status") return ["lead_status"];
   const t: TriggerType[] = ["incoming_message"];
+  if (ev.adId) t.push("ad_click");
   if (ev.text.trim()) t.push("keyword");
   if (ev.messageType === "button") t.push("button_click");
   if (ev.replyToTemplateId) t.push("template_reply");
@@ -129,6 +133,8 @@ function matches(type: string, cfg: TriggerData, ev: AutomationEvent): boolean {
       return ev.type === "tag_added" && cfg.tagName.trim().toLowerCase() === ev.tagName.toLowerCase();
     case "lead_status":
       return ev.type === "lead_status" && (!cfg.leadStatus || cfg.leadStatus === ev.to);
+    case "ad_click":
+      return ev.type === "inbound" && Boolean(ev.adId) && (!(cfg.adIds ?? []).length || (cfg.adIds ?? []).includes(ev.adId!));
     case "incoming_message":
       return ev.type === "inbound";
     case "keyword":
@@ -153,7 +159,14 @@ export async function dispatch(organizationId: string, ev: AutomationEvent, orig
   let handled = false;
   try {
     if (origin && origin.depth > MAX_DEPTH) return false;
-    if (ev.type === "inbound") {
+    // A customer who came from an ad that has its own automation gets that one — not the general welcome flow.
+    if (ev.type === "new_contact" && ev.adId && (await adAutomationFor(organizationId, ev.adId))) return false;
+    if (ev.type === "inbound" && ev.adId && !ev.optOut && (await adAutomationFor(organizationId, ev.adId, ev.whatsappAccountId))) {
+      await db.automationExecution.updateMany({
+        where: { organizationId, contactId: ev.contactId, status: { in: ["queued", "running"] }, isTest: false },
+        data: { status: "stopped", error: "The customer tapped an ad — that ad's automation took over.", finishedAt: new Date(), lockedUntil: null, waitState: "" },
+      });
+    } else if (ev.type === "inbound") {
       if (ev.optOut) {
         // STOP: nothing keeps messaging this customer.
         await db.automationExecution.updateMany({
@@ -188,6 +201,16 @@ export async function dispatch(organizationId: string, ev: AutomationEvent, orig
     console.error("[automations] dispatch failed:", e);
   }
   return handled;
+}
+
+/** An active automation that answers this ad (or any ad). */
+async function adAutomationFor(organizationId: string, adId: string, whatsappAccountId?: string) {
+  const autos = await db.automation.findMany({ where: { organizationId, status: "active", triggerType: "ad_click", publishedVersionId: { not: null } }, select: { triggerConfig: true, whatsappAccountId: true } });
+  return autos.some((a) => {
+    if (whatsappAccountId && a.whatsappAccountId && a.whatsappAccountId !== whatsappAccountId) return false;
+    const ids = parse<TriggerData>(a.triggerConfig, {} as TriggerData).adIds ?? [];
+    return !ids.length || ids.includes(adId);
+  });
 }
 
 type StartInput = { contactId: string | null; conversationId?: string | null; triggerData: unknown; dedupeKey?: string; origin?: Origin; test?: { graph: Graph; skipDelays: boolean }; parent?: { executionId: string; nodeId: string } };
@@ -459,7 +482,7 @@ async function loadContact(organizationId: string, id: string | null): Promise<(
   return { id: c.id, name: c.name, email: c.email, phone: c.phone, customFields: parse<Record<string, string>>(c.customFields, {}), tags: c.tags.map((t) => t.tag.name), leadStatus: c.leadStatus, source: c.source, optInStatus: c.optInStatus, suppressed: c.suppressed };
 }
 
-const vars = (r: RunCtx, contact: EvalContact | null) => ({ contact, reply: r.ctx.reply ?? "", ai: r.ctx.ai ?? "", trigger: String(r.trigger.text ?? "") });
+const vars = (r: RunCtx, contact: EvalContact | null) => ({ contact, reply: r.ctx.reply ?? "", ai: r.ctx.ai ?? "", trigger: String(r.trigger.text ?? ""), ad: String(r.trigger.adHeadline ?? "") });
 
 async function runNode(r: RunCtx): Promise<Outcome> {
   const { node, ex } = r;

@@ -53,7 +53,7 @@ export function houseSalesGraph(plans: SalesPlan[]): Graph {
   const ask = (text: string, buttons: string[] = []) => ({ text, buttons, waitForReply: true, replyTimeoutMinutes: 60 });
   const L = 0, M = 320, R = 640, F = 960;
 
-  node("t", "trigger", M, 0, { label: "New WhatsApp contact (ads)", trigger: "new_contact", sources: ["whatsapp"] });
+  node("t", "trigger", M, 0, { label: "Customer tapped our ad", trigger: "ad_click", adIds: [] });
   node("hi", "message", M, 140, {
     label: "Welcome",
     text: "Namaste 🙏 MECGURA mein aapka swagat hai!\n\nHum WhatsApp automation software dete hain: auto reply, AI agent, leads ka CRM, team inbox aur opt-in customers ko offers — sab ek jagah.",

@@ -34,11 +34,12 @@ export type Lists = {
   tags: string[];
   accounts: { id: string; displayName: string; phoneNumber: string; isDemo: boolean }[];
   automations: { id: string; name: string; published: boolean; triggerType: string }[];
+  ads: { adId: string; name: string; leads: number; status: string }[];
   selfId: string;
 };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const VARIABLE_HELP = "Personalise with {{contact.first_name}}, {{contact.name}}, {{contact.phone}}, {{contact.custom.city}}, {{reply}} (the customer's last answer) or {{ai.response}}.";
+const VARIABLE_HELP = "Personalise with {{contact.first_name}}, {{contact.name}}, {{contact.phone}}, {{contact.custom.city}}, {{reply}} (the customer's last answer), {{ai.response}} or {{ad.headline}} (the ad they tapped).";
 
 function TagInput({ id, label, value, onChange, hint }: { id: string; label: string; value: string; onChange: (v: string) => void; tags?: string[]; hint?: string }) {
   return (
@@ -160,6 +161,30 @@ function OnErrorField({ value, onChange, id }: { value: string; onChange: (v: st
 
 type FormProps<T> = { d: T; set: (p: Record<string, unknown>) => void; fid: (k: string) => string };
 
+function AdPicker({ d, set, fid, ads }: FormProps<TriggerData> & { ads: Lists["ads"] }) {
+  const ids = d.adIds ?? [];
+  const [manual, setManual] = React.useState("");
+  const known = new Set(ads.map((a) => a.adId));
+  const toggle = (id: string, on: boolean) => set({ adIds: on ? [...ids, id] : ids.filter((x) => x !== id) });
+  return (
+    <fieldset className="space-y-1.5">
+      <legend className="mb-1 text-small font-medium text-app-text">Which ads?</legend>
+      <p className="text-caption text-app-muted">Runs when a customer opens WhatsApp from your Click-to-WhatsApp ad. Leave all unticked for <strong>any ad</strong>. A customer from a chosen ad gets this automation instead of your “New contact” welcome.</p>
+      {ads.length ? (
+        ads.map((a) => <Checkbox key={a.adId} label={`${a.name}${a.leads ? ` · ${a.leads} lead${a.leads === 1 ? "" : "s"}` : ""}`} checked={ids.includes(a.adId)} onChange={(e) => toggle(a.adId, e.target.checked)} />)
+      ) : (
+        <p className="text-caption text-app-subtle">No ads yet. Ads you create in Ads Manager, or that customers arrive from, show up here.</p>
+      )}
+      {ids.filter((x) => !known.has(x)).map((x) => <Checkbox key={x} label={`Ad ${x}`} checked onChange={() => toggle(x, false)} />)}
+      <div className="flex gap-2 pt-1">
+        <Input id={fid("adid")} aria-label="Add a Meta ad ID" placeholder="Or paste a Meta ad ID" inputMode="numeric" value={manual} onChange={(e) => setManual(e.target.value.replace(/\D/g, "").slice(0, 30))} />
+        <Button type="button" variant="secondary" size="sm" disabled={!manual || ids.includes(manual)} onClick={() => { toggle(manual, true); setManual(""); }}>Add</Button>
+      </div>
+      <p className="text-caption text-app-subtle">Tip: use <code>{"{{ad.headline}}"}</code> in a message to mention the ad they tapped.</p>
+    </fieldset>
+  );
+}
+
 function TriggerForm({ d, set, lists, fid, webhook }: FormProps<TriggerData> & { lists: Lists; webhook: React.ReactNode }) {
   return (
     <>
@@ -183,6 +208,9 @@ function TriggerForm({ d, set, lists, fid, webhook }: FormProps<TriggerData> & {
           ))}
           <p className="text-caption text-app-subtle">CSV imports are off by default so a big import doesn&apos;t message thousands of people at once.</p>
         </fieldset>
+      ) : null}
+      {d.trigger === "ad_click" ? (
+        <AdPicker d={d} set={set} fid={fid} ads={lists.ads} />
       ) : null}
       {d.trigger === "keyword" ? (
         <>

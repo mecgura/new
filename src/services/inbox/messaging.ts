@@ -431,7 +431,8 @@ export type InboundInput = {
 
 export async function receiveInbound(organizationId: string, whatsappAccountId: string, input: InboundInput) {
   if (await db.message.findUnique({ where: { externalId: input.externalId }, select: { id: true } })) return null; // duplicate delivery
-  const contact = await upsertInboundContact(organizationId, input.fromPhone, input.profileName);
+  const adId = input.referral && (input.referral.sourceType === "ad" || !input.referral.sourceType) && /^\d+$/.test(input.referral.sourceId) ? input.referral.sourceId : null;
+  const contact = await upsertInboundContact(organizationId, input.fromPhone, input.profileName, { adId });
   const existing = await db.conversation.findUnique({ where: { whatsappAccountId_contactId: { whatsappAccountId, contactId: contact.id } } });
   const prev = preview(input.type, input.body);
   const conv = existing
@@ -522,6 +523,8 @@ export async function receiveInbound(organizationId: string, whatsappAccountId: 
     replyToTemplateId: quotedTemplate,
     flowName: input.type === "flow" ? String((input.payload as { flowName?: string } | undefined)?.flowName ?? "") : null,
     optOut,
+    adId,
+    adHeadline: input.referral?.headline ?? "",
   });
   // AI agent: answers after the response is sent (the webhook must not wait on the model).
   const aiInput = { conversationId: conv.id, contactId: contact.id, whatsappAccountId, messageId: msg.id, type: input.type, text: input.body, optOut, automationHandled };

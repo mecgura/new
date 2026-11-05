@@ -331,7 +331,7 @@ export async function recordConsent(
 }
 
 /** Inbound WhatsApp sender → contact (created on first message). */
-export async function upsertInboundContact(organizationId: string, phone: string, profileName: string) {
+export async function upsertInboundContact(organizationId: string, phone: string, profileName: string, opts: { adId?: string | null } = {}) {
   const existing = await db.contact.findUnique({ where: { organizationId_phone: { organizationId, phone } } });
   const now = new Date();
   if (existing) {
@@ -340,7 +340,7 @@ export async function upsertInboundContact(organizationId: string, phone: string
   const c = await db.contact.create({ data: { organizationId, phone, name: profileName, source: "whatsapp", lastInboundAt: now, lastMessageAt: now } });
   await incrementUsage(organizationId, "contacts_created");
   await audit({ action: "contact.created", organizationId, targetType: "contact", targetId: c.id, metadata: { source: "whatsapp" } });
-  await emitAutomationEvent(organizationId, { type: "new_contact", contactId: c.id, source: "whatsapp" });
+  await emitAutomationEvent(organizationId, { type: "new_contact", contactId: c.id, source: "whatsapp", adId: opts.adId ?? null });
   await emitContactEvent("contact.created", organizationId, c.id);
   return c;
 }

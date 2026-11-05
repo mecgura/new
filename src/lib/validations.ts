@@ -514,7 +514,7 @@ export const flowNodeSchema = z.discriminatedUnion("type", [
     type: z.literal("trigger"),
     data: z.object({
       label,
-      trigger: z.enum(["new_contact", "incoming_message", "keyword", "button_click", "template_reply", "flow_submission", "webhook", "schedule", "tag_added", "lead_status", "subflow"]),
+      trigger: z.enum(["new_contact", "ad_click", "incoming_message", "keyword", "button_click", "template_reply", "flow_submission", "webhook", "schedule", "tag_added", "lead_status", "subflow"]),
       keywords: z.array(z.string().trim().max(60)).max(30).default([]),
       match: z.enum(["exact", "contains", "starts_with"]).default("exact"),
       buttonText: short(40),
@@ -522,6 +522,7 @@ export const flowNodeSchema = z.discriminatedUnion("type", [
       tagName: short(40),
       leadStatus: z.enum(["", "new", "contacted", "qualified", "proposal", "won", "lost"]).default(""),
       sources: z.array(z.enum(["manual", "whatsapp", "import", "api", "landing"])).max(5).default(["whatsapp", "manual", "api"]),
+      adIds: z.array(z.string().trim().regex(/^\d{1,30}$/, "Ad ids are numbers")).max(20).default([]),
       schedule: z
         .object({ frequency: z.enum(["daily", "weekly"]).default("daily"), time: z.string().max(5).default("10:00"), days: z.array(z.number().int().min(0).max(6)).max(7).default([]), tagName: short(40) })
         .default({ frequency: "daily", time: "10:00", days: [], tagName: "" }),
