@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BarChart3, Copy, ListChecks, Lock, MoreHorizontal, Pause, Pencil, Play, Plus, ShieldCheck, Trash2, Workflow } from "lucide-react";
+import { BarChart3, Copy, ListChecks, Lock, MoreHorizontal, Pause, Pencil, Play, Plus, ShieldCheck, Sparkles, Trash2, Workflow } from "lucide-react";
 import {
   Alert,
   Badge,
@@ -138,9 +138,14 @@ export function AutomationsApp({ orgId, canManage, accounts, activeAccountId = "
               <ShieldCheck aria-hidden="true" /> Approvals{approvalCount ? <Badge tone="warning">{approvalCount}</Badge> : null}
             </Button>
             {canManage ? (
-              <Button onClick={() => setNewOpen(true)}>
-                <Plus aria-hidden="true" /> Create automation
-              </Button>
+              <>
+                <Button variant="secondary" onClick={() => setNewOpen(true)}>
+                  <Plus aria-hidden="true" /> Create automation
+                </Button>
+                <Button onClick={() => router.push("/automations/easy")}>
+                  <Sparkles aria-hidden="true" /> Easy setup
+                </Button>
+              </>
             ) : null}
           </div>
         }
@@ -164,7 +169,7 @@ export function AutomationsApp({ orgId, canManage, accounts, activeAccountId = "
             icon={Workflow}
             title={q || tab !== "all" ? "No automations match" : "No automations yet"}
             description="Start from the ready-made welcome flow or a blank canvas."
-            action={canManage ? <Button onClick={() => setNewOpen(true)}>Create automation</Button> : undefined}
+            action={canManage ? <Button onClick={() => router.push("/automations/easy")}><Sparkles aria-hidden="true" /> Easy setup</Button> : undefined}
           />
         ) : (
           <Table caption="Automations" className="min-w-[820px]">

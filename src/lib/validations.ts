@@ -2,6 +2,7 @@ import { z } from "zod";
 import { partialNoDefaults } from "@/lib/schema-utils";
 import { LIBRARY_IDS } from "@/lib/automation-library";
 import { HOUSE_SALES_ID } from "@/lib/house-sales";
+import { isMediaUrl } from "@/lib/automations";
 import { SERVICE_KEYS } from "@/lib/catalog";
 import { DEFAULT_AUTH_OPTIONS, HEADER_TYPES, TEMPLATE_CATEGORIES } from "@/lib/templates";
 
@@ -531,7 +532,18 @@ export const flowNodeSchema = z.discriminatedUnion("type", [
   z.object({
     ...nodeBase,
     type: z.literal("message"),
-    data: z.object({ label, text: short(4096), buttons: z.array(z.string().max(40)).max(5).default([]), waitForReply: z.boolean().default(false), replyTimeoutMinutes: z.number().int().min(0).max(100_000).default(1440), fallbackTemplateId: short(64), onError }),
+    data: z.object({
+      label,
+      text: short(4096),
+      buttons: z.array(z.string().max(40)).max(5).default([]),
+      waitForReply: z.boolean().default(false),
+      replyTimeoutMinutes: z.number().int().min(0).max(100_000).default(1440),
+      fallbackTemplateId: short(64),
+      onError,
+      media: z
+        .object({ kind: z.enum(["", "image", "document"]).default(""), url: z.string().trim().max(1000).refine((u) => u === "" || isMediaUrl(u), "Use an https link").default(""), filename: short(120) })
+        .default({ kind: "", url: "", filename: "" }),
+    }),
   }),
   z.object({ ...nodeBase, type: z.literal("template"), data: z.object({ label, templateId: short(64), variables: z.record(z.string().max(64), varMapping).default({}), onError }) }),
   z.object({ ...nodeBase, type: z.literal("delay"), data: z.object({ label, amount: z.number().int().min(0).max(100_000).default(5), unit: z.enum(["minutes", "hours", "days"]).default("minutes") }) }),
@@ -921,3 +933,25 @@ export const contactGroupSchema = z.union([
     })
     .strict(),
 ]);
+
+const quickMedia = z
+  .object({ kind: z.enum(["", "image", "document"]).default(""), url: z.string().trim().max(1000).refine((u) => u === "" || isMediaUrl(u), "Use an https link").default(""), filename: z.string().trim().max(120).default("") })
+  .default({ kind: "", url: "", filename: "" });
+export const quickAutomationSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    whatsappAccountId: z.string().trim().max(64).nullable().optional(),
+    start: z.enum(["ad_click", "new_contact", "keyword"]).default("ad_click"),
+    adIds: z.array(z.string().trim().regex(/^\d{1,30}$/, "Ad ids are numbers")).max(20).default([]),
+    keywords: z.array(z.string().trim().min(1).max(60)).max(30).default([]),
+    welcomeText: z.string().trim().min(1, "Write the welcome message").max(1024),
+    welcomeImage: quickMedia,
+    brochure: quickMedia,
+    brochureText: z.string().trim().max(1024).default(""),
+    priceText: z.string().trim().min(1, "Write the price list").max(1024),
+    priceImage: quickMedia,
+    buttons: z.object({ price: z.string().trim().min(1).max(20), call: z.string().trim().min(1).max(20), team: z.string().trim().min(1).max(20) }),
+    teamText: z.string().trim().max(1024).default(""),
+  })
+  .strict()
+  .refine((v) => v.start !== "keyword" || v.keywords.length > 0, { message: "Add at least one keyword", path: ["keywords"] });

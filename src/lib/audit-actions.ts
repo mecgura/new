@@ -113,6 +113,7 @@ export const AUDIT_ACTIONS = [
   "food.order_placed",
   "food.order_status",
   "food.order_paid",
+  "automation.media_uploaded",
   "workspace.deletion_requested",
   "workspace.deletion_cancelled",
   "workspace.deletion_rejected",

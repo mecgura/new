@@ -75,6 +75,7 @@ model Organization {
   menuItems               MenuItem[]
   diningSpots             DiningSpot[]
   foodOrders              FoodOrder[]
+  automationMedia         AutomationMedia[]
   whatsappAccounts        WhatsAppAccount[]
   channelAccounts         ChannelAccount[]
   voiceCalls              VoiceCall[]
@@ -2547,4 +2548,21 @@ model FoodOrder {
 
   @@unique([organizationId, number])
   @@index([organizationId, status, createdAt])
+}
+
+/// Images and brochures (PDF) that automation messages send. Served publicly by an unguessable key so WhatsApp can fetch them.
+model AutomationMedia {
+  id             String   @id @default(cuid())
+  organizationId String
+  key            String   @unique
+  kind           String // image | document
+  mimeType       String
+  filename       String   @default("")
+  size           Int      @default(0)
+  bytes          Bytes
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
 }

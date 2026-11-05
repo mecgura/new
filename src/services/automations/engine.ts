@@ -733,9 +733,13 @@ async function messageStep(r: RunCtx): Promise<Outcome> {
   let messageId: string;
   let via = "session";
   if (windowOpen) {
+    const media = d.media?.kind && d.media.url ? { kind: d.media.kind, url: d.media.url, filename: d.media.filename } : null;
+    const filename = media?.kind === "document" ? (media.filename || "Brochure.pdf").slice(0, 120) : undefined;
     const input = d.buttons.length
-      ? ({ type: "interactive", body: text, buttons: d.buttons.map((b, i) => ({ id: `btn_${i + 1}`, title: b.slice(0, 20) })) } as const)
-      : ({ type: "text", body: text } as const);
+      ? ({ type: "interactive", body: text || "👇", buttons: d.buttons.map((b, i) => ({ id: `btn_${i + 1}`, title: b.slice(0, 20) })), ...(media ? { header: { kind: media.kind, link: media.url, filename } } : {}) } as const)
+      : media
+        ? ({ type: media.kind, link: media.url, caption: text || undefined, filename } as const)
+        : ({ type: "text", body: text } as const);
     const built = toPayload(input);
     messageId = await sendOutbound(r, conv, contact, { ...built, type: input.type });
   } else if (d.fallbackTemplateId) {

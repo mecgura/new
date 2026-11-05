@@ -105,6 +105,11 @@ export const CONSENT_VALUES = ["opted_in", "opted_out", "unknown"];
 // Node data
 // ---------------------------------------------------------------------------
 
+/** An image or a brochure (PDF) sent with a message: on top of the buttons, or with the text as its caption. */
+export type MessageMedia = { kind: "" | "image" | "document"; url: string; filename: string };
+/** A public https link, or a file uploaded to this app (which is plain http only in local development). */
+export const isMediaUrl = (u: string) => /^https:\/\/\S+$/.test(u) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/api\/automation-media\/[\w-]+$/.test(u);
+
 export type ScheduleConfig = { frequency: "daily" | "weekly"; time: string; days: number[]; tagName: string };
 
 export type TriggerData = {
@@ -125,7 +130,7 @@ export type OnError = "stop" | "continue";
 
 export type NodeDataMap = {
   trigger: TriggerData;
-  message: { text: string; buttons: string[]; waitForReply: boolean; replyTimeoutMinutes: number; fallbackTemplateId: string; onError: OnError };
+  message: { text: string; buttons: string[]; waitForReply: boolean; replyTimeoutMinutes: number; fallbackTemplateId: string; onError: OnError; media: MessageMedia };
   template: { templateId: string; variables: VariableMap; onError: OnError };
   delay: { amount: number; unit: "minutes" | "hours" | "days" };
   condition: { match: "all" | "any"; rules: { field: ConditionField; key: string; operator: Operator; value: string }[] };
@@ -152,7 +157,7 @@ export const MAX_REPLY_WAIT_MINUTES = 7 * 24 * 60;
 export function defaultData<T extends NodeType>(type: T): NodeDataMap[T] {
   const d: { [K in NodeType]: NodeDataMap[K] } = {
     trigger: { trigger: "new_contact", keywords: [], match: "exact", buttonText: "", templateId: "", tagName: "", leadStatus: "", sources: ["whatsapp", "manual", "api"], adIds: [], schedule: { frequency: "daily", time: "10:00", days: [1, 2, 3, 4, 5], tagName: "" } },
-    message: { text: "", buttons: [], waitForReply: false, replyTimeoutMinutes: 1440, fallbackTemplateId: "", onError: "stop" },
+    message: { text: "", buttons: [], waitForReply: false, replyTimeoutMinutes: 1440, fallbackTemplateId: "", onError: "stop", media: { kind: "", url: "", filename: "" } },
     template: { templateId: "", variables: {}, onError: "stop" },
     delay: { amount: 5, unit: "minutes" },
     condition: { match: "any", rules: [{ field: "message", key: "", operator: "contains", value: "" }] },
@@ -310,7 +315,9 @@ export function nodeProblems(n: FlowNode): string[] {
     }
     case "message": {
       const d = n.data as NodeDataMap["message"];
-      if (!d.text.trim()) p.push("Write the message.");
+      const media = d.media ?? { kind: "", url: "", filename: "" };
+      if (!d.text.trim() && !media.kind) p.push("Write the message.");
+      if (media.kind && !isMediaUrl(media.url)) p.push(media.kind === "image" ? "Upload the image (or paste an https link)." : "Upload the brochure (or paste an https link).");
       if (d.text.length > 1024) p.push("Messages with buttons/automation are limited to 1024 characters.");
       if (d.buttons.length > 3) p.push("Up to 3 reply buttons.");
       if (d.buttons.some((b) => !b.trim() || b.length > 20)) p.push("Button titles: 1–20 characters.");

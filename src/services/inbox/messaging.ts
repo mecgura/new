@@ -30,7 +30,7 @@ export type SendInput =
   | { type: "text"; body: string; replyToId?: string }
   | { type: "template"; templateId: string; values: SlotValues; replyToId?: string }
   | { type: "flow"; flowId: string; body?: string; replyToId?: string }
-  | { type: "interactive"; body: string; buttons: { id: string; title: string }[]; replyToId?: string }
+  | { type: "interactive"; body: string; buttons: { id: string; title: string }[]; header?: { kind: "image" | "document"; link: string; filename?: string }; replyToId?: string }
   | { type: MediaKind; link: string; caption?: string; filename?: string; replyToId?: string };
 
 const messageInclude = {
@@ -120,9 +120,19 @@ export function toPayload(input: Exclude<SendInput, { type: "template" } | { typ
       return { payload: { type: "text", text: { body: input.body, preview_url: /https?:\/\//.test(input.body) } }, body: input.body, stored: {} };
     case "interactive":
       return {
-        payload: { type: "interactive", interactive: { type: "button", body: { text: input.body }, action: { buttons: input.buttons.map((b) => ({ type: "reply", reply: b })) } } },
+        payload: {
+          type: "interactive",
+          interactive: {
+            type: "button",
+            ...(input.header
+              ? { header: input.header.kind === "image" ? { type: "image" as const, image: { link: input.header.link } } : { type: "document" as const, document: { link: input.header.link, ...(input.header.filename ? { filename: input.header.filename } : {}) } } }
+              : {}),
+            body: { text: input.body },
+            action: { buttons: input.buttons.map((b) => ({ type: "reply", reply: b })) },
+          },
+        },
         body: input.body,
-        stored: { buttons: input.buttons },
+        stored: { buttons: input.buttons, ...(input.header ? { headerMedia: { type: input.header.kind, link: input.header.link, filename: input.header.filename } } : {}) },
       };
     default: {
       const ref = { ...(mediaId ? { id: mediaId } : { link: input.link }), ...(input.caption ? { caption: input.caption } : {}), ...(input.type === "document" && input.filename ? { filename: input.filename } : {}) };

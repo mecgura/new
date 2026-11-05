@@ -138,7 +138,7 @@ function Builder({ orgId, automation, accounts, canManage }: { orgId: string; au
   const [stats, setStats] = React.useState<Record<string, Record<string, number>> | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [lists, setLists] = React.useState<Lists>({ templates: [], members: [], tags: [], accounts, automations: [], ads: [], selfId: automation.id });
+  const [lists, setLists] = React.useState<Lists>({ templates: [], members: [], tags: [], accounts, automations: [], ads: [], selfId: automation.id, orgId });
 
   // History (undo/redo) — snapshots of the graph, taken before each change.
   const past = React.useRef<Snapshot[]>([]);

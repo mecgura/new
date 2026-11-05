@@ -10,6 +10,7 @@ import type { OrgAccess } from "@/lib/session";
 import { defaultData, validateGraph, type Graph, type TriggerData } from "@/lib/automations";
 import { AUTOMATION_LIBRARY, libraryTemplate } from "@/lib/automation-library";
 import { HOUSE_SALES_ID, houseSalesGraph, type SalesPlan } from "@/lib/house-sales";
+import { quickFlowGraph, type QuickFlowInput } from "@/lib/quick-flow";
 import { assertServiceEnabled, isServiceEnabled } from "@/services/whatsapp/guards";
 import { templateSlots } from "@/lib/templates";
 import { graphSchema } from "@/lib/validations";
@@ -474,6 +475,13 @@ export async function triggerFromWebhook(automationId: string, secret: string, i
 }
 
 /** The ready-made automations, with which ones this workspace can use. */
+/** Easy setup: builds the whole flow from a short form, saves and publishes it. */
+export async function createQuickAutomation(access: OrgAccess, input: QuickFlowInput & { name: string; whatsappAccountId?: string | null }, req?: Request) {
+  const created = await createAutomation(access, { name: input.name, description: "Made with Easy setup — open it to edit any step.", whatsappAccountId: input.whatsappAccountId ?? null, start: "blank" }, req);
+  await updateAutomation(access, created.id, { graph: quickFlowGraph(input) }, req);
+  return publishAutomation(access, created.id, "Easy setup", req);
+}
+
 /** Ads to choose from in an "Ad click" trigger: this workspace's ads plus ads customers have arrived from (made anywhere). */
 export async function listAdSources(organizationId: string) {
   const [made, seen] = await Promise.all([

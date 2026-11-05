@@ -6,7 +6,7 @@ export type OutboundPayload =
   | { type: "text"; text: { body: string; preview_url?: boolean } }
   | { type: "image" | "video" | "audio" | "document"; image?: MediaRef; video?: MediaRef; audio?: MediaRef; document?: MediaRef & { filename?: string } }
   | { type: "template"; template: { name: string; language: { code: string }; components?: unknown[] } }
-  | { type: "interactive"; interactive: { type: "button"; body: { text: string }; action: { buttons: { type: "reply"; reply: { id: string; title: string } }[] } } }
+  | { type: "interactive"; interactive: { type: "button"; header?: { type: "image"; image: { link: string } } | { type: "document"; document: { link: string; filename?: string } }; body: { text: string }; action: { buttons: { type: "reply"; reply: { id: string; title: string } }[] } } }
   | {
       type: "interactive";
       interactive: {

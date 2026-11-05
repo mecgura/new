@@ -348,6 +348,7 @@ describe("5. public and secret-protected surfaces", () => {
         "/api/webhooks/payments/[gateway]",
         "/api/food-menu/[org]/[code]/order",
         "/api/webhooks/food/[orgId]",
+        "/api/automation-media/[key]",
       ].sort()
     );
   });

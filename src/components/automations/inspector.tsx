@@ -4,6 +4,7 @@ import * as React from "react";
 import { Copy, KeyRound, Plus, Trash2, X } from "lucide-react";
 import { Alert, Badge, Button, Checkbox, Field, IconButton, Input, Select, Textarea, useToast } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
+import { EMPTY_MEDIA, MediaField } from "@/components/automations/media-field";
 import {
   CONDITION_FIELDS,
   CONDITION_FIELD_LABELS,
@@ -36,6 +37,7 @@ export type Lists = {
   automations: { id: string; name: string; published: boolean; triggerType: string }[];
   ads: { adId: string; name: string; leads: number; status: string }[];
   selfId: string;
+  orgId: string;
 };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -302,7 +304,8 @@ function TriggerForm({ d, set, lists, fid, webhook }: FormProps<TriggerData> & {
 function MessageForm({ d, set, lists, fid }: FormProps<NodeDataMap["message"]> & { lists: Lists }) {
   return (
     <>
-      <Field id={fid("text")} label={<span className="flex justify-between">Message <span className="text-caption text-app-subtle">{d.text.length}/1024</span></span>} hint={VARIABLE_HELP}>
+      <MediaField orgId={lists.orgId} value={d.media ?? EMPTY_MEDIA} onChange={(m) => set({ media: m })} label="Image or brochure (optional)" />
+      <Field id={fid("text")} label={<span className="flex justify-between">{d.media?.kind ? "Text / caption" : "Message"} <span className="text-caption text-app-subtle">{d.text.length}/1024</span></span>} hint={VARIABLE_HELP}>
         <Textarea value={d.text} onChange={(e) => set({ text: e.target.value })} rows={5} maxLength={1024} />
       </Field>
       <div>
