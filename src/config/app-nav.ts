@@ -1,6 +1,6 @@
-import { UtensilsCrossed, Activity, ShieldAlert, Newspaper, BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, LayoutTemplate, LifeBuoy, Mail, Plug, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, TrendingUp, Users, UsersRound, Webhook, Workflow, type LucideIcon } from "lucide-react";
+import { PanelRight, UtensilsCrossed, Activity, ShieldAlert, Newspaper, BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, LayoutTemplate, LifeBuoy, Mail, Plug, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, TrendingUp, Users, UsersRound, Webhook, Workflow, type LucideIcon } from "lucide-react";
 
-export type NavService = "WHATSAPP_AUTOMATION" | "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "SOCIAL_MEDIA" | "LOYALTY" | "REVIEWS" | "LANDING_PAGES" | "FOOD_ORDERING";
+export type NavService = "WHATSAPP_AUTOMATION" | "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "SOCIAL_MEDIA" | "LOYALTY" | "REVIEWS" | "LANDING_PAGES" | "FOOD_ORDERING" | "SPONSORED_ADS";
 
 export type NavItem = {
   label: string;
@@ -33,6 +33,7 @@ export const CLIENT_NAV: NavSection[] = [
       { label: "Reviews", icon: Star, href: "/reviews", service: "REVIEWS" },
       { label: "Landing pages", icon: LayoutTemplate, href: "/pages", service: "LANDING_PAGES" },
       { label: "Food orders", icon: UtensilsCrossed, href: "/food", service: "FOOD_ORDERING" },
+      { label: "Sponsored spot", icon: PanelRight, href: "/sponsored", service: "SPONSORED_ADS" },
       { label: "WhatsApp", icon: MessageCircle, href: "/dashboard/whatsapp", also: ["/whatsapp"], service: "WHATSAPP_AUTOMATION" },
       { label: "Campaigns", icon: Megaphone, href: "/campaigns", service: "WHATSAPP_AUTOMATION" },
       { label: "Templates", icon: FileText, href: "/templates", service: "WHATSAPP_AUTOMATION" },
@@ -90,6 +91,7 @@ export const ADMIN_NAV: NavSection[] = [
       { label: "Website", icon: Globe, href: "/admin/site" },
       { label: "Festivals", icon: PartyPopper, href: "/admin/festivals" },
       { label: "Blog", icon: Newspaper, href: "/admin/blog" },
+      { label: "Sponsored", icon: PanelRight, href: "/admin/sponsored" },
       { label: "Settings", icon: Settings, href: "/admin/settings" },
     ],
   },

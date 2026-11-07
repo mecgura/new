@@ -349,6 +349,9 @@ describe("5. public and secret-protected surfaces", () => {
         "/api/food-menu/[org]/[code]/order",
         "/api/webhooks/food/[orgId]",
         "/api/automation-media/[key]",
+        "/api/sponsored-img/[key]",
+        "/api/sponsored/[id]/click",
+        "/api/sponsored/serve",
       ].sort()
     );
   });

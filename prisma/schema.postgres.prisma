@@ -76,6 +76,7 @@ model Organization {
   diningSpots             DiningSpot[]
   foodOrders              FoodOrder[]
   automationMedia         AutomationMedia[]
+  sponsoredAds            SponsoredAd[]
   whatsappAccounts        WhatsAppAccount[]
   channelAccounts         ChannelAccount[]
   voiceCalls              VoiceCall[]
@@ -2565,4 +2566,48 @@ model AutomationMedia {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, createdAt])
+}
+
+/// A client's "Sponsored" card shown in the side panel on MECGURA's own website (blog). Reviewed by Super Admin before it goes live.
+model SponsoredAd {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String // internal name
+  headline       String
+  body           String    @default("")
+  ctaLabel       String    @default("Learn more")
+  linkType       String    @default("url") // url | whatsapp
+  link           String // https URL, or the WhatsApp number as digits (country code first)
+  waMessage      String    @default("")
+  imageKey       String?   @unique
+  imageMime      String    @default("")
+  imageBytes     Bytes?
+  status         String    @default("draft") // draft | pending | active | paused | rejected | ended
+  reviewNote     String    @default("")
+  reviewedAt     DateTime?
+  startsAt       DateTime?
+  endsAt         DateTime?
+  maxImpressions Int       @default(0) // 0 = no cap; reaching it ends the ad
+  impressions    Int       @default(0)
+  clicks         Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stats        SponsoredStat[]
+
+  @@index([status, startsAt, endsAt])
+  @@index([organizationId, createdAt])
+}
+
+model SponsoredStat {
+  id          String @id @default(cuid())
+  adId        String
+  day         String // YYYY-MM-DD (IST)
+  impressions Int    @default(0)
+  clicks      Int    @default(0)
+
+  ad SponsoredAd @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@unique([adId, day])
 }

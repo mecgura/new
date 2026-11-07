@@ -46,6 +46,10 @@ one-by-one WhatsApp), site editor.
   Guests scan a room/table QR, pick items, confirm on WhatsApp; the kitchen screen gets the order (with a beep),
   Accept → Preparing → Ready → Delivered sends the guest a WhatsApp update at each step. Payment: pay now
   (the client's own Razorpay payment link), room bill or pay at counter. Printable QR sheet and a sales report.
+- **Sponsored placement** — separate service (Admin → Clients → Services). A client writes a card (headline, text, image,
+  website or WhatsApp link, dates) in *Sponsored spot*, sends it for review, and after Super Admin approval (Admin → Sponsored)
+  it shows in the labelled “Sponsored” side panel on mecgura.tech blog articles. Views and clicks per ad (14-day chart),
+  optional view cap that ends the ad automatically, pause/reject with a reason, and a master on/off switch for the panel.
 
 ## Not built yet (on the list)
 See `DEVELOPMENT_STATUS.md`.

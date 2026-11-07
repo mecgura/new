@@ -11,6 +11,7 @@ export const SERVICES = [
   { key: "LOYALTY", label: "Referral & loyalty", description: "Points on purchases, rewards catalogue, membership tiers and customer referral links with fraud checks" },
   { key: "REVIEWS", label: "Reviews & reputation", description: "WhatsApp feedback requests, private ratings, Google review links, unhappy-customer alerts and rating reports" },
   { key: "LANDING_PAGES", label: "Landing pages", description: "Drag-and-drop landing pages with industry templates, lead forms into the CRM, WhatsApp button, QR code and visit analytics" },
+  { key: "SPONSORED_ADS", label: "Sponsored placement", description: "Your ad card in the labelled Sponsored panel on mecgura.tech (blog), reviewed by MECGURA, with views and clicks" },
   { key: "FOOD_ORDERING", label: "Food ordering", description: "QR menu for rooms and tables, orders confirmed on WhatsApp, kitchen screen with live status updates to guests, pay now (client's Razorpay) / room bill / counter, and order reports" },
   { key: "SMS", label: "SMS", description: "Coming soon: SMS inbox and campaigns (needs DLT registration and an SMS provider)" },
   { key: "RCS", label: "RCS", description: "Coming soon: rich messages on Android (needs an RCS provider and brand verification)" },
@@ -18,7 +19,7 @@ export const SERVICES = [
 ] as const;
 
 /** Services that switch a whole module on or off in the client's sidebar and APIs (the rest are labels or plan features). */
-export const GATED_SERVICES = ["OMNICHANNEL", "AI_CALLING", "AI_ASSISTANT", "ADS_MANAGER", "AUTOMATION_PACK", "SOCIAL_MEDIA", "LOYALTY", "REVIEWS", "LANDING_PAGES", "FOOD_ORDERING"] as const;
+export const GATED_SERVICES = ["OMNICHANNEL", "AI_CALLING", "AI_ASSISTANT", "ADS_MANAGER", "AUTOMATION_PACK", "SOCIAL_MEDIA", "LOYALTY", "REVIEWS", "LANDING_PAGES", "FOOD_ORDERING", "SPONSORED_ADS"] as const;
 
 /** Listed so the package can be planned, but nothing sits behind it yet: shown disabled and never saved as on. */
 export const isComingSoon = (s: { description: string }) => s.description.startsWith("Coming soon");

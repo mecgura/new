@@ -100,6 +100,14 @@ Built in this run:
 - Webhook `/api/webhooks/food/<orgId>` (HMAC verified, deduped) marks pay-now orders paid.
 - Tests: `tests/integration/food-ordering.test.ts`; security sweep covers the new public routes.
 
+### Sponsored placement (clients' ads on mecgura.tech)
+- New gated service `SPONSORED_ADS`; models `SponsoredAd`, `SponsoredStat`; migration `20261123090000_sponsored_ads`.
+- Flow: client draft → sends for review → Super Admin approves (Admin → Sponsored) → shown in the “Sponsored” panel beside blog articles
+  (loaded client-side so cached pages still count views; bots are not counted; clicks counted once per visitor per 10 minutes).
+- Safety: https-only links (no IPs/localhost/credentials), image sniffed (JPG/PNG/WebP ≤ 1 MB), edits to live ads go back to review,
+  MECGURA pauses can't be undone by the client, global off switch, click redirect only to stored, reviewed links.
+- Tests: `tests/integration/sponsored.test.ts` (6); security sweep lists the 3 public routes.
+
 ## 3. Pending external dependencies (nothing simulated)
 | Item | Needed from Guri |
 |---|---|
@@ -116,6 +124,6 @@ Built in this run:
 ## 4. Test results (this run)
 - `npx tsc --noEmit`: pass
 - `npx eslint src tests --quiet`: pass
-- `npx vitest run`: **69 files, 586 tests passed**
+- `npx vitest run`: **74 files, 609 tests passed**
 - `next build`: compiled successfully
 - Browser smoke: Integrations readiness, Admin auto-pay tab, contact journey, deals forecast, AI tests tab, data card and Admin security all render with no page errors and no mobile overflow.

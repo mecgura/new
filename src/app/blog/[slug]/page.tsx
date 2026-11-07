@@ -6,6 +6,8 @@ import { PublicShell } from "@/components/site/public-shell";
 import { countView, getPublished, listPublished, tagList } from "@/services/site/blog";
 import { readingMinutes, renderMarkdown } from "@/lib/markdown";
 import { siteConfig } from "@/config/site";
+import { SponsoredPanel } from "@/components/site/sponsored-panel";
+import { advertiseHref, hasLiveAds } from "@/services/sponsored/sponsored";
 
 export const revalidate = 300;
 
@@ -35,6 +37,7 @@ export default async function BlogPost({ params }: Props) {
   after(() => countView(p.id));
   const { html, headings } = renderMarkdown(p.body);
   const url = `${siteConfig.url}/blog/${p.slug}`;
+  const hasAds = await hasLiveAds();
   const more = (await listPublished(6)).filter((x) => x.id !== p.id).slice(0, 3);
   const jsonLd = [
     {
@@ -65,7 +68,8 @@ export default async function BlogPost({ params }: Props) {
     <PublicShell>
       {/* JSON-LD: data we build ourselves; "<" is escaped so the content can't close the script tag. */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
-      <article className="mx-auto max-w-3xl px-4 py-10">
+      <div className={hasAds ? "mx-auto grid max-w-6xl gap-10 px-4 py-10 lg:grid-cols-[minmax(0,1fr)_320px]" : undefined}>
+      <article className={hasAds ? "min-w-0 max-w-3xl" : "mx-auto max-w-3xl px-4 py-10"}>
         <nav aria-label="Breadcrumb" className="wa-muted text-small"><Link href="/" className="hover:underline">Home</Link> › <Link href="/blog" className="hover:underline">Blog</Link></nav>
         <h1 className="mt-3 font-display text-3xl font-bold leading-tight sm:text-4xl">{p.title}</h1>
         <p className="wa-muted mt-3 text-small">{p.author} · {p.publishedAt ? <time dateTime={p.publishedAt.toISOString()}>{dateFmt.format(p.publishedAt)}</time> : null} · {readingMinutes(p.body)} min read</p>
@@ -96,6 +100,12 @@ export default async function BlogPost({ params }: Props) {
           </section>
         ) : null}
       </article>
+      {hasAds ? (
+        <div className="lg:sticky lg:top-24 lg:self-start">
+          <SponsoredPanel advertiseHref={advertiseHref} />
+        </div>
+      ) : null}
+      </div>
     </PublicShell>
   );
 }

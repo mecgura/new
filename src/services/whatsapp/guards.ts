@@ -14,8 +14,8 @@ export async function assertWhatsAppEnabled(organizationId: string) {
   }
 }
 
-export type GatedService = "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "AUTOMATION_PACK" | "SOCIAL_MEDIA" | "LOYALTY" | "REVIEWS" | "LANDING_PAGES" | "FOOD_ORDERING";
-const GATE_LABEL: Record<GatedService, string> = { OMNICHANNEL: "The omnichannel inbox (email, website chat, Messenger, Instagram)", AI_CALLING: "AI Calling", AI_ASSISTANT: "The AI Agent", ADS_MANAGER: "Ads Manager", AUTOMATION_PACK: "Ready-made automations", SOCIAL_MEDIA: "Social Media Management", LOYALTY: "Referral & loyalty", REVIEWS: "Reviews & reputation", LANDING_PAGES: "Landing pages", FOOD_ORDERING: "Food ordering" };
+export type GatedService = "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "AUTOMATION_PACK" | "SOCIAL_MEDIA" | "LOYALTY" | "REVIEWS" | "LANDING_PAGES" | "FOOD_ORDERING" | "SPONSORED_ADS";
+const GATE_LABEL: Record<GatedService, string> = { OMNICHANNEL: "The omnichannel inbox (email, website chat, Messenger, Instagram)", AI_CALLING: "AI Calling", AI_ASSISTANT: "The AI Agent", ADS_MANAGER: "Ads Manager", AUTOMATION_PACK: "Ready-made automations", SOCIAL_MEDIA: "Social Media Management", LOYALTY: "Referral & loyalty", REVIEWS: "Reviews & reputation", LANDING_PAGES: "Landing pages", FOOD_ORDERING: "Food ordering", SPONSORED_ADS: "Sponsored placement" };
 
 export async function isServiceEnabled(organizationId: string, service: GatedService) {
   const row = await db.organizationService.findUnique({ where: { organizationId_service: { organizationId, service } }, select: { enabled: true } });
