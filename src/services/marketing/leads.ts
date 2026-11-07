@@ -53,7 +53,7 @@ type LeadRow = Awaited<ReturnType<typeof db.marketingLead.findFirstOrThrow>>;
 export function heatScore(l: Pick<LeadRow, "source" | "stage" | "createdAt" | "lastContactAt" | "nextFollowUpAt">, now = Date.now()): number {
   if (l.stage === "won") return 100;
   if (l.stage === "lost") return 0;
-  const base: Record<string, number> = { referral: 35, whatsapp: 30, website_chat: 25, festival: 25, demo_click: 20, maps: 12, manual: 10 };
+  const base: Record<string, number> = { referral: 35, whatsapp: 30, website_form: 30, website_chat: 25, festival: 25, demo_click: 20, maps: 12, manual: 10 };
   let s = base[l.source] ?? 10;
   const ageDays = (now - l.createdAt.getTime()) / 86_400_000;
   s += ageDays < 2 ? 25 : ageDays < 7 ? 15 : ageDays < 30 ? 5 : 0;

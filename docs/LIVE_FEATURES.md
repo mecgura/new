@@ -53,6 +53,11 @@ one-by-one WhatsApp), site editor.
 - **Free tools (mecgura.tech/tools)**: WhatsApp link generator, WhatsApp QR code generator (PNG), WhatsApp message cost calculator
   (rates from Admin → Meta rates). SEO pages with FAQ data, in the sitemap; everything runs in the visitor's browser. A QR code on the
   homepage opens a WhatsApp chat with MECGURA. CTA clicks are tracked as leads.
+- **Website growth pack**: lead form (homepage, /demo, every SEO page) into Admin → Marketing as “Website form” with consent, honeypot and
+  rate limit; 8 industry pages and 5 city pages (/whatsapp-automation/…); Hinglish page (/hi); guides (WhatsApp Business app vs API,
+  API price in India with live plan prices and Meta rates); free 22-template pack with PDF; /refer (introduce a business); /about;
+  /results case studies (Admin → Case studies: hidden until published with the client's OK); optional Google Analytics, Meta Pixel and
+  Search Console via environment variables.
 
 ## Not built yet (on the list)
 See `DEVELOPMENT_STATUS.md`.

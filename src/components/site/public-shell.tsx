@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { Logo } from "@/components/layout/logo";
 import { siteConfig } from "@/config/site";
+import { SiteAnalytics } from "@/components/site/analytics";
 
 /** Header + footer for public pages outside the homepage (blog). Same look as the homepage. */
 export function PublicShell({ children }: { children: React.ReactNode }) {
-  const wa = `https://wa.me/${siteConfig.contact.whatsapp}?text=${encodeURIComponent("Hi MECGURA, I read your blog and want to know more.")}`;
   return (
     <div className="wa-root min-h-dvh overflow-x-hidden">
+      <SiteAnalytics />
       <header className="wa-topbar sticky top-0 z-30">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
           <Logo tone="light" />
@@ -15,7 +16,7 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
             <Link href="/blog" className="wa-muted px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)]">Blog</Link>
             <Link href="/tools" className="wa-muted px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)]">Free tools</Link>
             <Link href="/#pricing" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] sm:inline">Pricing</Link>
-            <a href={wa} className="wa-btn !min-h-10 !px-5 text-small">Talk on WhatsApp</a>
+            <Link href="/demo" className="wa-btn !min-h-10 !px-5 text-small" data-track="header_demo">Free demo</Link>
           </nav>
         </div>
       </header>
@@ -27,6 +28,9 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
             <Link href="/" className="hover:underline">Home</Link>
             <Link href="/blog" className="hover:underline">Blog</Link>
             <Link href="/tools" className="hover:underline">Free tools</Link>
+            <Link href="/whatsapp-automation" className="hover:underline">By industry</Link>
+            <Link href="/about" className="hover:underline">About</Link>
+            <Link href="/refer" className="hover:underline">Refer</Link>
             <Link href="/privacy" className="hover:underline">Privacy</Link>
             <Link href="/terms" className="hover:underline">Terms</Link>
           </nav>

@@ -1,3 +1,5 @@
+import { LeadForm } from "@/components/site/lead-form";
+import { SiteAnalytics } from "@/components/site/analytics";
 import { DemoQr } from "@/components/home/demo-qr";
 import type { Metadata } from "next";
 import type * as React from "react";
@@ -113,6 +115,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
       />
       <ScrollReveal />
       <SiteTracker />
+      <SiteAnalytics />
       {previewing ? (
         <div className="fixed bottom-4 left-1/2 z-[70] -translate-x-1/2 rounded-full bg-black/85 px-4 py-2 text-center text-xs font-semibold text-white shadow-lg">
           {promo ? `Preview: ${promo.festival.name} (${promo.phase === "pre" ? "days before" : "festival day"}). Only you can see this.` : "Preview: festival not found. Save it first."}{" "}
@@ -307,6 +310,17 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
               <a href={`tel:+${whatsappDigits}`} data-track="contact_call" className="wa-btn wa-btn-ghost w-full"><Phone className="size-5" aria-hidden="true" /> {phoneLabel}</a>
               <a href={`mailto:${siteConfig.contact.email}`} className="wa-btn wa-btn-ghost w-full !px-3 text-small"><Mail className="size-5 shrink-0" aria-hidden="true" /> {siteConfig.contact.email}</a>
             </div>
+          </div>
+        </section>
+
+        <section aria-labelledby="demo-form-title" className="mx-auto max-w-5xl px-4 pb-6">
+          <div className="grid items-start gap-8 md:grid-cols-2">
+            <div data-reveal>
+              <h2 id="demo-form-title" className="font-display text-3xl font-bold sm:text-4xl">Book a free demo</h2>
+              <p className="wa-muted mt-3">Tell us a little about your business. We&apos;ll show you how WhatsApp automation would work for you in about 15 minutes.</p>
+              <p className="wa-muted mt-4 text-small">Made for <Link href="/whatsapp-automation/salon" className="underline">salons</Link>, <Link href="/whatsapp-automation/restaurant" className="underline">restaurants</Link>, <Link href="/whatsapp-automation/resort" className="underline">hotels</Link>, <Link href="/whatsapp-automation/coaching" className="underline">coaching</Link>, <Link href="/whatsapp-automation/clinic" className="underline">clinics</Link>, <Link href="/whatsapp-automation/real-estate" className="underline">real estate</Link>, <Link href="/whatsapp-automation/retail" className="underline">shops</Link> and <Link href="/whatsapp-automation/gym" className="underline">gyms</Link>. <Link href="/hi" className="underline">Hinglish mein dekhein</Link>.</p>
+            </div>
+            <LeadForm page="/" whatsapp={whatsappDigits} />
           </div>
         </section>
 

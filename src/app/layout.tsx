@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   title: { default: "MECGURA Platform", template: "%s | MECGURA" },
   description: siteConfig.description,
   robots: { index: false, follow: false },
+  ...(process.env.GOOGLE_SITE_VERIFICATION ? { verification: { google: process.env.GOOGLE_SITE_VERIFICATION } } : {}),
 };
 
 export const viewport: Viewport = {

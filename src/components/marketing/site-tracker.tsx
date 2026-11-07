@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { sourceOf } from "@/lib/traffic-source";
+import { trackContact } from "@/lib/site-events";
 
 /**
  * Anonymous analytics for MECGURA's own site: one "visit" per page load and a "click" for any element marked
@@ -76,6 +77,7 @@ export function SiteTracker() {
       const el = (e.target as HTMLElement | null)?.closest?.("[data-track]");
       const name = el?.getAttribute("data-track") ?? "";
       if (!/^[a-z0-9_]{1,40}$/.test(name)) return;
+      if (/whatsapp|call|cta/.test(name)) trackContact(name);
       const a = getAttribution();
       send({ kind: "click", name, path: window.location.pathname, utmSource: a?.medium === "direct" ? "" : (a?.medium ?? ""), utmCampaign: a?.campaign ?? "", ref: a?.ref ?? "", visitor: vid });
     };

@@ -92,6 +92,7 @@ export const ADMIN_NAV: NavSection[] = [
       { label: "Festivals", icon: PartyPopper, href: "/admin/festivals" },
       { label: "Blog", icon: Newspaper, href: "/admin/blog" },
       { label: "Sponsored", icon: PanelRight, href: "/admin/sponsored" },
+      { label: "Case studies", icon: Star, href: "/admin/results" },
       { label: "Settings", icon: Settings, href: "/admin/settings" },
     ],
   },

@@ -4,10 +4,11 @@ export const STAGES = ["new", "contacted", "demo", "proposal", "won", "lost"] as
 export type Stage = (typeof STAGES)[number];
 export const STAGE_LABELS: Record<Stage, string> = { new: "New", contacted: "Contacted", demo: "Demo", proposal: "Proposal", won: "Won", lost: "Lost" };
 
-export const SOURCES = ["website_chat", "whatsapp", "demo_click", "festival", "referral", "maps", "manual"] as const;
+export const SOURCES = ["website_chat", "website_form", "whatsapp", "demo_click", "festival", "referral", "maps", "manual"] as const;
 export type Source = (typeof SOURCES)[number];
 export const SOURCE_LABELS: Record<Source, string> = {
   website_chat: "Website chat",
+  website_form: "Website form",
   whatsapp: "WhatsApp",
   demo_click: "Demo button",
   festival: "Festival offer",

@@ -10,6 +10,8 @@ export const siteConfig = {
     email: (process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@mecgura.tech").trim(),
     whatsapp: (process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP || "917837722567").replace(/\D/g, ""),
   },
+  /** The thank-you offered on /refer, e.g. "1 month free on your plan". Empty = the page offers none (nothing is promised). */
+  referralReward: (process.env.NEXT_PUBLIC_REFERRAL_REWARD || "").trim(),
 } as const;
 
 export type SiteConfig = typeof siteConfig;
