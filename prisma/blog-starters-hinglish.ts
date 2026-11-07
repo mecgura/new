@@ -81,12 +81,12 @@ Setup mein madad chahiye? [Free demo](https://mecgura.tech/demo) book karein.`,
 ## 1. Marketing
 Offer, discount, festival greeting with offer, new arrival, win-back. Ye sabse mahenga hota hai.
 
-*Example:* "Diwali offer: 20% off aaj hi. Reply karein."
+_Example:_ "Diwali offer: 20% off aaj hi. Reply karein."
 
 ## 2. Utility
 Aise updates jo customer ne pehle se kiye kisi kaam ke baare mein hon: order confirmation, delivery update, appointment reminder, payment receipt.
 
-*Example:* "Aapka order #1234 confirm ho gaya hai."
+_Example:_ "Aapka order #1234 confirm ho gaya hai."
 
 ## 3. Authentication
 OTP aur verification codes.
@@ -302,7 +302,7 @@ Zyada details ho to PDF theek hai. File chhoti rakhein taaki jaldi khule. Pehla 
 
 ## Option 3: Text list
 Chhote items ke liye seedha message bhi chalta hai:
-*Price list*
+_Price list_
 - Haircut: ₹...
 - Facial: ₹...
 (Apni asli prices likhein.)

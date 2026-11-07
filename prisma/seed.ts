@@ -45,6 +45,7 @@ async function main() {
   await repriceNov2026();
   await seedBlogStarters();
   await seedBlogStartersHinglish();
+  await fixHinglishItalics();
   await backfillClientDefaults();
   await grandfatherAiAssistant();
   await seedDemoTenants();
@@ -123,6 +124,19 @@ async function seedBlogStartersHinglish() {
   }
   await db.siteSetting.create({ data: { key, value: new Date().toISOString() } });
   console.log(`Published ${added} Hinglish starter blog article(s).`);
+}
+
+/** One time: the markdown renderer uses _italic_, so the first Hinglish upload's *italic* shows stars. Fixes only those exact strings. */
+async function fixHinglishItalics() {
+  const key = "migration:blog_hinglish_italics_2026_11";
+  if (await db.siteSetting.findUnique({ where: { key } })) return;
+  for (const slug of BLOG_STARTERS_HINGLISH.map((a) => a.slug)) {
+    const post = await db.blogPost.findUnique({ where: { slug } });
+    if (!post) continue;
+    const body = post.body.replaceAll("*Example:*", "_Example:_").replaceAll("*Price list*\n", "_Price list_\n");
+    if (body !== post.body) await db.blogPost.update({ where: { slug }, data: { body } });
+  }
+  await db.siteSetting.create({ data: { key, value: new Date().toISOString() } });
 }
 
 /**
