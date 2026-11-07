@@ -50,6 +50,9 @@ one-by-one WhatsApp), site editor.
   website or WhatsApp link, dates) in *Sponsored spot*, sends it for review, and after Super Admin approval (Admin → Sponsored)
   it shows in the labelled “Sponsored” side panel on mecgura.tech blog articles. Views and clicks per ad (14-day chart),
   optional view cap that ends the ad automatically, pause/reject with a reason, and a master on/off switch for the panel.
+- **Free tools (mecgura.tech/tools)**: WhatsApp link generator, WhatsApp QR code generator (PNG), WhatsApp message cost calculator
+  (rates from Admin → Meta rates). SEO pages with FAQ data, in the sitemap; everything runs in the visitor's browser. A QR code on the
+  homepage opens a WhatsApp chat with MECGURA. CTA clicks are tracked as leads.
 
 ## Not built yet (on the list)
 See `DEVELOPMENT_STATUS.md`.

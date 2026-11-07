@@ -13,6 +13,7 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
           <nav aria-label="Main" className="flex items-center gap-1 sm:gap-2">
             <Link href="/" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] sm:inline">Home</Link>
             <Link href="/blog" className="wa-muted px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)]">Blog</Link>
+            <Link href="/tools" className="wa-muted px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)]">Free tools</Link>
             <Link href="/#pricing" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] sm:inline">Pricing</Link>
             <a href={wa} className="wa-btn !min-h-10 !px-5 text-small">Talk on WhatsApp</a>
           </nav>
@@ -25,6 +26,7 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
           <nav aria-label="Footer" className="flex flex-wrap gap-5 font-semibold">
             <Link href="/" className="hover:underline">Home</Link>
             <Link href="/blog" className="hover:underline">Blog</Link>
+            <Link href="/tools" className="hover:underline">Free tools</Link>
             <Link href="/privacy" className="hover:underline">Privacy</Link>
             <Link href="/terms" className="hover:underline">Terms</Link>
           </nav>

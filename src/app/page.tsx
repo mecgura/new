@@ -1,3 +1,4 @@
+import { DemoQr } from "@/components/home/demo-qr";
 import type { Metadata } from "next";
 import type * as React from "react";
 import Link from "next/link";
@@ -127,6 +128,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
             <a href="#channels" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Channels</a>
             {plans.length ? <a href="#pricing" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Pricing</a> : null}
             <Link href="/blog" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Blog</Link>
+            <Link href="/tools" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Free tools</Link>
             <a href="#contact" className="wa-muted hidden px-3 py-2 text-small font-semibold hover:text-[var(--wa-ink)] md:inline">Contact</a>
             <Link href={appHref} className="wa-btn !min-h-10 !px-5 text-small">{signedIn ? "Open workspace" : "Sign in"}</Link>
           </nav>
@@ -142,6 +144,8 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
           />
         ) : null}
         <IndustryHero slides={heroSlides} whatsapp={whatsappDigits} signedIn={signedIn} appHref={appHref} />
+
+        <DemoQr whatsapp={whatsappDigits} />
 
         {content.services.length ? (
           <section id="services" aria-labelledby="services-title" className="mx-auto max-w-6xl px-4 py-14">

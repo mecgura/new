@@ -11,6 +11,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const out: MetadataRoute.Sitemap = [
     { url: `${base}/`, lastModified: now, changeFrequency: "weekly", priority: 1 },
     { url: `${base}/blog`, lastModified: now, changeFrequency: "weekly", priority: 0.8 },
+    { url: `${base}/tools`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${base}/tools/whatsapp-link-generator`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${base}/tools/whatsapp-qr-code-generator`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${base}/tools/whatsapp-message-cost-calculator`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${base}/privacy`, changeFrequency: "yearly", priority: 0.2 },
     { url: `${base}/terms`, changeFrequency: "yearly", priority: 0.2 },
   ];
