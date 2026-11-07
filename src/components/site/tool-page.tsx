@@ -8,6 +8,8 @@ export const TOOLS = [
   { href: "/tools/whatsapp-link-generator", title: "WhatsApp link generator", blurb: "Make a wa.me link with a ready message. Put it on Instagram, Facebook, Google or your website." },
   { href: "/tools/whatsapp-qr-code-generator", title: "WhatsApp QR code generator", blurb: "Download a print-ready QR code that opens your WhatsApp chat. Shop boards, menus, visiting cards." },
   { href: "/tools/whatsapp-message-cost-calculator", title: "WhatsApp message cost calculator", blurb: "Estimate Meta’s monthly charges for marketing, utility and OTP messages before you start." },
+  { href: "/tools/whatsapp-template-category-checker", title: "WhatsApp template checker", blurb: "Paste a template and see if it reads as marketing or utility, and what may get it rejected." },
+  { href: "/tools/whatsapp-opt-in-message-generator", title: "WhatsApp opt-in message generator", blurb: "Ready wording to ask customers for permission: the ask, a form checkbox, confirmation and STOP line." },
 ] as const;
 
 /** Shared frame for the free tools: heading, the tool, how-to text, FAQ (with Google structured data) and the other tools. */
@@ -42,7 +44,7 @@ export function ToolPage({ path, title, h1, intro, steps, faqs, children }: { pa
         </section>
         <section className="mt-12" aria-labelledby="more-title">
           <h2 id="more-title" className="text-xl font-bold">More free tools</h2>
-          <ul className="mt-4 grid gap-4 sm:grid-cols-3">
+          <ul className="mt-4 grid gap-4 sm:grid-cols-2">
             {TOOLS.filter((t) => t.href !== path).map((t) => (
               <li key={t.href} className="wa-card p-4"><Link href={t.href} className="font-semibold hover:underline">{t.title}</Link><p className="wa-muted mt-1 text-small">{t.blurb}</p></li>
             ))}

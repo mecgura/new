@@ -16,6 +16,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/tools`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${base}/tools/whatsapp-link-generator`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${base}/tools/whatsapp-qr-code-generator`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${base}/tools/whatsapp-template-category-checker`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${base}/tools/whatsapp-opt-in-message-generator`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${base}/tools/whatsapp-message-cost-calculator`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${base}/demo`, lastModified: now, changeFrequency: "monthly", priority: 0.9 },
     { url: `${base}/about`, lastModified: now, changeFrequency: "monthly", priority: 0.5 },

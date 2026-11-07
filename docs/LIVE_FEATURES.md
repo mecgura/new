@@ -58,6 +58,9 @@ one-by-one WhatsApp), site editor.
   API price in India with live plan prices and Meta rates); free 22-template pack with PDF; /refer (introduce a business); /about;
   /results case studies (Admin → Case studies: hidden until published with the client's OK); optional Google Analytics, Meta Pixel and
   Search Console via environment variables.
+- **More free tools**: WhatsApp template checker (marketing / utility / OTP guide plus the usual rejection reasons) and WhatsApp opt-in
+  message generator (English / Hinglish). 12 Hinglish blog articles are published once by the seed. Scripts for Instagram carousels and
+  reels per industry are in `docs/SOCIAL_CONTENT.md`.
 
 ## Not built yet (on the list)
 See `DEVELOPMENT_STATUS.md`.
