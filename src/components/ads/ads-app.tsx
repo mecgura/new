@@ -20,6 +20,9 @@ type Ad = {
   metaStatus: string;
   reviewNote: string;
   whatsappStatus: boolean;
+  greeting?: string;
+  starters?: string[];
+  greetingNote?: string;
   placementNote: string;
   syncedAt: string | null;
 };
@@ -166,6 +169,8 @@ export function AdsApp({ orgId, canManage, canConnect }: { orgId: string; canMan
                       {a.lastError ? <p className="mt-1 text-small text-red-400">{a.lastError}</p> : null}
                       {a.status !== "failed" ? <p className="mt-1 text-caption text-app-subtle">{a.whatsappStatus ? "Facebook · Instagram · WhatsApp Status" : "Facebook · Instagram"} · synced with Meta {ago(a.syncedAt)}</p> : null}
                       {a.placementNote ? <p className="mt-1 text-caption text-amber-300">{a.placementNote}</p> : null}
+                      {a.greeting || a.starters?.length ? <p className="mt-1 text-caption text-app-subtle">Opening chat: {a.greeting || "(default greeting)"}{a.starters?.length ? ` · ${a.starters.join(" · ")}` : ""}</p> : null}
+                      {a.greetingNote ? <p className="mt-1 text-caption text-amber-300">{a.greetingNote}</p> : null}
                     </div>
                     {canManage ? (
                       <div className="flex flex-wrap gap-2">
@@ -269,6 +274,8 @@ function ConnectCard({ base, onDone }: { base: string; onDone: () => void }) {
 function CreateModal({ open, onClose, base, numbers, onDone, onFailed }: { open: boolean; onClose: () => void; base: string; numbers: Overview["numbers"]; onDone: () => void; onFailed: () => void }) {
   const toast = useToast();
   const empty = { name: "", whatsappAccountId: "", dailyBudgetRupees: "500", message: "", headline: "", ageMin: "18", ageMax: "55", gender: "all" };
+  const [greeting, setGreeting] = React.useState("");
+  const [starters, setStarters] = React.useState<string[]>(["", "", ""]);
   const [onStatus, setOnStatus] = React.useState(true);
   const [f, setF] = React.useState(empty);
   const [hash, setHash] = React.useState("");
@@ -297,7 +304,7 @@ function CreateModal({ open, onClose, base, numbers, onDone, onFailed }: { open:
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    const body = { name: f.name, whatsappAccountId: f.whatsappAccountId || numbers[0]?.id, dailyBudgetRupees: Number(f.dailyBudgetRupees), message: f.message, headline: f.headline, imageHash: hash, ageMin: Number(f.ageMin), ageMax: Number(f.ageMax), gender: f.gender, whatsappStatus: onStatus, locations: places.map(({ key, name, type, radiusKm }) => ({ key, name, type, ...(type === "city" ? { radiusKm: radiusKm ?? 25 } : {}) })) };
+    const body = { name: f.name, whatsappAccountId: f.whatsappAccountId || numbers[0]?.id, dailyBudgetRupees: Number(f.dailyBudgetRupees), message: f.message, headline: f.headline, imageHash: hash, ageMin: Number(f.ageMin), ageMax: Number(f.ageMax), gender: f.gender, whatsappStatus: onStatus, greeting, starters: starters.map((x) => x.trim()).filter(Boolean), locations: places.map(({ key, name, type, radiusKm }) => ({ key, name, type, ...(type === "city" ? { radiusKm: radiusKm ?? 25 } : {}) })) };
     const r = await apiFetch(`${base}/campaigns`, { method: "POST", body });
     setSaving(false);
     if (!r.ok) {
@@ -307,6 +314,8 @@ function CreateModal({ open, onClose, base, numbers, onDone, onFailed }: { open:
     }
     toast("Ad created (paused)");
     setF(empty);
+    setGreeting("");
+    setStarters(["", "", ""]);
     setHash("");
     setPlaces([]);
     setErr({});
@@ -331,6 +340,18 @@ function CreateModal({ open, onClose, base, numbers, onDone, onFailed }: { open:
         <Field id="ad-msg" label="Ad text" error={err.message?.[0]}>
           <Textarea rows={3} value={f.message} onChange={set("message")} maxLength={500} required />
         </Field>
+        <fieldset className="space-y-2 rounded-lg border border-app-border p-3">
+          <legend className="px-1 text-small font-medium text-app-text">When the chat opens (optional)</legend>
+          <p className="text-caption text-app-muted">Customers see this greeting and tappable questions before they type anything. A question they tap is sent as their first message, and your “Ad click” automation answers it.</p>
+          <Field id="ad-greet" label="Greeting" error={err.greeting?.[0]} hint={`${greeting.length}/160`}>
+            <Input value={greeting} maxLength={160} onChange={(e) => setGreeting(e.target.value)} placeholder="Hi! Please let us know how we can help you." />
+          </Field>
+          {starters.map((q, i) => (
+            <Field key={i} id={`ad-q-${i}`} label={`Question ${i + 1}`} error={err.starters?.[0]}>
+              <Input value={q} maxLength={80} onChange={(e) => setStarters((s) => s.map((x, j) => (j === i ? e.target.value : x)))} placeholder={["What is the price?", "Do you offer a free visit?", "Talk to the team"][i]} />
+            </Field>
+          ))}
+        </fieldset>
         <Field id="ad-head" label="Headline (optional)" error={err.headline?.[0]}>
           <Input value={f.headline} onChange={set("headline")} maxLength={40} />
         </Field>

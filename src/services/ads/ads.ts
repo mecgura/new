@@ -21,6 +21,15 @@ async function token(organizationId: string) {
 
 type CampaignRow = Awaited<ReturnType<typeof db.adCampaign.findFirstOrThrow>>;
 
+function parseStarters(raw: string): string[] {
+  try {
+    const v: unknown = JSON.parse(raw);
+    return Array.isArray(v) ? v.map(String).slice(0, 3) : [];
+  } catch {
+    return [];
+  }
+}
+
 function parseLocations(raw: string): AdLocation[] {
   try {
     const v: unknown = JSON.parse(raw);
@@ -50,6 +59,9 @@ function toDto(c: CampaignRow, chats: number) {
     metaStatus: c.metaStatus,
     whatsappStatus: c.whatsappStatus,
     placementNote: c.placementNote,
+    greeting: c.greeting,
+    starters: parseStarters(c.starters),
+    greetingNote: c.greetingNote,
     reviewNote: c.reviewNote,
     spend: c.spend,
     impressions: c.impressions,
@@ -111,7 +123,7 @@ export async function uploadImage(access: OrgAccess, base64: string) {
   }
 }
 
-export type CreateAdInput = { whatsappStatus?: boolean; name: string; whatsappAccountId: string; dailyBudgetRupees: number; message: string; headline: string; imageHash: string; ageMin: number; ageMax: number; gender: "all" | "male" | "female"; startAt: Date | null; endAt: Date | null; locations: AdLocation[] };
+export type CreateAdInput = { greeting?: string; starters?: string[]; whatsappStatus?: boolean; name: string; whatsappAccountId: string; dailyBudgetRupees: number; message: string; headline: string; imageHash: string; ageMin: number; ageMax: number; gender: "all" | "male" | "female"; startAt: Date | null; endAt: Date | null; locations: AdLocation[] };
 
 /** Creates the ad on Meta, always PAUSED. If any step fails, what was already created is archived and the error is kept on the record. */
 export async function createAd(access: OrgAccess, input: CreateAdInput, req?: Request) {
@@ -126,13 +138,13 @@ export async function createAd(access: OrgAccess, input: CreateAdInput, req?: Re
   const startAt = input.startAt && input.startAt.getTime() > Date.now() ? input.startAt : new Date(Date.now() + 10 * 60_000);
 
   const row = await db.adCampaign.create({
-    data: { organizationId: orgId, name: input.name, dailyBudget: budget, whatsappAccountId: wa.id, message: input.message, headline: input.headline, imageHash: input.imageHash, ageMin: input.ageMin, ageMax: input.ageMax, gender: input.gender, locations: JSON.stringify(input.locations), startAt, endAt: input.endAt, createdByUserId: access.user.id },
+    data: { organizationId: orgId, name: input.name, dailyBudget: budget, whatsappAccountId: wa.id, message: input.message, headline: input.headline, imageHash: input.imageHash, ageMin: input.ageMin, ageMax: input.ageMax, gender: input.gender, locations: JSON.stringify(input.locations), startAt, endAt: input.endAt, createdByUserId: access.user.id, greeting: input.greeting ?? "", starters: JSON.stringify((input.starters ?? []).slice(0, 3)) },
   });
   const made: Partial<{ campaign: string; adset: string; creative: string; ad: string }> = {};
-  const meta: CtwaInput = { name: input.name, pageId: c.pageId, whatsappNumberE164: wa.phoneNumber, dailyBudgetPaise: budget, message: input.message, headline: input.headline, imageHash: input.imageHash, ageMin: input.ageMin, ageMax: input.ageMax, gender: input.gender, startAt, endAt: input.endAt, locations: input.locations, whatsappStatus: input.whatsappStatus ?? true };
+  const meta: CtwaInput = { name: input.name, pageId: c.pageId, whatsappNumberE164: wa.phoneNumber, dailyBudgetPaise: budget, message: input.message, headline: input.headline, imageHash: input.imageHash, ageMin: input.ageMin, ageMax: input.ageMax, gender: input.gender, startAt, endAt: input.endAt, locations: input.locations, whatsappStatus: input.whatsappStatus ?? true, greeting: input.greeting, starters: input.starters };
   try {
     const ids = await createCtwaAd(c.adAccountId, t, meta, (partial) => Object.assign(made, partial));
-    await db.adCampaign.update({ where: { id: row.id }, data: { status: "paused", metaCampaignId: ids.campaign ?? "", metaAdSetId: ids.adset ?? "", metaCreativeId: ids.creative ?? "", metaAdId: ids.ad ?? "", lastError: "", whatsappStatus: ids.whatsappStatus, placementNote: ids.placementNote } });
+    await db.adCampaign.update({ where: { id: row.id }, data: { status: "paused", metaCampaignId: ids.campaign ?? "", metaAdSetId: ids.adset ?? "", metaCreativeId: ids.creative ?? "", metaAdId: ids.ad ?? "", lastError: "", whatsappStatus: ids.whatsappStatus, placementNote: ids.placementNote, greetingNote: ids.greetingNote } });
   } catch (e) {
     if (made.campaign) await setStatus(made.campaign, t, "ARCHIVED").catch(() => undefined); // nothing half-built is left running
     await db.adCampaign.update({ where: { id: row.id }, data: { status: "failed", lastError: metaError(e, "Meta could not create the ad.").slice(0, 500) } });

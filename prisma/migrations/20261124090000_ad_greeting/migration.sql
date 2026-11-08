@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "AdCampaign" ADD COLUMN "greeting" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "AdCampaign" ADD COLUMN "starters" TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE "AdCampaign" ADD COLUMN "greetingNote" TEXT NOT NULL DEFAULT '';

@@ -48,6 +48,9 @@ export function geoTargeting(locations: AdLocation[]) {
 }
 
 export type CtwaInput = {
+  /** Opening greeting and up to 3 tappable questions shown when the chat opens from the ad. */
+  greeting?: string;
+  starters?: string[];
   name: string;
   pageId: string;
   whatsappNumberE164: string; // +91…
@@ -75,6 +78,30 @@ export const WHATSAPP_STATUS_PLACEMENTS = {
   instagram_positions: ["stream", "story", "reels", "explore"],
   whatsapp_positions: ["status"],
 };
+
+/**
+ * The "greeting + tappable questions" Meta shows when the chat opens from an ad (before the customer sends anything).
+ * Each question the customer taps is sent as their first message, which then starts your automation.
+ * Returns the JSON string Meta expects in link_data.page_welcome_message, or "" when there is nothing to show.
+ */
+export function welcomeMessageJson(greeting?: string, starters?: string[]): string {
+  const text = (greeting ?? "").trim().slice(0, 160);
+  const questions = (starters ?? []).map((q) => q.trim().slice(0, 80)).filter(Boolean).slice(0, 3);
+  if (!text && !questions.length) return "";
+  return JSON.stringify({
+    type: "VISUAL_EDITOR",
+    version: 2,
+    landing_screen_type: "welcome_message",
+    media_type: "text",
+    text_format: {
+      customer_action_type: questions.length ? "ice_breakers" : "autofill_message",
+      message: {
+        text: text || "Hi! Please let us know how we can help you.",
+        ...(questions.length ? { ice_breakers: questions.map((title) => ({ title })) } : {}),
+      },
+    },
+  });
+}
 
 /** Runs one creation step; a Meta error says which step failed (campaign, ad set, creative, ad). */
 async function step<T>(name: string, run: () => Promise<T>): Promise<T> {
@@ -136,23 +163,31 @@ export async function createCtwaAd(adAccountId: string, token: string, input: Ct
   }
   ids.adset = adset.id;
   onStep?.({ ...ids });
-  const creative = await step("Creative", () => graph<Id>(`${act}/adcreatives`, {
-    token,
-    method: "POST",
-    body: {
-      name: `${input.name} — creative`,
-      object_story_spec: {
-        page_id: input.pageId,
-        link_data: {
-          message: input.message,
-          name: input.headline || undefined,
-          link: `https://api.whatsapp.com/send?phone=${input.whatsappNumberE164.replace(/\D/g, "")}`,
-          image_hash: input.imageHash,
-          call_to_action: { type: "WHATSAPP_MESSAGE", value: { app_destination: "WHATSAPP" } },
-        },
+  const welcome = welcomeMessageJson(input.greeting, input.starters);
+  const creativeBody = (withWelcome: boolean) => ({
+    name: `${input.name} — creative`,
+    object_story_spec: {
+      page_id: input.pageId,
+      link_data: {
+        message: input.message,
+        name: input.headline || undefined,
+        link: `https://api.whatsapp.com/send?phone=${input.whatsappNumberE164.replace(/\D/g, "")}`,
+        image_hash: input.imageHash,
+        call_to_action: { type: "WHATSAPP_MESSAGE", value: { app_destination: "WHATSAPP" } },
+        ...(withWelcome && welcome ? { page_welcome_message: welcome } : {}),
       },
     },
-  }));
+  });
+  let greetingNote = "";
+  let creative: Id;
+  try {
+    creative = await step("Creative", () => graph<Id>(`${act}/adcreatives`, { token, method: "POST", body: creativeBody(Boolean(welcome)) }));
+  } catch (e) {
+    if (!welcome || !(e instanceof MetaApiError)) throw e;
+    // The opening greeting is an extra: if Meta refuses it for this account or version, the ad is still created without it.
+    greetingNote = `The opening greeting and questions were not applied (${e.userMessage || e.message}). Your ad still works; customers get your automation's reply after they message.`.slice(0, 500);
+    creative = await step("Creative", () => graph<Id>(`${act}/adcreatives`, { token, method: "POST", body: creativeBody(false) }));
+  }
   ids.creative = creative.id;
   onStep?.({ ...ids });
   const ad = await step("Ad", () =>
@@ -164,7 +199,7 @@ export async function createCtwaAd(adAccountId: string, token: string, input: Ct
   );
   ids.ad = ad.id;
   onStep?.({ ...ids });
-  return { ...ids, whatsappStatus, placementNote };
+  return { ...ids, whatsappStatus, placementNote, greetingNote };
 }
 
 /** Sets the delivery status of one Meta object (campaign, ad set or ad). */

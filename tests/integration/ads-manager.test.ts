@@ -37,7 +37,7 @@ async function tenant(opts: { service?: boolean } = {}) {
 }
 
 type Call = { path: string; method: string; body?: Record<string, unknown> };
-function graph(calls: Call[], opts: { failAt?: string; ad?: Record<string, unknown>; preview?: string; rejectStatus?: boolean } = {}) {
+function graph(calls: Call[], opts: { failAt?: string; ad?: Record<string, unknown>; preview?: string; rejectStatus?: boolean; rejectWelcome?: boolean } = {}) {
   let seq = 0;
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -47,6 +47,7 @@ function graph(calls: Call[], opts: { failAt?: string; ad?: Record<string, unkno
     calls.push({ path, method, body });
     const reply = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
     if (opts.rejectStatus && path.endsWith("/adsets") && JSON.stringify(body).includes("whatsapp_positions")) return reply({ error: { message: "Invalid parameter", code: 100, error_user_title: "Placement unavailable", error_user_msg: "WhatsApp Status isn't available for this ad account." } }, 400);
+    if (opts.rejectWelcome && path.endsWith("/adcreatives") && JSON.stringify(body).includes("page_welcome_message")) return reply({ error: { message: "Invalid parameter", code: 100, error_user_title: "Welcome message unavailable", error_user_msg: "page_welcome_message is not supported here." } }, 400);
     if (opts.failAt && path.endsWith(opts.failAt) && method === "POST") return reply({ error: { message: "Invalid parameter", code: 100, error_subcode: 1870227, error_user_title: "Advantage audience flag required", error_user_msg: "Set targeting_automation.advantage_audience to 0 or 1." } }, 400);
     if (method === "GET" && /^act_\d+$/.test(path)) return reply({ id: path, name: "Shop Ads", currency: "INR", account_status: 1 });
     if (method === "GET" && path === "search") return reply({ data: [{ key: "1035921", name: "Ludhiana", type: "city", region: "Punjab" }, { key: "1748", name: "Punjab", type: "region" }, { key: "IN", name: "India", type: "country" }] });
@@ -264,6 +265,45 @@ describe("location targeting", () => {
     expect((await previewRoute.GET(req("/x"), P(t.org.id, { adId: ad.id }))).status).toBe(409);
     actAs(t.agent);
     expect((await previewRoute.GET(req("/x"), P(t.org.id, { adId: ad.id }))).status).toBe(403);
+  });
+
+  it("sends the opening greeting and tappable questions with the creative, and still creates the ad if Meta refuses them", async () => {
+    const t = await tenant();
+    let calls: Call[] = [];
+    graph(calls);
+    await connect(t);
+    actAs(t.owner);
+    const r = await json(await campaigns.POST(post(adBody(t, { name: "Pest ad", greeting: "Hi! Please let us know how we can help you.", starters: ["What is the cost of termite control?", "Do you offer emergency service?"] })), P(t.org.id)));
+    expect(r.status).toBe(201);
+    const link = ((calls.find((c) => c.path.endsWith("/adcreatives"))!.body!.object_story_spec as Record<string, unknown>).link_data as Record<string, unknown>);
+    const welcome = JSON.parse(String(link.page_welcome_message)) as { text_format: { customer_action_type: string; message: { text: string; ice_breakers: { title: string }[] } } };
+    expect(welcome.text_format.customer_action_type).toBe("ice_breakers");
+    expect(welcome.text_format.message.text).toBe("Hi! Please let us know how we can help you.");
+    expect(welcome.text_format.message.ice_breakers.map((q) => q.title)).toEqual(["What is the cost of termite control?", "Do you offer emergency service?"]);
+    expect(r.body.ad).toMatchObject({ greeting: "Hi! Please let us know how we can help you.", starters: ["What is the cost of termite control?", "Do you offer emergency service?"], greetingNote: "" });
+
+    // No greeting or questions: nothing extra is sent.
+    vi.restoreAllMocks();
+    calls = [];
+    graph(calls);
+    await campaigns.POST(post(adBody(t, { name: "Plain ad" })), P(t.org.id));
+    expect(JSON.stringify(calls.find((c) => c.path.endsWith("/adcreatives"))!.body)).not.toContain("page_welcome_message");
+
+    // Meta refuses the greeting: the ad is still created, without it, with the reason shown.
+    vi.restoreAllMocks();
+    calls = [];
+    graph(calls, { rejectWelcome: true });
+    const fb = await json(await campaigns.POST(post(adBody(t, { name: "Fallback greeting", greeting: "Hello!", starters: ["Price?"] })), P(t.org.id)));
+    expect(fb.status).toBe(201);
+    const creatives = calls.filter((c) => c.path.endsWith("/adcreatives"));
+    expect(creatives).toHaveLength(2);
+    expect(JSON.stringify(creatives[1].body)).not.toContain("page_welcome_message");
+    expect(fb.body.ad).toMatchObject({ status: "paused" });
+    expect((fb.body.ad as { greetingNote: string }).greetingNote).toContain("not applied");
+
+    // Too many questions or a long one is refused before anything goes to Meta.
+    expect((await campaigns.POST(post(adBody(t, { name: "Too many", starters: ["a", "b", "c", "d"] })), P(t.org.id))).status).toBe(400);
+    expect((await campaigns.POST(post(adBody(t, { name: "Too long", starters: ["x".repeat(81)] })), P(t.org.id))).status).toBe(400);
   });
 
   it("adds WhatsApp Status (with Instagram Stories) by default, and falls back to Facebook + Instagram when Meta refuses it", async () => {

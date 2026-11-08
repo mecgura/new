@@ -891,6 +891,8 @@ export const adCreateSchema = z
     ageMax: z.number().int().min(18).max(65).default(55),
     gender: z.enum(["all", "male", "female"]).default("all"),
     whatsappStatus: z.boolean().default(true),
+    greeting: z.string().trim().max(160, "Greeting: up to 160 characters").default(""),
+    starters: z.array(z.string().trim().min(1).max(80, "Each question: up to 80 characters")).max(3, "Up to 3 questions").default([]),
     startAt: z.coerce.date().nullable().default(null),
     endAt: z.coerce.date().nullable().default(null),
     locations: z

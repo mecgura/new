@@ -1659,6 +1659,9 @@ model AdCampaign {
   reviewNote        String    @default("") // Meta's rejection / issue text, if any
   whatsappStatus    Boolean   @default(false) // placed on WhatsApp Status (Updates tab) as well as Facebook / Instagram
   placementNote     String    @default("") // e.g. why WhatsApp Status couldn't be used for this ad
+  greeting          String    @default("") // opening message shown when the chat opens from the ad
+  starters          String    @default("[]") // JSON: up to 3 tappable questions under the greeting
+  greetingNote      String    @default("") // why the greeting wasn't applied, if Meta refused it
   spend             Int       @default(0) // paise, from Meta insights
   impressions       Int       @default(0)
   clicks            Int       @default(0)

@@ -61,6 +61,10 @@ one-by-one WhatsApp), site editor.
 - **More free tools**: WhatsApp template checker (marketing / utility / OTP guide plus the usual rejection reasons) and WhatsApp opt-in
   message generator (English / Hinglish). 12 Hinglish blog articles are published once by the seed. Scripts for Instagram carousels and
   reels per industry are in `docs/SOCIAL_CONTENT.md`.
+- **Ad opening greeting + tappable questions**: in Ads Manager → Create ad, an optional greeting (160 chars) and up to 3 questions that
+  customers see when the chat opens from the ad. A tapped question is sent as their first message and starts the “Ad click” automation.
+  Sent to Meta as `page_welcome_message`; if Meta refuses it for the account, the ad is still created without it and the reason is shown.
+  Not yet verified against a live Meta ad account (needs the Meta app reconnected).
 
 ## Not built yet (on the list)
 See `DEVELOPMENT_STATUS.md`.
