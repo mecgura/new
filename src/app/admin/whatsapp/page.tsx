@@ -88,6 +88,40 @@ function MetaReadiness() {
   );
 }
 
+type ResetResult = { whatsappAccounts: number; connections: number; webhooks: number; adConnections: number; channels: number; leadSources: number };
+
+/** Clears every saved Meta token and link (old app) so clients reconnect cleanly with the new Meta app. History stays. */
+function MetaReset() {
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  async function run() {
+    if (!window.confirm("Clear ALL saved Meta connections?\n\nWhatsApp numbers become Disconnected, ad connections and page tokens are removed. Chats, contacts, automations and templates are kept.")) return;
+    if (window.prompt('Type RESET to confirm') !== "RESET") return;
+    setBusy(true);
+    setMsg(null);
+    const r = await apiFetch<ResetResult>("/api/admin/meta-reset", { method: "POST", body: { confirm: "RESET" } });
+    setBusy(false);
+    if (r.ok) {
+      const d = r.data;
+      setMsg({ tone: "success", text: `Done. ${d.whatsappAccounts} number(s) disconnected, ${d.connections} credential set(s) wiped, ${d.adConnections} ad connection(s), ${d.channels} social channel(s) and ${d.leadSources} lead source(s) cleared.` });
+    } else setMsg({ tone: "danger", text: r.error });
+  }
+  return (
+    <Card className="mb-4">
+      <div className="space-y-3 p-5">
+        <h2 className="font-semibold text-app-text">Reset Meta connections</h2>
+        <p className="text-small text-app-muted">
+          Use after moving to a new Meta app. Removes every saved Meta token, webhook link and ad connection. Conversations, contacts, automations and templates are not deleted. Numbers can be connected again afterwards.
+        </p>
+        <button type="button" onClick={run} disabled={busy} className="rounded-md border border-app-border px-3 py-2 text-small font-medium text-app-text hover:bg-app-hover disabled:opacity-50">
+          {busy ? "Clearing…" : "Reset Meta connections"}
+        </button>
+        {msg ? <Alert tone={msg.tone}>{msg.text}</Alert> : null}
+      </div>
+    </Card>
+  );
+}
+
 export default function AdminWhatsAppPage() {
   const [q, setQ] = React.useState("");
   const [status, setStatus] = React.useState("");
@@ -97,6 +131,7 @@ export default function AdminWhatsAppPage() {
     <>
       <PageHeader title="WhatsApp Accounts" description="Every WhatsApp Business number registered to a client." breadcrumb={[{ label: "Admin", href: "/admin" }, { label: "WhatsApp Accounts" }]} />
       <MetaReadiness />
+      <MetaReset />
       <Card>
         <FilterBar>
           <SearchBar label="Search numbers" placeholder="Number, name or client…" value={q} onChange={(e) => setQ(e.target.value)} className="sm:w-72" />
