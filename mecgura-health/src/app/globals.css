@@ -1,0 +1,261 @@
+@import "tailwindcss";
+
+/* =============================================================================
+   MECGURA HEALTH design tokens — the ONLY place colours/spacing/radii/shadows/type
+   are defined. Components use the utilities generated from `@theme` below
+   (bg-primary, text-muted, p-card, rounded-card, shadow-card, type-body ...).
+   Never write a hex colour inside a component.
+
+   White-label: a tenant overrides ONLY --brand-primary / --brand-secondary /
+   --brand-accent (injected at <html> by the root layout). Everything else is derived
+   with color-mix() or is a fixed semantic colour.
+   ============================================================================= */
+
+:root {
+  /* ---- Brand (tenant-overridable) ---- */
+  --brand-primary: #14529e; /* deep medical blue */
+  --brand-secondary: #0e7c86; /* teal */
+  --brand-accent: #12a06a; /* healthcare green */
+
+  /* ---- Neutrals ---- */
+  --app-bg: #eef2f8;
+  --surface: #ffffff;
+  --surface-muted: #f0f3f7;
+  --line: #dbe2e9;
+  --line-strong: #bcc8d3;
+  --ink: #1b2531; /* dark charcoal */
+  --muted: #566677; /* slate (AA on white: 5.9:1) */
+  --on-brand: #ffffff;
+
+  /* ---- Semantic (fixed — not tenant-overridable, meaning must stay constant) ---- */
+  --success: #17703a;
+  --success-soft: #e5f4ea;
+  --warning: #9a5b00;
+  --warning-soft: #fdf1da;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  --emergency: #c4161c;
+  --emergency-soft: #ffe3e3;
+  --info: #1d5fc4;
+  --info-soft: #e6effc;
+
+  /* ---- Spacing tokens (responsive) ---- */
+  --space-page: 1rem;
+  --space-card: 1rem;
+  --space-section: 1.25rem;
+  --space-form: 1rem;
+  --space-cell-x: 0.75rem;
+  --space-cell-y: 0.75rem;
+  --space-btn-x: 1rem;
+  --space-btn-y: 0.625rem;
+  --size-sidebar: 16rem;
+  --size-sidebar-collapsed: 4.5rem;
+  --size-header: 3.75rem;
+  --size-bottom-nav: 4rem;
+  --size-control: 2.75rem; /* 44px touch target */
+
+  /* ---- Radius ---- */
+  --r-sm: 0.5rem;
+  --r-md: 0.75rem;
+  --r-lg: 1rem;
+  --r-card: 1.5rem;
+  --r-modal: 1.75rem;
+  --r-pill: 9999px;
+
+  /* ---- Spatial depth: layered glass panels floating over a soft ambient background ---- */
+  --glass: rgb(255 255 255 / 0.62);
+  --glass-strong: rgb(255 255 255 / 0.86);
+  --glass-border: rgb(255 255 255 / 0.75);
+  --glass-edge: rgb(20 40 80 / 0.07); /* faint outer edge so a panel never vanishes into the background */
+  --glass-blur: blur(22px) saturate(1.5);
+
+  /* ---- Shadows (soft, layered: a top highlight + near and far drop shadows) ---- */
+  --sh-xs: 0 1px 2px rgb(20 40 80 / 0.06);
+  --sh-card: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 1px 2px rgb(20 40 80 / 0.05), 0 10px 30px -8px rgb(20 40 80 / 0.12);
+  --sh-pop: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 4px 10px rgb(20 40 80 / 0.08), 0 24px 48px -12px rgb(20 40 80 / 0.28);
+  --sh-modal: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 8px 20px rgb(20 40 80 / 0.12), 0 40px 80px -16px rgb(20 40 80 / 0.38);
+  --sh-btn: inset 0 1px 0 rgb(255 255 255 / 0.28), 0 6px 16px -6px color-mix(in srgb, var(--brand-primary) 70%, transparent);
+}
+
+:root, .brand-scope {
+  /* ---- Tenant-overridable role colours (default to the brand) ---- */
+  --button-bg: var(--brand-primary);
+  --link: var(--brand-primary);
+
+  /* ---- Derived from brand ---- */
+  --primary-hover: color-mix(in srgb, var(--brand-primary) 86%, black);
+  --primary-soft: color-mix(in srgb, var(--brand-primary) 9%, white);
+  --primary-border: color-mix(in srgb, var(--brand-primary) 28%, white);
+  --secondary-soft: color-mix(in srgb, var(--brand-secondary) 10%, white);
+  --accent-soft: color-mix(in srgb, var(--brand-accent) 12%, white);
+  --sidebar-bg: color-mix(in srgb, color-mix(in srgb, var(--brand-secondary) 34%, #04151b) 92%, transparent);
+  --sidebar-hover: color-mix(in srgb, white 9%, var(--sidebar-bg));
+  --sidebar-active: color-mix(in srgb, var(--brand-secondary) 70%, var(--sidebar-bg));
+  --sidebar-text: #dbe9ec;
+  --sidebar-muted: #8fb0b6;
+}
+
+/* A `.brand-scope` element with --brand-* set inline previews a theme locally (used by the branding preview). */
+
+@media (min-width: 768px) {
+  :root {
+    --space-page: 1.5rem;
+    --space-card: 1.25rem;
+    --space-section: 1.5rem;
+    --space-cell-x: 1rem;
+  }
+}
+@media (min-width: 1280px) {
+  :root {
+    --space-page: 2rem;
+    --space-card: 1.5rem;
+  }
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --color-primary: var(--brand-primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-border: var(--primary-border);
+  --color-secondary: var(--brand-secondary);
+  --color-secondary-soft: var(--secondary-soft);
+  --color-accent: var(--brand-accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-btn: var(--button-bg);
+  --color-link: var(--link);
+  --color-sidebar: var(--sidebar-bg);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-text: var(--sidebar-text);
+  --color-sidebar-muted: var(--sidebar-muted);
+
+  --color-app: var(--app-bg);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-on-brand: var(--on-brand);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-emergency: var(--emergency);
+  --color-emergency-soft: var(--emergency-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --spacing-page: var(--space-page);
+  --spacing-card: var(--space-card);
+  --spacing-section: var(--space-section);
+  --spacing-form: var(--space-form);
+  --spacing-sidebar: var(--size-sidebar);
+  --spacing-sidebar-collapsed: var(--size-sidebar-collapsed);
+  --spacing-header: var(--size-header);
+  --spacing-bottom-nav: var(--size-bottom-nav);
+  --spacing-control: var(--size-control);
+  --spacing-btn: var(--space-btn-x);
+
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-card: var(--r-card);
+  --radius-modal: var(--r-modal);
+  --radius-pill: var(--r-pill);
+
+  --shadow-xs: var(--sh-xs);
+  --shadow-card: var(--sh-card);
+  --shadow-pop: var(--sh-pop);
+  --shadow-modal: var(--sh-modal);
+  --shadow-btn: var(--sh-btn);
+  --color-glass: var(--glass);
+  --color-glass-strong: var(--glass-strong);
+}
+
+/* ---- Typography scale: use these classes, never ad-hoc text-xl/font-bold in components ---- */
+@utility type-page-title { font-size: 1.5rem; line-height: 1.3; font-weight: 700; letter-spacing: -0.015em; color: var(--ink); @media (min-width: 768px) { font-size: 1.75rem; } }
+@utility type-section { font-size: 1.1875rem; line-height: 1.4; font-weight: 650; letter-spacing: -0.01em; color: var(--ink); }
+@utility type-card-title { font-size: 1rem; line-height: 1.4; font-weight: 650; color: var(--ink); }
+@utility type-body { font-size: 0.9375rem; line-height: 1.6; font-weight: 400; }
+@utility type-secondary { font-size: 0.875rem; line-height: 1.5; font-weight: 400; color: var(--muted); }
+@utility type-caption { font-size: 0.8125rem; line-height: 1.4; font-weight: 400; color: var(--muted); }
+@utility type-label { font-size: 0.875rem; line-height: 1.3; font-weight: 600; color: var(--ink); }
+@utility type-button { font-size: 0.9375rem; line-height: 1.25; font-weight: 600; }
+@utility type-table { font-size: 0.875rem; line-height: 1.45; }
+@utility type-form { font-size: 1rem; line-height: 1.4; } /* 16px: prevents iOS zoom-on-focus */
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    /* Ambient light: the tenant's brand colours glow softly behind the glass panels. */
+    background:
+      radial-gradient(56rem 38rem at 8% -8%, color-mix(in srgb, var(--brand-primary) 24%, transparent), transparent 62%),
+      radial-gradient(48rem 34rem at 100% 2%, color-mix(in srgb, var(--brand-accent) 22%, transparent), transparent 58%),
+      radial-gradient(60rem 40rem at 55% 112%, color-mix(in srgb, var(--brand-secondary) 15%, transparent), transparent 62%),
+      var(--app-bg);
+    background-attachment: fixed;
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  :focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 2px; }
+  a { color: var(--link); }
+  ::selection { background: var(--primary-soft); }
+  dialog { padding: 0; border: 0; background: transparent; color: inherit; max-width: 100vw; max-height: 100dvh; }
+  dialog::backdrop { background: rgb(12 24 40 / 0.38); backdrop-filter: blur(10px); }
+}
+
+/* ---- Spatial surfaces ---- */
+@utility glass {
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  outline: 1px solid var(--glass-edge);
+  outline-offset: -1px;
+  box-shadow: var(--sh-card);
+}
+@utility glass-strong {
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  outline: 1px solid var(--glass-edge);
+  outline-offset: -1px;
+}
+/* Buttons rise slightly when hovered and press back down (depth feedback). */
+@utility lift { transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.18s ease, background-color 0.15s ease; &:hover:not(:disabled):not([aria-disabled="true"]) { transform: translateY(-1px); } &:active:not(:disabled) { transform: translateY(0) scale(0.99); } }
+/* No blur support, or the user asked for less transparency, or printing: solid panels. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .glass, .glass-strong { background: var(--surface); } }
+@media (prefers-reduced-transparency: reduce) { .glass, .glass-strong { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } body { background: var(--app-bg); } }
+@media print { .glass, .glass-strong { background: #fff; backdrop-filter: none; box-shadow: none; outline: 0; } body { background: #fff; } }
+
+/* Rich text from the CMS (rendered by components/website/markdown.tsx as React elements). */
+.prose-site { font-size: 1rem; line-height: 1.75; color: var(--ink); overflow-wrap: anywhere; }
+.prose-site > * + * { margin-top: 1rem; }
+.prose-site h2 { font-size: 1.375rem; line-height: 1.3; font-weight: 700; margin-top: 2rem; }
+.prose-site h3 { font-size: 1.125rem; line-height: 1.4; font-weight: 650; margin-top: 1.5rem; }
+.prose-site ul { list-style: disc; padding-left: 1.25rem; }
+.prose-site ol { list-style: decimal; padding-left: 1.25rem; }
+.prose-site li + li { margin-top: 0.25rem; }
+.prose-site blockquote { border-left: 4px solid var(--primary-border); padding-left: 1rem; color: var(--muted); font-style: italic; }
+.prose-site a { text-decoration: underline; text-underline-offset: 2px; }
+/* Links inside running text must not rely on colour alone (WCAG 1.4.1) */
+p a:not(.no-underline) { text-decoration: underline; text-underline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+
+@keyframes skeleton-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes drawer-in { from { transform: translateX(-100%); } to { transform: none; } }

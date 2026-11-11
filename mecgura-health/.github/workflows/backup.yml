@@ -1,0 +1,56 @@
+name: Database backup
+# Daily logical backup of the `health` schema from Neon, restored into a scratch Postgres to prove it is usable,
+# then encrypted (AES-256, gpg) and kept as a private workflow artifact for 30 days. The repository must stay PRIVATE.
+# Needs repository secrets: DATABASE_URL_UNPOOLED (direct Neon URL), BACKUP_PASSPHRASE (long random string; store it separately, losing it makes backups unreadable).
+# This complements — does not replace — Neon point-in-time recovery (enable it in the Neon console).
+on:
+  schedule:
+    - cron: "17 20 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      scratch:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: scratch
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - name: Check secrets
+        env:
+          URL: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$PASS" ]; then echo "::error::DATABASE_URL_UNPOOLED and BACKUP_PASSPHRASE secrets are required"; exit 1; fi
+      - name: Dump the health schema
+        env:
+          URL: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: |
+          set -o pipefail
+          docker run --rm postgres:17 pg_dump -Fc --schema=health --no-owner --no-privileges "$URL" > health.dump
+          ls -l health.dump
+      - name: Restore into a scratch database and verify
+        run: |
+          docker run --rm --network host -v "$PWD:/b" -e PGPASSWORD=scratch postgres:17 pg_restore --no-owner -h localhost -U postgres -d postgres /b/health.dump
+          users=$(docker run --rm --network host -e PGPASSWORD=scratch postgres:17 psql -h localhost -U postgres -d postgres -Atc 'select count(*) from health."User"')
+          roles=$(docker run --rm --network host -e PGPASSWORD=scratch postgres:17 psql -h localhost -U postgres -d postgres -Atc 'select count(*) from health."Role"')
+          echo "restore check: users=$users roles=$roles"
+          test "$roles" -ge 1 && test "$users" -ge 1
+      - name: Encrypt
+        env:
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASS" --symmetric --cipher-algo AES256 -o "health-$(date -u +%Y%m%dT%H%M%SZ).dump.gpg" health.dump
+          rm -f health.dump; ls -l *.gpg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: health-db-backup
+          path: "*.gpg"
+          retention-days: 30
+          if-no-files-found: error

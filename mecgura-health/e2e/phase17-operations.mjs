@@ -1,0 +1,24 @@
+/** Live checks for Phase 17: health/ready/version, scheduler job history, System health, security headers on ops endpoints. Run against a production build after `npm run db:seed` (server started with CRON_SECRET=e2e-cron-secret-0123456789). */
+import { chromium } from "playwright-core";
+const PORT = process.env.PORT ?? "3101"; const BASE = `http://localhost:${PORT}`; const PW = process.env.SEED_DEMO_PASSWORD ?? "Demo-Local-Pass-1"; const CRON = "e2e-cron-secret-0123456789";
+let pass = 0; const fails = []; const check = (n, ok, extra = "") => { if (ok) pass++; else { fails.push(n); console.log("  ✗", n, extra); } };
+const h = await fetch(`${BASE}/health`); const hj = await h.json(); check("/health is public, 200, {status:ok}", h.status === 200 && hj.status === "ok" && Object.keys(hj).length === 1);
+const r = await fetch(`${BASE}/ready`); const rj = await r.json(); check("/ready 200 with named checks", r.status === 200 && rj.checks.some((c) => c.name === "database" && c.status === "ok"));
+check("/ready labels unconfigured providers, never 'ok' without config", rj.checks.filter((c) => /_provider$/.test(c.name)).every((c) => c.status === "not_configured" || /configured/.test(c.detail)));
+check("/ready leaks no secrets/env values", !JSON.stringify(rj).match(/postgres:\/\/|file:\.|e2e-cron/));
+const v = await (await fetch(`${BASE}/version`)).json(); check("/version has name+version only-safe fields", v.name === "mecgura-health" && !!v.version && !JSON.stringify(v).match(/secret|password/i));
+check("ops endpoints are not cacheable", (await fetch(`${BASE}/ready`)).headers.get("cache-control") === "no-store");
+const noAuth = await fetch(`${BASE}/api/internal/communications/run`, { method: "POST" }); check("scheduler endpoint refuses without secret", noAuth.status === 401 || noAuth.status === 403);
+const run = await fetch(`${BASE}/api/internal/communications/run`, { method: "POST", headers: { authorization: `Bearer ${CRON}` } }); const rr = await run.json();
+check("scheduler tick runs and reports failedJobs", run.status === 200 && rr.ok === true && rr.failedJobs === 0, JSON.stringify(rr).slice(0, 200));
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH ?? "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args: ["--no-sandbox"] });
+const ctx = await browser.newContext({ baseURL: BASE }); const page = await ctx.newPage(); const errors = []; page.on("pageerror", (e) => errors.push(String(e)));
+await page.goto("/login"); await page.fill("input[name=identifier]", "platform@demo.mecgura.test"); await page.fill("input[name=password]", PW); await page.click("button[type=submit]"); await page.waitForURL((u) => !u.pathname.endsWith("/login"), { timeout: 20000 });
+await page.goto("/platform/system"); const t = await page.textContent("body");
+check("System page shows Background jobs, Error monitoring and Backups from real data", /Background jobs/.test(t) && /Error monitoring/.test(t) && /Backups/.test(t));
+check("System page no longer says backups are 'a later phase'", !/later phase/i.test(t));
+check("System page shows scheduler job just recorded", /last run/i.test(t));
+check("no browser errors on System page", errors.length === 0, errors.join("|"));
+const api = await ctx.request.get(`${BASE}/api/platform/system`); const sj = await api.json(); check("system API lists jobs/errors/backups components", ["jobs", "errors", "backups"].every((k) => sj.data.components.some((c) => c.key === k)));
+const anon = await fetch(`${BASE}/api/platform/system`); check("system API refuses anonymous", anon.status === 401);
+await browser.close(); console.log(`Phase 17 e2e: ${pass} passed, ${fails.length} failed`); process.exit(fails.length ? 1 : 0);
