@@ -250,6 +250,44 @@ export function AnalyticsApp({ orgId, numbers }: { orgId: string; numbers: { id:
   );
 }
 
+type ConvData = { enabled: boolean; leads: number; sales: number; salesValuePaise: number; notSent: number; lastProblem: string };
+
+/** Qualified leads and sales from ads that MECGURA reported back to Meta, with the on/off switch. */
+function AdConversions({ orgId, days }: { orgId: string; days: string }) {
+  const [d, setD] = React.useState<ConvData | null>(null);
+  const url = `/api/organizations/${orgId}/ads/conversions`;
+  React.useEffect(() => {
+    let cancelled = false;
+    void apiFetch<ConvData>(`${url}?days=${days}`).then((r) => {
+      if (!cancelled && r.ok) setD(r.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [url, days]);
+  if (!d) return null;
+  async function toggle() {
+    if (!d) return;
+    const r = await apiFetch<{ enabled: boolean }>(url, { method: "PUT", body: { enabled: !d.enabled } });
+    if (r.ok) setD({ ...d, enabled: r.data.enabled });
+  }
+  return (
+    <div className="mx-5 mt-3 rounded-md border border-app-border p-3 text-small">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-medium text-app-text">Tell Meta which ad chats became real customers</p>
+        <button type="button" onClick={toggle} className="rounded-md border border-app-border px-2 py-1 text-caption font-medium text-app-text hover:bg-app-hover">
+          {d.enabled ? "On · turn off" : "Off · turn on"}
+        </button>
+      </div>
+      <p className="mt-1 text-app-muted">
+        When you mark an ad customer as Qualified or Won, Meta is told automatically, so your ads find more people like them.
+        {d.enabled ? ` Reported in this period: ${d.leads} qualified lead${d.leads === 1 ? "" : "s"}, ${d.sales} sale${d.sales === 1 ? "" : "s"}${d.salesValuePaise ? ` (₹${Math.round(d.salesValuePaise / 100).toLocaleString("en-IN")})` : ""}.` : ""}
+      </p>
+      {d.enabled && d.notSent ? <p className="mt-1 text-caption text-app-subtle">{d.notSent} could not be reported. Latest reason: {d.lastProblem}</p> : null}
+    </div>
+  );
+}
+
 type AdsData = { days: number; totalChats: number; customers: number; optedIn: number; ads: { sourceId: string; sourceType: string; headline: string; chats: number; customers: number; lastAt: string }[] };
 
 /** Click-to-WhatsApp ads: which ads started chats in this period. Empty until a customer messages you from an ad. */
@@ -268,6 +306,7 @@ function AdsCard({ orgId, days }: { orgId: string; days: string }) {
   return (
     <Card className="mt-4">
       <CardHeader title="Click-to-WhatsApp ads" description="Chats that started from a Facebook or Instagram ad." />
+      <AdConversions orgId={orgId} days={days} />
       {data.ads.length ? (
         <>
           <p className="px-5 pt-3 text-small text-app-muted">

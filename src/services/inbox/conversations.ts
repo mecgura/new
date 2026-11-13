@@ -133,6 +133,7 @@ export function toMessageDto(m: MessageRow) {
     direction: m.direction,
     type: m.type,
     body: m.body,
+    transcript: m.transcript,
     payload,
     status: m.status,
     error: m.error,

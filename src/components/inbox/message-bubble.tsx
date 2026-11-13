@@ -124,6 +124,12 @@ export function MessageBubble({
           </div>
         ) : null}
         {m.body ? <p className="whitespace-pre-wrap break-words">{m.body}</p> : null}
+        {m.transcript ? (
+          <p className="whitespace-pre-wrap break-words text-small">
+            <span className="block text-caption opacity-70">Voice note, written out:</span>
+            {m.transcript}
+          </p>
+        ) : null}
         {payload.footer ? <p className="mt-1 text-caption text-app-subtle">{payload.footer}</p> : null}
         {m.type === "button" ? <p className="mt-1 text-caption text-app-muted">Tapped a button</p> : null}
         {payload.buttons?.length ? (

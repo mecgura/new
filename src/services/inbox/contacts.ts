@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { conversionForLeadStatus, reportAdConversion } from "@/services/ads/conversions";
 import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { publish } from "@/lib/realtime/broker";
@@ -237,6 +238,8 @@ export async function updateContact(ctx: Ctx, id: string, input: ContactInput) {
   if (input.tags) await setContactTags(ctx, id, input.tags, { silent: true });
   if (input.leadStatus && input.leadStatus !== before.leadStatus) {
     await emitAutomationEvent(ctx.organizationId, { type: "lead_status", contactId: id, from: before.leadStatus, to: input.leadStatus });
+    const conversion = conversionForLeadStatus(input.leadStatus);
+    if (conversion) await reportAdConversion(ctx.organizationId, id, conversion);
   }
   if (input.optInStatus && input.optInStatus !== before.optInStatus) {
     await recordConsent(ctx, id, { status: input.optInStatus, source: "manual", evidence: input.consentEvidence ?? "" }, { silent: true });

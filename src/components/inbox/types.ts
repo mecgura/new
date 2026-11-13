@@ -28,6 +28,7 @@ export type Message = {
   direction: "inbound" | "outbound" | "internal";
   type: string;
   body: string;
+  transcript?: string;
   payload: Record<string, unknown>;
   status: string;
   error: string;

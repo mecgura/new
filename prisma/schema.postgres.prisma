@@ -350,6 +350,9 @@ model OrganizationSettings {
   loyalty            String    @default("") // JSON loyalty + referral programme settings ("" = defaults, off)
   reviews            String    @default("") // JSON review-request settings ("" = defaults)
   social             String    @default("") // JSON social settings: approval required, brand voice ("" = defaults)
+  adConversions      Boolean   @default(true) // report qualified leads and sales from click-to-WhatsApp ads back to Meta
+  voiceNotes         Boolean   @default(true) // turn customers' voice notes into text
+  sheetsWebhookUrl   String    @default("") // Google Apps Script web app URL that receives each new lead
   updatedAt          DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -407,6 +410,7 @@ model WhatsAppBusinessAccount {
   accountStatus       String    @default("")
   lastAccountEvent    String    @default("")
   lastAccountEventAt  DateTime?
+  capiDatasetId       String    @default("") // Meta dataset used to report ad conversions for this account
   isDemo              Boolean   @default(false)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -670,6 +674,7 @@ model Message {
   direction      String // inbound | outbound | internal
   type           String // text | image | document | video | audio | template | interactive | button | note | unsupported
   body           String    @default("")
+  transcript     String    @default("") // text of a voice note (filled in after it arrives)
   payload        String    @default("{}") // JSON: template / buttons / interactive reply data
   externalId     String?   @unique // WhatsApp message id (wamid)
   status         String    @default("pending") // pending | sent | delivered | read | failed | received
@@ -783,6 +788,7 @@ model MessageTemplate {
   body           String    @default("")
   footer         String    @default("")
   buttons        String    @default("[]") // JSON array of buttons
+  cards          String    @default("[]") // JSON array of carousel cards (empty = normal template)
   examples       String    @default("{}") // JSON: sample values Meta needs for review
   authOptions    String    @default("{}") // JSON (AUTHENTICATION only)
   metaTemplateId String    @default("")
@@ -1500,6 +1506,80 @@ model AdReferral {
   @@index([organizationId, createdAt])
   @@index([organizationId, sourceId])
   @@index([contactId])
+}
+
+// "When someone comments this word on Instagram, send them a DM". One rule per set of keywords.
+model CommentRule {
+  id               String    @id @default(cuid())
+  organizationId   String
+  channelAccountId String
+  name             String
+  keywords         String    @default("[]") // JSON array, lowercase; empty = every comment
+  dmText           String
+  publicReply      String    @default("") // optional reply under the comment
+  status           String    @default("active") // active | paused
+  repliesCount     Int       @default(0)
+  lastReplyAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  replies CommentReply[]
+
+  @@index([organizationId])
+  @@index([channelAccountId, status])
+}
+
+// One comment that was answered (kept so the same comment is never answered twice).
+model CommentReply {
+  id             String   @id @default(cuid())
+  organizationId String
+  ruleId         String
+  commentId      String   @unique
+  fromUsername   String   @default("")
+  text           String   @default("")
+  status         String   @default("sent") // sent | failed
+  error          String   @default("")
+  createdAt      DateTime @default(now())
+
+  rule CommentRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+}
+
+// An unpaid bill uploaded from Tally / Excel; the customer gets WhatsApp payment reminders until it is marked paid.
+model DueReminder {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String    @default("")
+  phone          String
+  invoiceNo      String    @default("")
+  amountPaise    Int
+  dueDate        DateTime?
+  status         String    @default("pending") // pending | sent | paid | failed
+  sentCount      Int       @default(0)
+  lastSentAt     DateTime?
+  error          String    @default("")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([organizationId, phone, invoiceNo])
+  @@index([organizationId, status])
+}
+
+// One conversion reported to Meta for a customer who came from a click-to-WhatsApp ad (one row per customer and event).
+model AdConversion {
+  id             String   @id @default(cuid())
+  organizationId String
+  contactId      String
+  event          String // LeadSubmitted | Purchase
+  adId           String   @default("")
+  valuePaise     Int      @default(0)
+  status         String   @default("sent") // sent | failed | skipped
+  error          String   @default("")
+  createdAt      DateTime @default(now())
+
+  @@unique([contactId, event])
+  @@index([organizationId, createdAt])
 }
 
 // A Facebook Page whose Lead Ad forms feed MECGURA. Each new lead becomes a contact (with the consent the owner confirmed)

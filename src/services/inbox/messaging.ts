@@ -435,6 +435,8 @@ export type InboundInput = {
   replyToExternalId?: string;
   /** Click-to-WhatsApp ad this message came from (Meta sends it with the customer's first message). */
   referral?: { sourceType: string; sourceId: string; sourceUrl: string; headline: string; body: string; ctwaClid: string };
+  /** Text of a voice note when it is already known (simulator, tests). Real voice notes are transcribed on arrival. */
+  transcript?: string;
   at: Date;
   isDemo: boolean;
 };
@@ -472,6 +474,20 @@ export async function receiveInbound(organizationId: string, whatsappAccountId: 
       ...(input.attachments?.length ? { attachments: { create: input.attachments } } : {}),
     },
   });
+  // Voice note: write down what was said so the team can read it and automations / the AI agent can answer it.
+  let spoken = "";
+  if (input.type === "audio" && !input.body) {
+    spoken = (input.transcript ?? "").trim().slice(0, 2000);
+    const mediaId = input.attachments?.[0]?.providerMediaId ?? "";
+    if (!spoken && !input.isDemo && mediaId) {
+      const { transcribeVoiceNote } = await import("@/services/inbox/voice-notes");
+      spoken = await transcribeVoiceNote(organizationId, whatsappAccountId, mediaId);
+    }
+    if (spoken) {
+      await db.message.update({ where: { id: msg.id }, data: { transcript: spoken } });
+      await db.conversation.update({ where: { id: conv.id }, data: { lastMessagePreview: `🎤 ${spoken}`.slice(0, 120) } });
+    }
+  }
   if (input.referral && (input.referral.sourceId || input.referral.sourceUrl || input.referral.headline)) {
     await db.adReferral.create({ data: { organizationId, conversationId: conv.id, contactId: contact.id, messageId: msg.id, ...input.referral } }).catch((e) => console.error("[ads] saving referral failed:", e));
   }
@@ -528,8 +544,8 @@ export async function receiveInbound(organizationId: string, whatsappAccountId: 
     conversationId: conv.id,
     whatsappAccountId,
     messageId: msg.id,
-    text: input.body,
-    messageType: input.type,
+    text: spoken || input.body,
+    messageType: spoken ? "text" : input.type,
     replyToTemplateId: quotedTemplate,
     flowName: input.type === "flow" ? String((input.payload as { flowName?: string } | undefined)?.flowName ?? "") : null,
     optOut,
@@ -537,7 +553,7 @@ export async function receiveInbound(organizationId: string, whatsappAccountId: 
     adHeadline: input.referral?.headline ?? "",
   });
   // AI agent: answers after the response is sent (the webhook must not wait on the model).
-  const aiInput = { conversationId: conv.id, contactId: contact.id, whatsappAccountId, messageId: msg.id, type: input.type, text: input.body, optOut, automationHandled };
+  const aiInput = { conversationId: conv.id, contactId: contact.id, whatsappAccountId, messageId: msg.id, type: spoken ? "text" : input.type, text: spoken || input.body, optOut, automationHandled };
   runAfterResponse(async () => {
     // A first message to MECGURA's own number becomes a lead in Admin → Marketing.
     const { captureWhatsAppLead } = await import("@/services/marketing/capture");
