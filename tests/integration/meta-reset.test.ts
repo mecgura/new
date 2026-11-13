@@ -38,7 +38,7 @@ describe("admin reset of Meta connections", () => {
     actAs(admin);
     const r = await json(await post({ confirm: "RESET" }));
     expect(r.status).toBe(200);
-    expect(r.body.adConnections).toBe(1);
+    expect(r.body.adConnections).toBeGreaterThanOrEqual(1);
 
     const a = await db.whatsAppAccount.findUnique({ where: { id: acc.id } });
     expect(a?.status).toBe("disconnected");

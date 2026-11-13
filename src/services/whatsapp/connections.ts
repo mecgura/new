@@ -5,7 +5,7 @@ import { audit } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
 import { decryptSecret, encryptSecret, isEncryptionConfigured, last4, randomToken, sha256 } from "@/lib/crypto";
 import { siteConfig } from "@/config/site";
-import { isDemoAvailable, isMetaConfigured, publicMetaConfig } from "@/providers/meta/config";
+import { getMetaConfig, isDemoAvailable, isMetaConfigured, publicMetaConfig } from "@/providers/meta/config";
 import { MetaApiError } from "@/providers/meta/graph";
 import {
   exchangeCodeForToken,
@@ -593,6 +593,8 @@ export async function diagnoseConnection(organizationId: string, accountId: stri
       } catch {
         secret = "";
       }
+      // Numbers connected with "Connect with Meta" use MECGURA's own app, whose secret lives on the server.
+      if (!secret) secret = getMetaConfig().appSecret;
       const apps = (await listSubscribedApps(wabaId, token).catch(() => [])).filter((a) => a.id);
       let ours: { name?: string; id?: string; subs: Awaited<ReturnType<typeof getAppSubscriptions>> } | null = null;
       if (secret) {
@@ -632,7 +634,13 @@ export async function diagnoseConnection(organizationId: string, accountId: stri
   }
 
   const wh = acc.connection.webhook;
-  add("secret", "App secret stored (signature check)", acc.connection.encryptedAppSecret ? "ok" : "fail", acc.connection.encryptedAppSecret ? "Incoming messages are verified with your app secret." : "Not stored: every incoming message would be rejected. Reconnect with the app secret.");
+  const platformSecret = Boolean(getMetaConfig().appSecret);
+  add(
+    "secret",
+    "App secret (signature check)",
+    acc.connection.encryptedAppSecret || platformSecret ? "ok" : "fail",
+    acc.connection.encryptedAppSecret ? "Incoming messages are verified with your app secret." : platformSecret ? "Incoming messages are verified with MECGURA's Meta app secret." : "Not stored: every incoming message would be rejected. Reconnect with the app secret."
+  );
   const since = new Date(Date.now() - 7 * 86_400_000);
   const [received, failed] = await Promise.all([
     db.webhookEvent.count({ where: { organizationId, wabaId, receivedAt: { gte: since } } }),
