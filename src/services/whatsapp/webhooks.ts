@@ -177,7 +177,7 @@ async function processEvent(organizationId: string, wabaRecordId: string, ev: No
 // ---------------------------------------------------------------------------
 
 type SocialMessaging = { sender?: { id?: string }; timestamp?: number; message?: { mid?: string; text?: string; is_echo?: boolean; attachments?: unknown[] } };
-type PageWebhookPayload = { object: "page" | "instagram"; entry?: { id?: string | number; messaging?: SocialMessaging[]; changes?: { field?: string; value?: { leadgen_id?: string | number; form_id?: string | number; page_id?: string | number } }[] }[] };
+type PageWebhookPayload = { object: "page" | "instagram"; entry?: { id?: string | number; messaging?: SocialMessaging[]; changes?: { field?: string; value?: { leadgen_id?: string | number; form_id?: string | number; page_id?: string | number; id?: string; text?: string; from?: { id?: string; username?: string } } }[] }[] };
 
 /**
  * Page webhooks carry Lead Ad submissions (`leadgen`). Same rule as WhatsApp events: nothing is trusted until the signature
@@ -223,6 +223,14 @@ async function ingestPageWebhook(raw: Buffer, signatureHeader: string | null, pa
       else duplicates++;
     }
     for (const change of entry.changes ?? []) {
+      if (change.field === "comments" && account && payload.object === "instagram") {
+        const v = change.value as { id?: string; text?: string; from?: { id?: string; username?: string } } | undefined;
+        const { handleInstagramComment } = await import("@/services/social/comment-rules");
+        const r = await handleInstagramComment(account, { commentId: String(v?.id ?? ""), text: String(v?.text ?? ""), fromId: String(v?.from?.id ?? ""), username: String(v?.from?.username ?? "") });
+        if (r === "duplicate") duplicates++;
+        else if (r !== "ignored") received++;
+        continue;
+      }
       if (change.field !== "leadgen" || !change.value?.leadgen_id) continue;
       const result = await handleLeadgen(String(change.value.page_id ?? entry.id ?? ""), String(change.value.leadgen_id), String(change.value.form_id ?? ""));
       if (result === "duplicate") duplicates++;

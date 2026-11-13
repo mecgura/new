@@ -6,6 +6,7 @@ import * as channel from "@/app/api/organizations/[orgId]/channels/[chid]/route"
 import * as simulate from "@/app/api/organizations/[orgId]/channels/[chid]/simulate/route";
 import * as webchat from "@/app/api/webchat/[key]/route";
 import * as metaWebhook from "@/app/api/webhooks/meta/route";
+import * as commentRules from "@/app/api/organizations/[orgId]/comment-rules/route";
 import { createHmac } from "node:crypto";
 import * as inboundHook from "@/app/api/webhooks/channels/[key]/route";
 import * as convList from "@/app/api/organizations/[orgId]/inbox/conversations/route";
@@ -291,6 +292,34 @@ describe("channels: Messenger and Instagram", () => {
     expect(sent.body.message).toMatchObject({ status: "sent" });
     const out = calls.find((c) => c.url.pathname.endsWith("/messages"))!;
     expect(out.body).toMatchObject({ recipient: { id: "psid-1" }, messaging_type: "RESPONSE", message: { text: "Yes!" } });
+  });
+
+  it("an Instagram comment with the chosen word gets one private reply (and a public one), never twice", async () => {
+    vi.stubEnv("META_APP_SECRET", SECRET);
+    const calls: { url: URL; body?: Record<string, unknown> }[] = [];
+    graphOk(calls);
+    const t = await tenant();
+    const { address } = await connect(t, "instagram");
+    const account = await db.channelAccount.findFirstOrThrow({ where: { organizationId: t.org.id, kind: "instagram" } });
+    actAs(t.agent);
+    expect((await commentRules.POST(post({ channelAccountId: account.id, name: "Price", keywords: ["Price"], dmText: "Hi {{name}}, our price list: https://shop.test/p" }), P(t.org.id))).status).toBe(403);
+    actAs(t.owner);
+    const made = await json(await commentRules.POST(post({ channelAccountId: account.id, name: "Price", keywords: ["Price"], dmText: "Hi {{name}}, our price list: https://shop.test/p", publicReply: "Sent you a DM!" }), P(t.org.id)));
+    expect(made.status).toBe(201);
+    const comment = (id: string, text: string, from = "u1") => ({ id: address, changes: [{ field: "comments", value: { id, text, from: { id: from, username: "simran" }, media: { id: "m1" } } }] });
+    calls.length = 0;
+    expect((await json(await metaWebhook.POST(signed("instagram", comment("c1", "What is the PRICE?"))))).body).toEqual({ received: 1, duplicates: 0 });
+    const dm = calls.find((c) => c.url.pathname.endsWith("/me/messages"))!;
+    expect(dm.body).toMatchObject({ recipient: { comment_id: "c1" }, message: { text: "Hi @simran, our price list: https://shop.test/p" } });
+    expect(calls.some((c) => c.url.pathname.endsWith("/c1/replies"))).toBe(true);
+    // Same comment again, a comment without the word, and the business's own comment: nothing is sent.
+    calls.length = 0;
+    expect((await json(await metaWebhook.POST(signed("instagram", comment("c1", "What is the PRICE?"))))).body).toEqual({ received: 0, duplicates: 1 });
+    expect((await json(await metaWebhook.POST(signed("instagram", comment("c2", "Nice photo"))))).body).toEqual({ received: 0, duplicates: 0 });
+    expect((await json(await metaWebhook.POST(signed("instagram", comment("c3", "price is in bio", address))))).body).toEqual({ received: 0, duplicates: 0 });
+    expect(calls).toHaveLength(0);
+    const list = await json(await commentRules.GET(req("/x"), P(t.org.id)));
+    expect((list.body.rules as { repliesCount: number }[])[0].repliesCount).toBe(1);
   });
 
   it("refuses replies after the 24-hour window; instagram events only reach instagram inboxes", async () => {

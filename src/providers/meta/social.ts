@@ -34,3 +34,15 @@ export async function publishInstagramPost(token: string, igUserId: string, capt
   const r = await graph<{ id?: string }>(`${igUserId}/media_publish`, { token, method: "POST", body: { creation_id: c.id }, timeoutMs: 30_000 });
   return r.id ?? "";
 }
+
+/** Sends one private message to the person who wrote an Instagram comment (Meta allows a single private reply per comment). */
+export async function sendCommentPrivateReply(token: string, commentId: string, text: string) {
+  const r = await graph<{ message_id?: string }>("me/messages", { token, method: "POST", body: { recipient: { comment_id: commentId }, message: { text: text.slice(0, 1000) } } });
+  return r.message_id ?? "";
+}
+
+/** Replies in public under an Instagram comment. */
+export async function replyToComment(token: string, commentId: string, text: string) {
+  const r = await graph<{ id?: string }>(`${commentId}/replies`, { token, method: "POST", body: { message: text.slice(0, 300) } });
+  return r.id ?? "";
+}

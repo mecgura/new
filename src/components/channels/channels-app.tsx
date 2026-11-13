@@ -5,6 +5,7 @@ import { Mail, Trash2 } from "lucide-react";
 import { Alert, Badge, Button, Card, CardBody, CardHeader, ConfirmationDialog, EmptyState, ErrorState, Field, Input, LoadingState, Modal, PageHeader, Select, useToast } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
 import { siteConfig } from "@/config/site";
+import { CommentRules } from "@/components/channels/comment-rules";
 
 type Channel = { id: string; kind: string; name: string; address: string; status: "demo" | "active" | "disabled"; inboundPath: string; conversations: number; publicKey?: string; settings: Record<string, string> };
 
@@ -136,6 +137,7 @@ export function ChannelsApp({ orgId, canManage }: { orgId: string; canManage: bo
           <p className="mt-3 text-small text-app-muted">Website chat works right away: paste the snippet on your site and visitors can message you. Email is plain text for now. WhatsApp campaigns and templates stay WhatsApp-only.</p>
         </CardBody>
       </Card>
+      <CommentRules orgId={orgId} canManage={canManage} />
       <AddModal open={open} onClose={() => setOpen(false)} base={base} onDone={() => { setOpen(false); void load(); }} />
       <SimulateModal channel={simulating} onClose={() => setSimulating(null)} base={base} />
       <ConfirmationDialog open={Boolean(removing)} onClose={() => setRemoving(null)} onConfirm={remove} title="Remove this inbox?" description="Its conversations and messages are deleted from MECGURA. This cannot be undone." confirmLabel="Remove" tone="danger" />
