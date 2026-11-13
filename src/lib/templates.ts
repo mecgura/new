@@ -79,6 +79,10 @@ export type AuthOptions = { addSecurityRecommendation: boolean; codeExpirationMi
 
 export type TemplateExamples = { header?: string[]; body?: string[] };
 
+/** One swipeable card of a carousel template: a picture, a short text and one or two buttons. */
+export type TemplateCard = { imageUrl: string; body: string; buttons: TemplateButton[] };
+export const CARD_LIMITS = { min: 2, max: 10, body: 160, buttons: 2 };
+
 export type TemplateDef = {
   name: string;
   language: string;
@@ -90,6 +94,8 @@ export type TemplateDef = {
   buttons: TemplateButton[];
   examples: TemplateExamples;
   authOptions: AuthOptions;
+  /** Carousel cards. Empty or missing = a normal template. */
+  cards?: TemplateCard[];
 };
 
 export const DEFAULT_AUTH_OPTIONS: AuthOptions = { addSecurityRecommendation: true, codeExpirationMinutes: 10, buttonText: "Copy code" };
@@ -237,6 +243,30 @@ export function validateTemplate(t: TemplateDef, opts: { forSubmit?: boolean } =
     if (x.type === "PHONE_NUMBER" && !/^\+[1-9]\d{7,14}$/.test(x.phone)) err(k, "Enter the phone number with country code, e.g. +919876543210.");
   });
 
+  // Carousel cards
+  const cards = t.cards ?? [];
+  if (cards.length) {
+    if (t.category !== "MARKETING") err("cards", "Carousel templates must be Marketing.");
+    if (t.headerType !== "none") err("cards", "A carousel can't have a header. Each card has its own picture.");
+    if (t.footer.trim()) err("cards", "A carousel can't have a footer.");
+    if (b.length) err("cards", "Put buttons on the cards, not on the message.");
+    if (cards.length < CARD_LIMITS.min || cards.length > CARD_LIMITS.max) err("cards", `Use ${CARD_LIMITS.min} to ${CARD_LIMITS.max} cards.`);
+    const shape = (c: TemplateCard) => c.buttons.map((x) => x.type).join(",");
+    cards.forEach((c, i) => {
+      const k = `cards.${i}`;
+      if (!/^https:\/\/\S+$/.test(c.imageUrl) || c.imageUrl.length > LIMITS.url) err(k, "Add a picture link that starts with https://.");
+      if (!c.body.trim() || c.body.length > CARD_LIMITS.body) err(k, `Card text: 1–${CARD_LIMITS.body} characters.`);
+      if (/\{\{/.test(c.body)) err(k, "Card text can't contain variables.");
+      if (c.buttons.length < 1 || c.buttons.length > CARD_LIMITS.buttons) err(k, `Each card needs 1 or ${CARD_LIMITS.buttons} buttons.`);
+      if (shape(c) !== shape(cards[0])) err(k, "Every card must have the same kinds of buttons in the same order.");
+      c.buttons.forEach((x) => {
+        if (!x.text.trim() || x.text.length > LIMITS.buttonText) err(k, `Button text: 1–${LIMITS.buttonText} characters.`);
+        if (x.type === "PHONE_NUMBER") err(k, "Cards can have reply buttons and website buttons only.");
+        if (x.type === "URL" && !/^https?:\/\/[^\s{}]+$/.test(x.url)) err(k, "Enter a full website link without variables.");
+      });
+    });
+  }
+
   if (t.category === "MARKETING" && !/stop|opt.?out|unsubscribe/i.test(`${t.footer} ${t.body} ${b.map((x) => x.text).join(" ")}`)) {
     warnings.push("Tip: add an opt-out line (e.g. footer “Reply STOP to unsubscribe”) — it reduces blocks and protects your quality rating.");
   }
@@ -248,7 +278,7 @@ export function validateTemplate(t: TemplateDef, opts: { forSubmit?: boolean } =
 // ---------------------------------------------------------------------------
 
 /** Template → Meta "create template" components (POST /{waba}/message_templates). */
-export function toMetaComponents(t: TemplateDef, headerHandle?: string): Record<string, unknown>[] {
+export function toMetaComponents(t: TemplateDef, headerHandle?: string, cardHandles: string[] = []): Record<string, unknown>[] {
   if (t.category === "AUTHENTICATION") {
     return [
       { type: "BODY", add_security_recommendation: t.authOptions.addSecurityRecommendation },
@@ -275,6 +305,18 @@ export function toMetaComponents(t: TemplateDef, headerHandle?: string): Record<
             ? { type: "PHONE_NUMBER", text: b.text, phone_number: b.phone }
             : { type: "QUICK_REPLY", text: b.text }
       ),
+    });
+  }
+  if (t.cards?.length) {
+    out.push({
+      type: "CAROUSEL",
+      cards: t.cards.map((c, i) => ({
+        components: [
+          { type: "HEADER", format: "IMAGE", ...(cardHandles[i] ? { example: { header_handle: [cardHandles[i]] } } : {}) },
+          { type: "BODY", text: c.body },
+          { type: "BUTTONS", buttons: c.buttons.map((b) => (b.type === "URL" ? { type: "URL", text: b.text, url: b.url } : { type: "QUICK_REPLY", text: b.text })) },
+        ],
+      })),
     });
   }
   return out;
@@ -360,7 +402,7 @@ export function mapMetaStatus(status: string): TemplateStatus {
 export type SlotValues = Record<string, string>;
 
 /** Template + values → Cloud API send components. */
-export function toSendComponents(t: Pick<TemplateDef, "category" | "headerType" | "headerText" | "body" | "buttons">, values: SlotValues): Record<string, unknown>[] {
+export function toSendComponents(t: Pick<TemplateDef, "category" | "headerType" | "headerText" | "body" | "buttons" | "cards">, values: SlotValues): Record<string, unknown>[] {
   if (t.category === "AUTHENTICATION") {
     const code = values["body.1"] ?? "";
     return [
@@ -380,6 +422,18 @@ export function toSendComponents(t: Pick<TemplateDef, "category" | "headerType" 
   t.buttons.forEach((b, i) => {
     if (b.type === "URL" && variableCount(b.url)) out.push({ type: "button", sub_type: "url", index: String(i), parameters: [{ type: "text", text: values[`button.${i}`] ?? "" }] });
   });
+  if (t.cards?.length) {
+    out.push({
+      type: "carousel",
+      cards: t.cards.map((c, ci) => ({
+        card_index: ci,
+        components: [
+          { type: "header", parameters: [{ type: "image", image: { link: c.imageUrl } }] },
+          ...c.buttons.flatMap((b, bi) => (b.type === "QUICK_REPLY" ? [{ type: "button", sub_type: "quick_reply", index: String(bi), parameters: [{ type: "payload", payload: b.text }] }] : [])),
+        ],
+      })),
+    });
+  }
   return out;
 }
 

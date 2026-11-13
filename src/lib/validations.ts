@@ -391,6 +391,10 @@ const templateFields = {
   body: z.string().max(2000).default(""),
   footer: z.string().max(200).default(""),
   buttons: z.array(templateButtonSchema).max(12).default([]),
+  cards: z
+    .array(z.object({ imageUrl: z.string().trim().max(2000), body: z.string().max(400), buttons: z.array(templateButtonSchema).max(3) }))
+    .max(12)
+    .default([]),
   examples: z
     .object({ header: z.array(z.string().max(1024)).max(1).optional(), body: z.array(z.string().max(1024)).max(60).optional() })
     .default({}),

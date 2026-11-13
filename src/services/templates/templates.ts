@@ -18,11 +18,13 @@ import {
   type TemplateCategory,
   type TemplateDef,
   type TemplateExamples,
+  type TemplateCard,
   type TemplateStatus,
   type HeaderType,
 } from "@/lib/templates";
 import { MetaApiError, graph } from "@/providers/meta/graph";
 import { diagnoseRejection } from "@/lib/template-doctor";
+import { assertPublicHttpsUrl } from "@/lib/safe-fetch";
 import { createTemplate as metaCreate, deleteTemplate as metaDelete, listTemplates as metaList, uploadReviewSample } from "@/providers/meta/templates";
 
 function parse<T>(raw: string, fallback: T): T {
@@ -43,6 +45,7 @@ export function toDef(t: MessageTemplate): TemplateDef {
     body: t.body,
     footer: t.footer,
     buttons: parse<TemplateButton[]>(t.buttons, []),
+    cards: parse<TemplateCard[]>(t.cards, []),
     examples: parse<TemplateExamples>(t.examples, {}),
     authOptions: { ...DEFAULT_AUTH_OPTIONS, ...parse<Partial<AuthOptions>>(t.authOptions, {}) },
   };
@@ -140,6 +143,7 @@ function data(def: TemplateDef) {
     body: auth ? "" : def.body,
     footer: auth ? "" : def.footer,
     buttons: JSON.stringify(auth ? [] : def.buttons),
+    cards: JSON.stringify(auth ? [] : def.cards ?? []),
     examples: JSON.stringify(def.examples ?? {}),
     authOptions: JSON.stringify(auth ? def.authOptions : {}),
   };
@@ -231,6 +235,22 @@ export async function wabaToken(wabaRecordId: string): Promise<string> {
   return decryptSecret(conn.encryptedAccessToken);
 }
 
+/** Downloads a card's picture (public https only, JPG or PNG, up to 5 MB) and gives it to Meta as the review sample. */
+async function uploadCardImage(token: string, url: string): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(await assertPublicHttpsUrl(url), { redirect: "error", signal: AbortSignal.timeout(20_000) });
+  } catch {
+    throw new ApiError("VALIDATION_ERROR", "A card picture couldn't be downloaded. Use a public https link to a JPG or PNG.", { details: { cards: ["Picture link doesn't open"] } });
+  }
+  const mime = (res.headers.get("content-type") ?? "").split(";")[0].trim();
+  const bytes = await res.arrayBuffer();
+  if (!res.ok || !["image/jpeg", "image/png"].includes(mime) || bytes.byteLength > 5 * 1024 * 1024) {
+    throw new ApiError("VALIDATION_ERROR", "Card pictures must be JPG or PNG, up to 5 MB.", { details: { cards: ["Not a JPG or PNG under 5 MB"] } });
+  }
+  return uploadReviewSample(token, new Blob([bytes], { type: mime }), `card.${mime === "image/png" ? "png" : "jpg"}`, mime);
+}
+
 export type ReviewSample = { file: Blob; filename: string; mimeType: string };
 
 /**
@@ -257,7 +277,9 @@ export async function submitTemplate(access: OrgAccess, id: string, sample?: Rev
     const token = await wabaToken(t.wabaRecordId);
     try {
       const handle = isMediaHeader && sample ? await uploadReviewSample(token, sample.file, sample.filename, sample.mimeType) : undefined;
-      const components = toMetaComponents(def, handle);
+      const cardHandles: string[] = [];
+      for (const c of def.cards ?? []) cardHandles.push(await uploadCardImage(token, c.imageUrl));
+      const components = toMetaComponents(def, handle, cardHandles);
       const r = t.metaTemplateId
         ? // Rejected templates are corrected in place on Meta.
           { ...(await graph<{ success?: boolean }>(t.metaTemplateId, { token, method: "POST", body: { category: def.category, components }, timeoutMs: 30_000 })), id: t.metaTemplateId, status: "PENDING", category: def.category }

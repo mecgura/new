@@ -59,7 +59,7 @@ const EMPTY: TemplateDef = {
 };
 
 function pick(t: TemplateView): TemplateDef {
-  return { name: t.name, language: t.language, category: t.category, headerType: t.headerType, headerText: t.headerText, body: t.body, footer: t.footer, buttons: t.buttons, examples: t.examples, authOptions: t.authOptions };
+  return { name: t.name, language: t.language, category: t.category, headerType: t.headerType, headerText: t.headerText, body: t.body, footer: t.footer, buttons: t.buttons, cards: t.cards ?? [], examples: t.examples, authOptions: t.authOptions };
 }
 
 const Counter = ({ value, max }: { value: string; max: number }) => (
@@ -436,6 +436,7 @@ export function TemplateEditor({ orgId, accounts, template, canManage }: { orgId
                     </div>
                   </CardBody>
                 </Card>
+                {def.category === "MARKETING" ? <CardsEditor cards={def.cards ?? []} onChange={(c) => set("cards", c)} error={Object.entries(errs).find(([k]) => k === "cards" || k.startsWith("cards."))?.[1]?.[0]} /> : null}
               </>
             )}
           </fieldset>
@@ -529,6 +530,68 @@ function StatusPanel({ orgId, t, onApprove, onReject, busy, canManage }: { orgId
           </Link>
         ) : null}
         {t.metaTemplateId ? <p className="text-caption text-app-subtle">Meta template ID: <span className="font-mono">{t.metaTemplateId}</span></p> : null}
+      </CardBody>
+    </Card>
+  );
+}
+
+type CardDef = NonNullable<TemplateDef["cards"]>[number];
+
+/** Carousel: 2 to 10 swipeable cards, each with a picture, a short text and one or two buttons. */
+function CardsEditor({ cards, onChange, error }: { cards: CardDef[]; onChange: (c: CardDef[]) => void; error?: string }) {
+  const first = cards[0];
+  const blank = (): CardDef => ({ imageUrl: "", body: "", buttons: first ? first.buttons.map((b) => (b.type === "URL" ? { type: "URL", text: b.text, url: "" } : { type: "QUICK_REPLY", text: b.text })) : [{ type: "QUICK_REPLY", text: "" }] });
+  const patch = (i: number, p: Partial<CardDef>) => onChange(cards.map((c, j) => (j === i ? { ...c, ...p } : c)));
+  const patchButton = (i: number, bi: number, p: Record<string, string>) => patch(i, { buttons: cards[i].buttons.map((b, j) => (j === bi ? ({ ...b, ...p } as CardDef["buttons"][number]) : b)) });
+  /** Meta wants the same kinds of buttons on every card, so the layout is changed on all cards at once. */
+  const setLayout = (kind: string) => {
+    const types = kind === "reply" ? ["QUICK_REPLY"] : kind === "link" ? ["URL"] : ["QUICK_REPLY", "URL"];
+    onChange(cards.map((c) => ({ ...c, buttons: types.map((t, i) => (c.buttons[i]?.type === t ? c.buttons[i] : t === "URL" ? { type: "URL", text: "", url: "" } : { type: "QUICK_REPLY", text: "" })) as CardDef["buttons"] })));
+  };
+  const layout = !first ? "reply" : first.buttons.length === 2 ? "both" : first.buttons[0]?.type === "URL" ? "link" : "reply";
+  return (
+    <Card>
+      <CardHeader title="Carousel cards (optional)" description="Swipeable product cards under the message. Use 2 to 10 cards. With cards, leave the header, footer and buttons above empty." />
+      <CardBody className="space-y-4">
+        {error ? <Alert tone="danger">{error}</Alert> : null}
+        {cards.length ? (
+          <Field id="card-layout" label="Buttons on every card">
+            <Select value={layout} onChange={(e) => setLayout(e.target.value)}>
+              <option value="reply">One reply button</option>
+              <option value="link">One website button</option>
+              <option value="both">Reply button + website button</option>
+            </Select>
+          </Field>
+        ) : null}
+        {cards.map((c, i) => (
+          <div key={i} className="space-y-2 rounded-md border border-app-border p-3">
+            <div className="flex items-center justify-between">
+              <p className="text-small font-medium text-app-text">Card {i + 1}</p>
+              <Button type="button" size="sm" variant="secondary" onClick={() => onChange(cards.filter((_, j) => j !== i))}>Remove</Button>
+            </div>
+            <Field id={`card-${i}-img`} label="Picture link (https, JPG or PNG)">
+              <Input value={c.imageUrl} onChange={(e) => patch(i, { imageUrl: e.target.value })} placeholder="https://yourshop.com/cake.jpg" />
+            </Field>
+            <Field id={`card-${i}-body`} label="Card text" hint={`${c.body.length}/160`}>
+              <Input value={c.body} maxLength={160} onChange={(e) => patch(i, { body: e.target.value })} placeholder="Chocolate truffle cake, 1 kg. ₹799" />
+            </Field>
+            {c.buttons.map((b, bi) => (
+              <div key={bi} className="grid gap-2 sm:grid-cols-2">
+                <Field id={`card-${i}-b${bi}`} label={b.type === "URL" ? "Website button text" : "Reply button text"}>
+                  <Input value={b.text} maxLength={25} onChange={(e) => patchButton(i, bi, { text: e.target.value })} placeholder={b.type === "URL" ? "View" : "Order this"} />
+                </Field>
+                {b.type === "URL" ? (
+                  <Field id={`card-${i}-u${bi}`} label="Website link">
+                    <Input value={b.url} onChange={(e) => patchButton(i, bi, { url: e.target.value })} placeholder="https://yourshop.com/cake" />
+                  </Field>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ))}
+        <Button type="button" size="sm" variant="secondary" disabled={cards.length >= 10} onClick={() => onChange(cards.length ? [...cards, blank()] : [blank(), blank()])}>
+          {cards.length ? "Add a card" : "Make this a carousel"}
+        </Button>
       </CardBody>
     </Card>
   );
