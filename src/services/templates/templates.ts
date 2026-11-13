@@ -22,6 +22,7 @@ import {
   type HeaderType,
 } from "@/lib/templates";
 import { MetaApiError, graph } from "@/providers/meta/graph";
+import { diagnoseRejection } from "@/lib/template-doctor";
 import { createTemplate as metaCreate, deleteTemplate as metaDelete, listTemplates as metaList, uploadReviewSample } from "@/providers/meta/templates";
 
 function parse<T>(raw: string, fallback: T): T {
@@ -192,6 +193,32 @@ export async function duplicateTemplate(access: OrgAccess, id: string, name: str
     .catch(uniqueConflict);
   await audit({ action: "template.created", organizationId: access.organizationId, actorUserId: access.user.id, targetType: "template", targetId: copy.id, metadata: { name, duplicatedFrom: t.name }, req });
   return getTemplate(access, copy.id);
+}
+
+/** Plain-words explanation of why Meta rejected this template, plus what a fixed copy would change. */
+export async function doctorTemplate(access: OrgAccess, id: string) {
+  const t = await load(access.organizationId, id);
+  return diagnoseRejection(t.rejectedReason, { category: t.category, body: t.body, headerText: t.headerText, footer: t.footer });
+}
+
+/** Makes a new draft with the safe fixes applied. A new name is used because Meta holds a rejected name for 30 days. */
+export async function fixTemplate(access: OrgAccess, id: string, req?: Request) {
+  const t = await load(access.organizationId, id);
+  if (t.status !== "rejected") throw new ApiError("CONFLICT", "Only a rejected template can be fixed this way.");
+  const d = diagnoseRejection(t.rejectedReason, { category: t.category, body: t.body, headerText: t.headerText, footer: t.footer });
+  const base = t.name.replace(/_v\d+$/, "").slice(0, 500);
+  let name = "";
+  for (let v = 2; v < 50; v++) {
+    name = `${base}_v${v}`;
+    if (!(await db.messageTemplate.count({ where: { wabaRecordId: t.wabaRecordId, name, language: t.language } }))) break;
+  }
+  const def = { ...toDef(t), name, body: d.fixed.body, category: d.fixed.category as TemplateCategory };
+  assertDraftValid(def);
+  const copy = await db.messageTemplate
+    .create({ data: { organizationId: access.organizationId, wabaRecordId: t.wabaRecordId, isDemo: t.isDemo, createdById: access.user.id, ...data(def) } })
+    .catch(uniqueConflict);
+  await audit({ action: "template.created", organizationId: access.organizationId, actorUserId: access.user.id, targetType: "template", targetId: copy.id, metadata: { name, fixedFrom: t.name, changes: d.changes.length }, req });
+  return { template: await getTemplate(access, copy.id), changes: d.changes };
 }
 
 /** Decrypted token of the WABA's active connection (server-only, never returned). */

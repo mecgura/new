@@ -231,7 +231,7 @@ export function TemplateEditor({ orgId, accounts, template, canManage }: { orgId
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-w-0 space-y-4">
-          {t ? <StatusPanel t={t} onApprove={() => review("approved")} onReject={() => setRejectOpen(true)} busy={busy === "review"} canManage={canManage} /> : null}
+          {t ? <StatusPanel orgId={orgId} t={t} onApprove={() => review("approved")} onReject={() => setRejectOpen(true)} busy={busy === "review"} canManage={canManage} /> : null}
           {formError ? <Alert tone="danger">{formError}</Alert> : null}
 
           <fieldset disabled={!editable} className="min-w-0 space-y-4 disabled:opacity-90">
@@ -489,7 +489,7 @@ export function TemplateEditor({ orgId, accounts, template, canManage }: { orgId
   );
 }
 
-function StatusPanel({ t, onApprove, onReject, busy, canManage }: { t: TemplateView; onApprove: () => void; onReject: () => void; busy: boolean; canManage: boolean }) {
+function StatusPanel({ orgId, t, onApprove, onReject, busy, canManage }: { orgId: string; t: TemplateView; onApprove: () => void; onReject: () => void; busy: boolean; canManage: boolean }) {
   return (
     <Card>
       <CardBody className="space-y-3">
@@ -504,9 +504,7 @@ function StatusPanel({ t, onApprove, onReject, busy, canManage }: { t: TemplateV
           </span>
         </div>
         {t.status === "rejected" ? (
-          <Alert tone="danger" title="Rejected by Meta">
-            {t.rejectedReason || "No reason given."} Edit the template below and submit it again.
-          </Alert>
+          <RejectionDoctor orgId={orgId} t={t} canManage={canManage} />
         ) : null}
         {t.status === "paused" || t.status === "disabled" ? (
           <Alert tone="danger" title={`${STATUS_LABELS[t.status]}`}>{t.rejectedReason || "Customers blocked or reported this template. Meta stops it from sending."}</Alert>
@@ -533,6 +531,55 @@ function StatusPanel({ t, onApprove, onReject, busy, canManage }: { t: TemplateV
         {t.metaTemplateId ? <p className="text-caption text-app-subtle">Meta template ID: <span className="font-mono">{t.metaTemplateId}</span></p> : null}
       </CardBody>
     </Card>
+  );
+}
+
+type Diagnosis = { title: string; why: string; steps: string[]; changes: string[] };
+
+/** Explains the rejection in plain words and offers a fixed copy. */
+function RejectionDoctor({ orgId, t, canManage }: { orgId: string; t: TemplateView; canManage: boolean }) {
+  const router = useRouter();
+  const [d, setD] = React.useState<Diagnosis | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState("");
+  const url = `/api/organizations/${orgId}/templates/${t.id}/doctor`;
+  React.useEffect(() => {
+    let off = false;
+    void apiFetch<Diagnosis>(url).then((r) => {
+      if (!off && r.ok) setD(r.data);
+    });
+    return () => {
+      off = true;
+    };
+  }, [url]);
+  async function fix() {
+    setBusy(true);
+    setErr("");
+    const r = await apiFetch<{ template: { id: string } }>(url, { method: "POST" });
+    setBusy(false);
+    if (!r.ok) return setErr(r.error);
+    router.push(`/templates/${r.data.template.id}`);
+  }
+  return (
+    <Alert tone="danger" title={d ? `Rejected by Meta: ${d.title}` : "Rejected by Meta"}>
+      <p>{d ? d.why : t.rejectedReason || "No reason given."}</p>
+      {d ? (
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          {d.steps.map((s) => (
+            <li key={s}>{s}</li>
+          ))}
+        </ul>
+      ) : null}
+      {d && canManage ? (
+        <div className="mt-3">
+          {d.changes.length ? <p className="mb-2">A fixed copy would: {d.changes.join(" ")}</p> : <p className="mb-2">Nothing here can be fixed automatically. Edit the text below, or make a copy under a new name and edit that.</p>}
+          <Button size="sm" variant="secondary" onClick={fix} loading={busy}>
+            Make a fixed copy
+          </Button>
+          {err ? <p className="mt-2">{err}</p> : null}
+        </div>
+      ) : null}
+    </Alert>
   );
 }
 
