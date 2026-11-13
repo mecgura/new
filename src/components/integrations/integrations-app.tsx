@@ -150,6 +150,7 @@ export function IntegrationsApp({ orgId, canManage }: { orgId: string; canManage
         </CardBody>
       </Card>
 
+      <SheetsCard orgId={orgId} canManage={canManage} />
       <h2 className="mb-2 text-small font-semibold uppercase tracking-wider text-app-subtle">Google</h2>
       <div className="grid gap-4 lg:grid-cols-2">
         {[
@@ -180,6 +181,68 @@ export function IntegrationsApp({ orgId, canManage }: { orgId: string; canManage
         </Modal>
       ) : null}
     </>
+  );
+}
+
+/** Google Sheets: every new lead becomes a row in the client's own sheet. */
+function SheetsCard({ orgId, canManage }: { orgId: string; canManage: boolean }) {
+  const url = `/api/organizations/${orgId}/integrations/sheets`;
+  const [d, setD] = React.useState<{ url: string; script: string } | null>(null);
+  const [value, setValue] = React.useState("");
+  const [msg, setMsg] = React.useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  const [busy, setBusy] = React.useState("");
+  React.useEffect(() => {
+    let off = false;
+    void apiFetch<{ url: string; script: string }>(url).then((r) => {
+      if (off || !r.ok) return;
+      setD(r.data);
+      setValue(r.data.url);
+    });
+    return () => {
+      off = true;
+    };
+  }, [url]);
+  if (!d) return null;
+  async function save() {
+    setBusy("save");
+    setMsg(null);
+    const r = await apiFetch<{ url: string }>(url, { method: "PUT", body: { url: value } });
+    setBusy("");
+    if (!r.ok) return setMsg({ tone: "danger", text: r.details?.url?.[0] ? r.error : r.error });
+    setD({ ...d!, url: r.data.url });
+    setMsg({ tone: "success", text: r.data.url ? "Saved. New leads will be added to your sheet." : "Google Sheets link removed." });
+  }
+  async function test() {
+    setBusy("test");
+    setMsg(null);
+    const r = await apiFetch(url, { method: "POST" });
+    setBusy("");
+    setMsg(r.ok ? { tone: "success", text: "Test row sent. Check your sheet." } : { tone: "danger", text: r.error });
+  }
+  return (
+    <Card className="mb-6">
+      <CardHeader title={<span className="flex items-center gap-2">Google Sheets <Badge tone={d.url ? "success" : "neutral"}>{d.url ? "Connected" : "Not connected"}</Badge></span>} description="Every new lead is added as a row in your own Google Sheet." />
+      <CardBody className="space-y-3">
+        <ol className="list-decimal space-y-1 pl-5 text-small text-app-muted">
+          <li>Open your Google Sheet → Extensions → Apps Script. Delete what is there and paste the code below.</li>
+          <li>Deploy → New deployment → type Web app → Execute as: Me → Who has access: Anyone → Deploy.</li>
+          <li>Copy the Web app URL and paste it here.</li>
+        </ol>
+        <CopyField label="Apps Script code" value={d.script} />
+        {canManage ? (
+          <>
+            <Field id="sheets-url" label="Web app URL">
+              <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://script.google.com/macros/s/…/exec" />
+            </Field>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={save} loading={busy === "save"}>Save</Button>
+              {d.url ? <Button variant="secondary" onClick={test} loading={busy === "test"}>Send a test row</Button> : null}
+            </div>
+          </>
+        ) : null}
+        {msg ? <Alert tone={msg.tone}>{msg.text}</Alert> : null}
+      </CardBody>
+    </Card>
   );
 }
 

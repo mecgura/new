@@ -1,4 +1,4 @@
-import { PanelRight, UtensilsCrossed, Activity, ShieldAlert, Newspaper, BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, LayoutTemplate, LifeBuoy, Mail, Plug, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, TrendingUp, Users, UsersRound, Webhook, Workflow, type LucideIcon } from "lucide-react";
+import { PanelRight, UtensilsCrossed, Activity, ShieldAlert, Newspaper, BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, LayoutTemplate, LifeBuoy, Mail, Plug, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, TrendingUp, Users, UsersRound, Webhook, Workflow, type LucideIcon, IndianRupee } from "lucide-react";
 
 export type NavService = "WHATSAPP_AUTOMATION" | "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "SOCIAL_MEDIA" | "LOYALTY" | "REVIEWS" | "LANDING_PAGES" | "FOOD_ORDERING" | "SPONSORED_ADS";
 
@@ -37,6 +37,7 @@ export const CLIENT_NAV: NavSection[] = [
       { label: "WhatsApp", icon: MessageCircle, href: "/dashboard/whatsapp", also: ["/whatsapp"], service: "WHATSAPP_AUTOMATION" },
       { label: "Campaigns", icon: Megaphone, href: "/campaigns", service: "WHATSAPP_AUTOMATION" },
       { label: "Templates", icon: FileText, href: "/templates", service: "WHATSAPP_AUTOMATION" },
+      { label: "Payment reminders", icon: IndianRupee, href: "/dues", service: "WHATSAPP_AUTOMATION" },
       { label: "Automations", icon: Workflow, href: "/automations", service: "WHATSAPP_AUTOMATION" },
       { label: "Lead Ads", icon: Target, href: "/lead-ads", service: "WHATSAPP_AUTOMATION" },
       { label: "Ads Manager", icon: Rocket, href: "/ads", service: "ADS_MANAGER" },

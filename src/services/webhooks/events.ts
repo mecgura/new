@@ -31,6 +31,10 @@ export async function emitMessageEvent(event: MessageEvent, messageId: string) {
 }
 
 export async function emitContactEvent(event: "contact.created" | "contact.updated", organizationId: string, contactId: string, changed?: string[]) {
+  if (event === "contact.created") {
+    const { pushContactToSheet } = await import("@/services/integrations/sheets");
+    await pushContactToSheet(organizationId, contactId);
+  }
   try {
     if (!(await hasSubscribers(organizationId, event))) return;
     const c = await db.contact.findFirst({ where: { id: contactId, organizationId }, include: { tags: { include: { tag: { select: { name: true } } } } } });
