@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Logo } from "@/components/layout/logo";
 import { siteConfig } from "@/config/site";
 import { SiteAnalytics } from "@/components/site/analytics";
+import { FloatingChat } from "@/components/home/floating-chat";
 
 /** Header + footer for public pages outside the homepage (blog). Same look as the homepage. */
 export function PublicShell({ children }: { children: React.ReactNode }) {
@@ -36,6 +37,7 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
       </footer>
+      <FloatingChat digits={siteConfig.contact.whatsapp} />
     </div>
   );
 }

@@ -53,11 +53,23 @@ const STEPS = [
   { n: "3", title: "Chat and campaign", text: "Your team replies from one inbox while campaigns and automations run in the background." },
 ];
 
+const WHY = [
+  { icon: BadgeCheck, title: "Setup asi karde ha", text: "Number jodna, templates te automation, sab MECGURA di team karti hai. Tusi apne business te dhyan deo." },
+  { icon: Check, title: "Saaf pricing", text: "Plan di fees rupees ch pehla dasi jandi hai. Meta di WhatsApp charges Meta de rate naal alag bill hundiyan ne." },
+  { icon: Phone, title: "Punjabi te Hinglish ch support", text: "Sade naal apni bhasha ch gall karo, WhatsApp, call jaan message te." },
+  { icon: Megaphone, title: "Ads te WhatsApp ik jagah", text: "Click-to-WhatsApp ad chalao te ohdi leads nu automation naal turant reply milda hai." },
+];
+
 const FAQ = [
-  { q: "Who pays Meta's WhatsApp charges?", a: "Meta bills its own message charges to the payment method on your WhatsApp Business account. MECGURA's plan and wallet are separate, for the platform and service." },
-  { q: "Can I sign up myself?", a: "Accounts are created by MECGURA so your number, templates and consent process are set up correctly. Message us and we will set you up." },
-  { q: "Do I need a new phone number?", a: "Usually a number that is not already on the regular WhatsApp app. If you already use the WhatsApp Business app, we will check what Meta allows for your number." },
-  { q: "Where is my data?", a: "In your private workspace. See our Privacy Policy for what is stored and how to request deletion." },
+  { q: "Setup kaun karda hai? Mainu kujh aanda nahi.", a: "Setup asi karde ha. Tuhada workspace, WhatsApp number, templates te consent process, sab MECGURA di team sambhaldi hai. Tuhanu sirf apne business di jaankari deni hai." },
+  { q: "Setup ch kinna time lagda hai?", a: "Number jodna te templates di approval Meta de hath ch hai. Aam taur te kuch ghante ton kuch din lagde ne. Asi har step te tuhanu dasde rehnde ha." },
+  { q: "Meta di WhatsApp charges kaun bharda hai, te kinniyan hundiyan ne?", a: "Meta apni message charges apne rate card anusar bill karda hai (message di category te desh te nirbhar). MECGURA da plan platform te service layi alag hai. Plan te charges pehla saaf dasse jande ne, koi chhupi fees nahi." },
+  { q: "Kya ads vi chalaunde ho?", a: "Haan. Click-to-WhatsApp ads banaye te chalaye jande ne, te ad di leads seedhi WhatsApp ch aundiyan ne, jithe automation ohna nu reply dinda hai. Ad da kharcha tuhade Meta ad account ton hunda hai." },
+  { q: "Mere customers nu spam toh nahi jayega?", a: "Nahi. Sirf ohna customers nu message jaanda hai jinha ne ijazat ditti hai. STOP likhan wale customer nu apne aap band kar ditta janda hai." },
+  { q: "Kya mainu nawa phone number chahida?", a: "Aam taur te oh number chahida jo regular WhatsApp app te na chalda hove. Je tusi pehla WhatsApp Business app vartde ho, tan asi check karde ha ki Meta tuhade number layi ki allow karda hai." },
+  { q: "Kya main khud sign up kar sakda haan?", a: "Accounts MECGURA khud banaunda hai, taan jo tuhada number, templates te consent sahi tarike nal set hon. Sanu WhatsApp te message karo, asi set kar dinde ha." },
+  { q: "Demo free hai?", a: "Haan, free demo hai. Upar Book a free demo te form bharo, jaan WhatsApp te message karo." },
+  { q: "Mera data kithe hai?", a: "Tuhade private workspace ch. Ki store hunda hai te delete kiven karvana hai, Privacy Policy ch likhya hai." },
 ];
 
 async function loadTaxPercent() {
@@ -149,6 +161,19 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
         <IndustryHero slides={heroSlides} whatsapp={whatsappDigits} signedIn={signedIn} appHref={appHref} />
 
         <DemoQr whatsapp={whatsappDigits} />
+
+        <section aria-labelledby="why-title" className="mx-auto max-w-6xl px-4 pt-12">
+          <h2 id="why-title" data-reveal className="text-center font-display text-2xl font-bold sm:text-3xl">Sanu kyu chuno?</h2>
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {WHY.map((w, i) => (
+              <div key={w.title} data-reveal style={{ "--d": `${i * 0.06}s` } as React.CSSProperties} className="wa-card p-5">
+                <span className="wa-icon"><w.icon className="size-5" aria-hidden="true" /></span>
+                <h3 className="mt-3 font-bold">{w.title}</h3>
+                <p className="wa-muted mt-1 text-small">{w.text}</p>
+              </div>
+            ))}
+          </div>
+        </section>
 
         {content.services.length ? (
           <section id="services" aria-labelledby="services-title" className="mx-auto max-w-6xl px-4 py-14">
@@ -253,8 +278,9 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
 
         {plans.length ? (
           <section id="pricing" aria-labelledby="pricing-title" className="mx-auto max-w-6xl px-4 py-14">
-            <h2 id="pricing-title" data-reveal className="text-center font-display text-3xl font-bold sm:text-4xl">Simple plans</h2>
+            <h2 id="pricing-title" data-reveal className="text-center font-display text-3xl font-bold sm:text-4xl">Saaf plans, koi chhupi fees nahi</h2>
             <p data-reveal className="wa-muted mx-auto mt-3 max-w-xl text-center">Platform plans in rupees{taxPercent ? `, + ${taxPercent}% GST` : ""}. Meta&apos;s WhatsApp charges are billed by Meta separately.{plans.some((p) => p.priceYearly > 0) ? " Pay yearly and get 2 months free." : ""}</p>
+            <p data-reveal className="wa-muted mx-auto mt-2 max-w-xl text-center text-small">Rupaye ch saaf fees, mahine da plan. Meta di WhatsApp charges Meta de rate naal alag aundiyan ne. Samajh na aave tan WhatsApp te puchho, asi dasde ha.</p>
             <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
               {plans.map((p, i) => (
                 <div key={p.id} data-reveal style={{ "--d": `${i * 0.07}s` } as React.CSSProperties} className={`wa-card flex flex-col p-6 ${plans.length >= 3 && i === 1 ? "!border-[#128c7e] ring-2 ring-[#128c7e]/30" : ""}`}>
@@ -343,7 +369,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
         ) : null}
 
         <section aria-labelledby="faq" className="mx-auto max-w-3xl px-4 py-14">
-          <h2 id="faq" data-reveal className="text-center font-display text-3xl font-bold sm:text-4xl">Questions</h2>
+          <h2 id="faq" data-reveal className="text-center font-display text-3xl font-bold sm:text-4xl">Aam sawal</h2>
           <div className="mt-8 space-y-3">
             {FAQ.map((f) => (
               <details key={f.q} data-reveal className="wa-card px-6 py-4">
