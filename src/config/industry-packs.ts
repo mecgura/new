@@ -14,6 +14,43 @@ const T = (name: string, category: "UTILITY" | "MARKETING", body: string, exampl
 
 export const INDUSTRY_PACKS: IndustryPack[] = [
   {
+    id: "agency",
+    name: "Digital marketing agency (MECGURA)",
+    description: "Demo and proposal follow-ups, onboarding, invoices, festival wishes and win-back messages for a service business.",
+    tags: [
+      { name: "Hot lead", color: "amber" },
+      { name: "Demo booked", color: "emerald" },
+      { name: "Proposal sent", color: "sky" },
+      { name: "Client", color: "emerald" },
+      { name: "Ads client", color: "sky" },
+    ],
+    agent: {
+      name: "Agency assistant",
+      instructions: "You answer for a digital marketing and WhatsApp automation agency. Reply in simple Hinglish, short and friendly. Explain services only from the knowledge base. Never promise results, leads or prices that are not written there. Collect the person's name, business, city and what they need (WhatsApp automation, ads, website, social media). Offer a free demo and hand over to the team for pricing, payments or anything you are not sure about.",
+      faqs: [
+        { q: "Tusi kehdi services dinde ho?", a: "Please replace this answer with your service list: WhatsApp automation, Meta and Google ads, websites, social media and branding." },
+        { q: "Price ki hai?", a: "Please replace this answer with your plans. Until then: tell us your business and what you need and our team will share a quote." },
+        { q: "Demo free hai?", a: "Yes, the demo is free. Tell us your name, business and a convenient time and we will confirm it." },
+        { q: "Setup kaun karda hai?", a: "Our team sets everything up for you. You only need to share your business details." },
+      ],
+    },
+    templates: [
+      T("demo_booking_confirmed", "UTILITY", "Hello {{1}}, your MECGURA demo is confirmed for {{2}} at {{3}}. Reply here if you need to change the time.", ["Simran", "Monday 18 November", "11 AM"]),
+      T("demo_reminder", "UTILITY", "Reminder: Hello {{1}}, your MECGURA demo is today at {{2}}. Reply YES to confirm or tell us a new time.", ["Simran", "11 AM"]),
+      T("proposal_shared", "UTILITY", "Hello {{1}}, as discussed, we have shared the proposal for {{2}}. Reply here if you have questions or want any changes.", ["Simran", "WhatsApp automation"]),
+      T("onboarding_next_step", "UTILITY", "Hello {{1}}, welcome to MECGURA! To start your {{2}} setup we need {{3}}. Please reply here with it when you can.", ["Simran", "WhatsApp automation", "your logo and business timings"]),
+      T("invoice_ready", "UTILITY", "Hello {{1}}, your invoice #{{2}} for Rs {{3}} is ready. Please pay by {{4}}. Reply here if you need help.", ["Simran", "INV-101", "5,000", "20 November"]),
+      T("payment_received", "UTILITY", "Hello {{1}}, we received your payment of Rs {{2}} for {{3}}. Thank you!", ["Simran", "5,000", "INV-101"]),
+      T("work_update", "UTILITY", "Hello {{1}}, update on your {{2}}: {{3}}. Reply here if you have questions.", ["Simran", "website", "the home page design is ready for your review"]),
+      T("feedback_request", "UTILITY", "Hello {{1}}, thank you for working with MECGURA. How was your experience? Reply with a number from 1 (poor) to 5 (excellent).", ["Simran"]),
+      T("ad_lead_followup", "MARKETING", "Hello {{1}}, thanks for your interest in {{2}} from MECGURA. Would you like a free demo to see how it can work for your business? Reply YES and we will set a time.", ["Simran", "WhatsApp automation"], "Reply STOP to unsubscribe"),
+      T("festival_wish", "MARKETING", "Happy {{1}} from MECGURA! Wishing {{2}} a bright year ahead. If you want a festive post or ad for your business, just reply here.", ["Diwali", "your family and business"], "Reply STOP to unsubscribe"),
+      T("win_back_checkin", "MARKETING", "Hello {{1}}, it has been a while! Would you like a free check-up of how WhatsApp and ads are working for {{2}}? Reply YES and we will set it up.", ["Simran", "your business"], "Reply STOP to unsubscribe"),
+      T("referral_ask", "MARKETING", "Hello {{1}}, thank you for choosing MECGURA! Know a business owner who needs WhatsApp automation or ads? Share this chat with them and we will take good care of them.", ["Simran"], "Reply STOP to unsubscribe"),
+      T("abandoned_enquiry", "MARKETING", "Hello {{1}}, you asked us about {{2}} earlier. Would you like us to share the details again? Reply YES.", ["Simran", "ads for your shop"], "Reply STOP to unsubscribe"),
+    ],
+  },
+  {
     id: "clinic",
     name: "Clinic / Doctor",
     description: "Appointment reminders, follow-ups and answers to common patient questions.",
