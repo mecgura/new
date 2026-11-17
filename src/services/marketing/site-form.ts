@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cleanPersonName } from "@/lib/names";
 import { ApiError } from "@/lib/api";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { recordLead } from "@/services/marketing/leads";
@@ -50,7 +51,7 @@ export async function submitSiteLead(input: SiteLeadInput, ip: string, req?: Req
       : `Wants ${NEED[input.need]}.${input.message ? ` "${input.message}"` : ""}${input.page ? ` Page: ${input.page}.` : ""}`;
   await recordLead(
     {
-      name: referral ? input.friendName : input.name,
+      name: cleanPersonName(referral ? input.friendName : input.name),
       phone,
       business: input.business,
       city: input.city,

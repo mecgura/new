@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { cleanPersonName } from "@/lib/names";
 import { db } from "@/lib/db";
 import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
@@ -108,7 +109,7 @@ export async function captureLead(account: Account, input: { visitorId: string; 
   const phone = normalizePhone(input.phone);
   if (!phone) throw new ApiError("VALIDATION_ERROR", "Enter a valid mobile number.", { details: { phone: ["Enter a valid mobile number"] } });
   const organizationId = account.organizationId;
-  const name = input.name.trim().slice(0, 80);
+  const name = cleanPersonName(input.name).slice(0, 80);
 
   let contact = await db.contact.findUnique({ where: { organizationId_phone: { organizationId, phone } } });
   const isNew = !contact;

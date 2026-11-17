@@ -127,6 +127,13 @@ export function Composer({
       {mode === "reply" && !reasons && windowClosed ? (
         <Alert tone="info" className="mb-2">
           {conversation.channel === "whatsapp" ? "The 24-hour customer service window is closed. Only approved templates can be sent until the customer replies." : "The 24-hour reply window is closed. You can answer again when the customer writes to you."}
+          {conversation.channel === "whatsapp" && !replyDisabled ? (
+            <div className="mt-2">
+              <Button size="sm" onClick={() => setTemplateOpen(true)} disabled={sending}>
+                <FileText aria-hidden="true" /> Send an approved template
+              </Button>
+            </div>
+          ) : null}
         </Alert>
       ) : null}
       {error ? <Alert tone="danger" className="mb-2">{error}</Alert> : null}
