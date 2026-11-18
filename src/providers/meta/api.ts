@@ -53,19 +53,28 @@ export async function listSubscribedApps(wabaId: string, token: string): Promise
 }
 
 export type WabaBilling = {
-  fundingId: string;
+  /** undefined = Meta doesn't let this app read it (it is only readable for Business Solution Providers). */
+  fundingId: string | undefined;
+  fundingNote: string;
   canSend: string;
   problems: { entity: string; code?: number; text: string; fix?: string }[];
 };
 
-/** Whether the WhatsApp account has a payment method attached and whether Meta lets it send messages (health status). */
+/** Whether Meta lets the WhatsApp account send messages (health status), and the payment method if Meta allows reading it. */
 export async function getWabaBilling(wabaId: string, token: string): Promise<WabaBilling> {
-  const r = await graph<{
-    primary_funding_id?: string;
-    health_status?: { can_send_message?: string; entities?: { entity_type?: string; can_send_message?: string; errors?: { error_code?: number; error_description?: string; possible_solution?: string }[] }[] };
-  }>(wabaId, { token, query: { fields: "primary_funding_id,health_status" } });
-  const problems = (r.health_status?.entities ?? []).flatMap((e) => (e.errors ?? []).map((x) => ({ entity: e.entity_type ?? "", code: x.error_code, text: x.error_description ?? "", fix: x.possible_solution })));
-  return { fundingId: r.primary_funding_id ?? "", canSend: r.health_status?.can_send_message ?? "", problems };
+  type Health = { health_status?: { can_send_message?: string; entities?: { entity_type?: string; can_send_message?: string; errors?: { error_code?: number; error_description?: string; possible_solution?: string }[] }[] } };
+  const [health, funding] = await Promise.allSettled([
+    graph<Health>(wabaId, { token, query: { fields: "health_status" } }),
+    graph<{ primary_funding_id?: string }>(wabaId, { token, query: { fields: "primary_funding_id" } }),
+  ]);
+  const h = health.status === "fulfilled" ? health.value.health_status : undefined;
+  const problems = (h?.entities ?? []).flatMap((e) => (e.errors ?? []).map((x) => ({ entity: e.entity_type ?? "", code: x.error_code, text: x.error_description ?? "", fix: x.possible_solution })));
+  return {
+    fundingId: funding.status === "fulfilled" ? funding.value.primary_funding_id ?? "" : undefined,
+    fundingNote: funding.status === "rejected" ? (funding.reason instanceof Error ? funding.reason.message : "") : "",
+    canSend: h?.can_send_message ?? "",
+    problems,
+  };
 }
 
 export type MetaTokenDebug = { app_id?: string; application?: string; is_valid?: boolean; expires_at?: number; type?: string };

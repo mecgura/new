@@ -549,7 +549,7 @@ describe("webhook endpoint /api/webhooks/meta", () => {
 
 describe("connection check", () => {
   /** Meta's answers for the check: a real fetch mock that varies the phone platform and the app subscriptions. */
-  function mockCheck(ids: ReturnType<typeof metaIds>, o: { platform: string; apps: { name: string; id?: string }[]; webhook?: Record<string, string>; subs?: unknown[]; subsFail?: boolean; billing?: Record<string, unknown> }) {
+  function mockCheck(ids: ReturnType<typeof metaIds>, o: { platform: string; apps: { name: string; id?: string }[]; webhook?: Record<string, string>; subs?: unknown[]; subsFail?: boolean; billing?: Record<string, unknown>; fundingDenied?: boolean }) {
     return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = new URL(String(input)).pathname.replace(/^\/v[\d.]+\//, "");
       const reply = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
@@ -558,6 +558,7 @@ describe("connection check", () => {
       if (path.endsWith("/subscriptions")) {
         return o.subsFail ? new Response(JSON.stringify({ error: { message: "Invalid OAuth access token signature." } }), { status: 400, headers: { "content-type": "application/json" } }) : reply({ data: o.subs ?? [] });
       }
+      if (path === ids.wabaId && o.fundingDenied && new URL(String(input)).searchParams.get("fields") === "primary_funding_id") return new Response(JSON.stringify({ error: { message: "This action requires that the Business that owns this App is a Business Solution Provider for WhatsApp." } }), { status: 400, headers: { "content-type": "application/json" } });
       if (path === ids.wabaId) return reply(o.billing ?? { primary_funding_id: "999", health_status: { can_send_message: "AVAILABLE" } });
       if (path === ids.phoneNumberId) return reply({ id: ids.phoneNumberId, status: "CONNECTED", platform_type: o.platform, code_verification_status: "VERIFIED", webhook_configuration: o.webhook });
       return reply({ error: { message: "Unknown path" } });
@@ -592,6 +593,18 @@ describe("connection check", () => {
     expect(byId.payment.detail).toContain("Business eligibility payment issue");
     expect(byId.cansend.status).toBe("fail");
     expect(byId.cansend.detail).toContain("Open WhatsApp Manager and add a card.");
+  });
+
+  it("says so plainly when Meta won't let the app read the payment method, but still shows the sending status", async () => {
+    const { org, owner } = await makeTenant();
+    actAs(owner);
+    const r = await connectManual(org.id);
+    mockCheck(r.ids, { platform: "CLOUD_API", apps: [{ name: "MECGURA", id: "111" }], fundingDenied: true });
+    const res = await json(await diagnoseRoute.POST(post({}), p(org.id, { accountId: r.accountId })));
+    const byId = Object.fromEntries((res.body as unknown as Checks).checks.map((c) => [c.id, c]));
+    expect(byId.payment.status).toBe("warn");
+    expect(byId.payment.detail).toContain("Payment settings");
+    expect(byId.cansend.status).toBe("ok");
   });
 
   const goodSubs = () => [{ object: "whatsapp_business_account", callback_url: `${siteUrl()}/api/webhooks/meta`, active: true, fields: [{ name: "messages" }] }];

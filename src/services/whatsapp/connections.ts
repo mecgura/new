@@ -561,7 +561,9 @@ export async function diagnoseConnection(organizationId: string, accountId: stri
   if (token) {
     try {
       const b = await getWabaBilling(wabaId, token);
-      if (!b.fundingId) add("payment", "Payment method on the WhatsApp account", "fail", "Meta shows no payment method attached to this WhatsApp account. Add a card in WhatsApp Manager → Payment settings (inside the same business portfolio as the account). Until then template messages fail with \"Business eligibility payment issue\".");
+      if (b.fundingId === undefined) {
+        add("payment", "Payment method on the WhatsApp account", "warn", "Meta doesn't let MECGURA's app read this (only Business Solution Providers can). Check it yourself: WhatsApp Manager → Account tools → Payment settings must show your card for this account. If messages fail with \"Business eligibility payment issue\", the card is missing or not attached to this account.");
+      } else if (!b.fundingId) add("payment", "Payment method on the WhatsApp account", "fail", "Meta shows no payment method attached to this WhatsApp account. Add a card in WhatsApp Manager → Payment settings (inside the same business portfolio as the account). Until then template messages fail with \"Business eligibility payment issue\".");
       else add("payment", "Payment method on the WhatsApp account", "ok", "A payment method is attached.");
       if (b.canSend) {
         const why = b.problems.map((x) => `${x.text}${x.fix ? ` Fix: ${x.fix}` : ""}`).filter(Boolean).join(" ");
