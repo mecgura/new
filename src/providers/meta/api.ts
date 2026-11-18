@@ -52,6 +52,22 @@ export async function listSubscribedApps(wabaId: string, token: string): Promise
   return (r.data ?? []).map((d) => ({ ...(d.whatsapp_business_api_data ?? {}), overrideCallbackUri: d.override_callback_uri }));
 }
 
+export type WabaBilling = {
+  fundingId: string;
+  canSend: string;
+  problems: { entity: string; code?: number; text: string; fix?: string }[];
+};
+
+/** Whether the WhatsApp account has a payment method attached and whether Meta lets it send messages (health status). */
+export async function getWabaBilling(wabaId: string, token: string): Promise<WabaBilling> {
+  const r = await graph<{
+    primary_funding_id?: string;
+    health_status?: { can_send_message?: string; entities?: { entity_type?: string; can_send_message?: string; errors?: { error_code?: number; error_description?: string; possible_solution?: string }[] }[] };
+  }>(wabaId, { token, query: { fields: "primary_funding_id,health_status" } });
+  const problems = (r.health_status?.entities ?? []).flatMap((e) => (e.errors ?? []).map((x) => ({ entity: e.entity_type ?? "", code: x.error_code, text: x.error_description ?? "", fix: x.possible_solution })));
+  return { fundingId: r.primary_funding_id ?? "", canSend: r.health_status?.can_send_message ?? "", problems };
+}
+
 export type MetaTokenDebug = { app_id?: string; application?: string; is_valid?: boolean; expires_at?: number; type?: string };
 
 /** Which app issued a token, whether it is valid and when it expires (0 = never). */

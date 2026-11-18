@@ -549,7 +549,7 @@ describe("webhook endpoint /api/webhooks/meta", () => {
 
 describe("connection check", () => {
   /** Meta's answers for the check: a real fetch mock that varies the phone platform and the app subscriptions. */
-  function mockCheck(ids: ReturnType<typeof metaIds>, o: { platform: string; apps: { name: string; id?: string }[]; webhook?: Record<string, string>; subs?: unknown[]; subsFail?: boolean }) {
+  function mockCheck(ids: ReturnType<typeof metaIds>, o: { platform: string; apps: { name: string; id?: string }[]; webhook?: Record<string, string>; subs?: unknown[]; subsFail?: boolean; billing?: Record<string, unknown> }) {
     return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = new URL(String(input)).pathname.replace(/^\/v[\d.]+\//, "");
       const reply = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
@@ -558,6 +558,7 @@ describe("connection check", () => {
       if (path.endsWith("/subscriptions")) {
         return o.subsFail ? new Response(JSON.stringify({ error: { message: "Invalid OAuth access token signature." } }), { status: 400, headers: { "content-type": "application/json" } }) : reply({ data: o.subs ?? [] });
       }
+      if (path === ids.wabaId) return reply(o.billing ?? { primary_funding_id: "999", health_status: { can_send_message: "AVAILABLE" } });
       if (path === ids.phoneNumberId) return reply({ id: ids.phoneNumberId, status: "CONNECTED", platform_type: o.platform, code_verification_status: "VERIFIED", webhook_configuration: o.webhook });
       return reply({ error: { message: "Unknown path" } });
     });
@@ -578,6 +579,19 @@ describe("connection check", () => {
     expect(byId.events.status).toBe("warn");
     expect(JSON.stringify(res.body)).not.toContain(r.token);
     expect(JSON.stringify(res.body)).not.toContain(r.secret);
+  });
+
+  it("tells the owner when the WhatsApp account has no payment method, and what Meta says about sending", async () => {
+    const { org, owner } = await makeTenant();
+    actAs(owner);
+    const r = await connectManual(org.id);
+    mockCheck(r.ids, { platform: "CLOUD_API", apps: [{ name: "MECGURA", id: "111" }], billing: { health_status: { can_send_message: "BLOCKED", entities: [{ entity_type: "WABA", can_send_message: "BLOCKED", errors: [{ error_code: 141006, error_description: "Add a payment method.", possible_solution: "Open WhatsApp Manager and add a card." }] }] } } });
+    const res = await json(await diagnoseRoute.POST(post({}), p(org.id, { accountId: r.accountId })));
+    const byId = Object.fromEntries((res.body as unknown as Checks).checks.map((c) => [c.id, c]));
+    expect(byId.payment.status).toBe("fail");
+    expect(byId.payment.detail).toContain("Business eligibility payment issue");
+    expect(byId.cansend.status).toBe("fail");
+    expect(byId.cansend.detail).toContain("Open WhatsApp Manager and add a card.");
   });
 
   const goodSubs = () => [{ object: "whatsapp_business_account", callback_url: `${siteUrl()}/api/webhooks/meta`, active: true, fields: [{ name: "messages" }] }];

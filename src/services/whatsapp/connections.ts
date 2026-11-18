@@ -15,6 +15,7 @@ import {
   getWebhookConfiguration,
   getWaba,
   listPhoneNumbers,
+  getWabaBilling,
   listSubscribedApps,
   registerPhoneNumber,
   subscribeAppToWaba,
@@ -554,6 +555,20 @@ export async function diagnoseConnection(organizationId: string, accountId: stri
       );
     } catch (e) {
       add("subscribed", "App subscription", "warn", e instanceof MetaApiError ? `Couldn't read it: ${e.message}` : "Couldn't read it.");
+    }
+  }
+
+  if (token) {
+    try {
+      const b = await getWabaBilling(wabaId, token);
+      if (!b.fundingId) add("payment", "Payment method on the WhatsApp account", "fail", "Meta shows no payment method attached to this WhatsApp account. Add a card in WhatsApp Manager → Payment settings (inside the same business portfolio as the account). Until then template messages fail with \"Business eligibility payment issue\".");
+      else add("payment", "Payment method on the WhatsApp account", "ok", "A payment method is attached.");
+      if (b.canSend) {
+        const why = b.problems.map((x) => `${x.text}${x.fix ? ` Fix: ${x.fix}` : ""}`).filter(Boolean).join(" ");
+        add("cansend", "Meta lets this account send messages", b.canSend === "AVAILABLE" ? "ok" : b.canSend === "LIMITED" ? "warn" : "fail", b.canSend === "AVAILABLE" ? "Meta reports: available." : `Meta reports: ${b.canSend}.${why ? ` ${why}` : ""}`);
+      }
+    } catch (e) {
+      add("payment", "Payment method on the WhatsApp account", "warn", e instanceof MetaApiError ? `Couldn't read it: ${e.message}` : "Couldn't read it.");
     }
   }
 
