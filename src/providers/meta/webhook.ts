@@ -42,8 +42,10 @@ export function normalizeEvents(payload: MetaWebhookPayload): NormalizedEvent[] 
             out.push(callStatusEvent(wabaId, phoneNumberId, s));
             continue;
           }
-          const errors = (s.errors as { title?: string; message?: string }[] | undefined) ?? [];
-          out.push({ kind: "status", wabaId, phoneNumberId, id: String(s.id ?? ""), status: String(s.status ?? ""), recipient: String(s.recipient_id ?? ""), timestamp: String(s.timestamp ?? ""), error: errors[0]?.message ?? errors[0]?.title ?? "" });
+          const errors = (s.errors as { code?: number; title?: string; message?: string; error_data?: { details?: string } }[] | undefined) ?? [];
+          const first = errors[0];
+          const detail = first ? [first.message ?? first.title, first.error_data?.details].filter(Boolean).join(". ") + (first.code ? ` (Meta code ${first.code})` : "") : "";
+          out.push({ kind: "status", wabaId, phoneNumberId, id: String(s.id ?? ""), status: String(s.status ?? ""), recipient: String(s.recipient_id ?? ""), timestamp: String(s.timestamp ?? ""), error: detail });
         }
       } else if (change.field === "calls") {
         const meta = (v.metadata ?? {}) as { phone_number_id?: string };
