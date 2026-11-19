@@ -141,7 +141,7 @@ export function MessageBubble({
             ))}
           </div>
         ) : null}
-        {m.status === "failed" && m.error ? <p className="mt-1 text-caption text-red-300">{m.error}</p> : null}
+        {m.status === "failed" && m.error ? <p className="mt-1 break-words text-caption text-red-300 [overflow-wrap:anywhere]">{m.error}</p> : null}
         <p className="mt-1 flex items-center justify-end gap-1.5 text-caption text-app-subtle">
           {outbound && m.sender ? <span className="truncate">{m.sender.name}</span> : null}
           <time dateTime={m.createdAt}>{timeFmt.format(new Date(m.createdAt))}</time>
