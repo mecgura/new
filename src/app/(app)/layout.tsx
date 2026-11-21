@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { activeFestival, getFestivals } from "@/services/site/festivals";
 import { FestivalGreeting } from "@/components/festival/festival-banner";
 import { CallDock } from "@/components/calls/call-dock";
+import { SupportBanner } from "@/components/app/support-banner";
 import { hasFeature } from "@/services/billing/entitlements";
 
 export const metadata: Metadata = {
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ClientAppLayout({ children }: { children: React.ReactNode }) {
-  const { user, shellUser, shellOrgs, active } = await getAppContext();
+  const { user, shellUser, shellOrgs, active, supportMode } = await getAppContext();
   const enabledServices = active ? (await db.organizationService.findMany({ where: { organizationId: active.organizationId, enabled: true }, select: { service: true } })).map((s) => s.service) : [];
   const festival = activeFestival(await getFestivals(), "clients");
   // The call dock only runs where WhatsApp calling is actually on (plan feature + a number with calling enabled).
@@ -21,6 +22,7 @@ export default async function ClientAppLayout({ children }: { children: React.Re
   const orgName = shellOrgs.find((o) => o.id === active?.organizationId)?.name ?? "";
   return (
     <AppShell variant="client" user={shellUser} organizations={shellOrgs} activeOrganizationId={active?.organizationId ?? null} enabledServices={enabledServices}>
+      {supportMode ? <SupportBanner orgName={orgName} /> : null}
       {children}
       {callsOn && active ? <CallDock orgId={active.organizationId} /> : null}
       {festival ? <FestivalGreeting festival={{ ...festival, photoUrl: festival.hasPhoto ? `/api/festival-photo/${festival.id}` : null, endsLabel: "" }} orgName={orgName} userId={user.id} /> : null}

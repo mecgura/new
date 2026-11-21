@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Ban, CheckCircle2, KeyRound, Pencil, Trash2 } from "lucide-react";
+import { Ban, CheckCircle2, DoorOpen, KeyRound, Pencil, Trash2 } from "lucide-react";
 import { Badge, Button, ErrorState, LoadingState, PageHeader, TabPanel, Tabs } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
 import { DeleteClientModal, EditClientModal, ResetAccessModal, StatusDialog, type ClientRef } from "@/components/admin/client-dialogs";
@@ -43,6 +43,7 @@ function ClientDetailInner() {
   const [data, setData] = React.useState<ClientDetail | null>(null);
   const [error, setError] = React.useState<{ status: number; message: string } | null>(null);
   const [editOpen, setEditOpen] = React.useState(false);
+  const [opening, setOpening] = React.useState(false);
   const [statusOpen, setStatusOpen] = React.useState(false);
   const [resetOpen, setResetOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
@@ -59,6 +60,13 @@ function ClientDetailInner() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  async function openWorkspace() {
+    setOpening(true);
+    const r = await apiFetch(`/api/admin/clients/${id}/open-workspace`, { method: "POST" });
+    setOpening(false);
+    if (r.ok) router.push("/whatsapp/connect");
+  }
 
   if (error) {
     return error.status === 404 ? (
@@ -88,6 +96,9 @@ function ClientDetailInner() {
         description={data.plan ? `${data.plan.name} plan · ${o.members.length} user(s)` : "No plan assigned"}
         actions={
           <>
+            <Button onClick={openWorkspace} disabled={opening}>
+              <DoorOpen aria-hidden="true" /> {opening ? "Opening…" : "Open workspace"}
+            </Button>
             <Button variant="secondary" onClick={() => setEditOpen(true)}>
               <Pencil aria-hidden="true" /> Edit
             </Button>

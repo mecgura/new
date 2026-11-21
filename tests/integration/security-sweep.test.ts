@@ -224,7 +224,7 @@ describe("3. admin area", () => {
 
 describe("4. hostile input never produces a 5xx", () => {
   // Takes no body at all / only has optional fields of its own (none of the generic garbage keys apply).
-  const NO_BODY_INPUT = new Set(["/api/admin/billing/cycle", "/api/admin/settings/payments"]);
+  const NO_BODY_INPUT = new Set(["/api/admin/billing/cycle", "/api/admin/settings/payments", "/api/admin/exit-workspace"]);
   const bodies: [string, BodyInit][] = [
     ["empty object", "{}"],
     ["not JSON", "{not json"],
