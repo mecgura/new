@@ -3,7 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, Copy, Download, FileDown, Image as ImageIcon, Pencil, RefreshCw, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { upload } from "@vercel/blob/client";
+import { AlertTriangle, Check, Copy, Download, FileDown, Film, Image as ImageIcon, Pencil, RefreshCw, Sparkles, Trash2, Upload, X } from "lucide-react";
 import { Alert, Badge, Button, Card, CardBody, CardHeader, ConfirmationDialog, ErrorState, LoadingState, Modal, PageHeader, Textarea, useToast } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
 import { CHANNELS, STATUS_LABELS, STATUS_TONES, MAX_MEDIA_BYTES, MAX_MEDIA_PER_POST, contentToText, downloadName, type Channel, type FlowAction } from "@/lib/onepost";
@@ -11,9 +12,11 @@ import type { BrandDto, PostDetail } from "@/services/onepost/posts";
 import { ChannelPreview } from "@/components/onepost/previews";
 import { VersionEditor } from "@/components/onepost/version-editor";
 import { PostForm, type PostFields } from "@/components/onepost/post-form";
+import { PublishPanel } from "@/components/onepost/publish-panel";
 
+const MB = 1024 * 1024;
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
-const EVENT_LABELS: Record<string, string> = { created: "Created the post", generated: "Wrote versions", version_edited: "Edited a version", submit: "Sent for review", approve: "Approved", request_changes: "Asked for changes", reopen: "Reopened for editing", approval_reset: "Sent back to draft" };
+const EVENT_LABELS: Record<string, string> = { created: "Created the post", generated: "Wrote versions", version_edited: "Edited a version", submit: "Sent for review", approve: "Approved", request_changes: "Asked for changes", reopen: "Reopened for editing", approval_reset: "Sent back to draft", publish_requested: "Published", scheduled: "Scheduled", schedule_cancelled: "Cancelled scheduled posts", rescheduled: "Moved a scheduled post", published: "Published to", publish_retry: "Will retry", publish_failed: "Could not publish", retry: "Retried" };
 const readFile = (f: File) =>
   new Promise<string>((resolve, reject) => {
     const r = new FileReader();
@@ -47,12 +50,18 @@ export function PostStudio({ orgId, postId }: { orgId: string; postId: string })
   const [asking, setAsking] = React.useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [copied, setCopied] = React.useState<Channel | null>(null);
+  const [pct, setPct] = React.useState(0);
   const fileRef = React.useRef<HTMLInputElement>(null);
 
   const adopt = React.useCallback((p: PostDetail) => {
     setPost(p);
     setFields({ title: p.title, brief: p.brief, postType: p.postType, language: p.language, tone: p.tone, city: p.city, keywords: p.keywords, spokespersonName: p.spokespersonName, spokespersonQuote: p.spokespersonQuote, videoUrl: p.videoUrl });
   }, []);
+
+  const reload = React.useCallback(async () => {
+    const r = await apiFetch<{ post: PostDetail }>(`${base}/posts/${postId}`);
+    if (r.ok) adopt(r.data.post);
+  }, [base, postId, adopt]);
 
   React.useEffect(() => {
     let live = true;
@@ -108,10 +117,36 @@ export function PostStudio({ orgId, postId }: { orgId: string; postId: string })
     setAsking(null);
   }
 
-  async function addImages(files: FileList | null) {
+  async function addFiles(files: FileList | null) {
     if (!files?.length) return;
     setBusy("media");
     for (const f of Array.from(files)) {
+      const isVideo = f.type.startsWith("video/");
+      if (post!.storage) {
+        // Straight from the browser to Blob storage, so large videos never pass through the server.
+        if (f.size > (isVideo ? 300 * MB : 8 * MB)) {
+          toast(`${f.name} is over ${isVideo ? "300 MB" : "8 MB"}.`, "error");
+          continue;
+        }
+        try {
+          setPct(0);
+          const b = await upload(`onepost/${orgId}/${postId}/${f.name}`, f, { access: "public", handleUploadUrl: `${base}/posts/${postId}/media/blob`, contentType: f.type, multipart: f.size > 20 * MB, onUploadProgress: (e) => setPct(Math.round(e.percentage)) });
+          const r = await apiFetch<{ post: PostDetail }>(`${base}/posts/${postId}/media/register`, { method: "POST", body: { url: b.url, name: f.name } });
+          if (!r.ok) {
+            toast(r.error, "error");
+            break;
+          }
+          adopt(r.data.post);
+        } catch (e) {
+          toast(e instanceof Error ? e.message.slice(0, 160) : "Upload failed.", "error");
+          break;
+        }
+        continue;
+      }
+      if (isVideo) {
+        toast("Video upload needs file storage, which is not connected yet.", "error");
+        continue;
+      }
       if (f.size > MAX_MEDIA_BYTES) {
         toast(`${f.name} is over 3 MB.`, "error");
         continue;
@@ -124,6 +159,7 @@ export function PostStudio({ orgId, postId }: { orgId: string; postId: string })
       adopt(r.data.post);
     }
     setBusy("");
+    setPct(0);
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -208,7 +244,7 @@ export function PostStudio({ orgId, postId }: { orgId: string; postId: string })
             {post.reviewNote}
           </Alert>
         ) : null}
-        {post.status === "approved" ? <Alert tone="success">Approved. Nothing is sent anywhere yet. In this phase you copy or download each version and post it yourself.</Alert> : null}
+        {post.status === "approved" ? <Alert tone="success">Approved. Nothing is sent anywhere until you choose channels in Publish below and confirm.</Alert> : null}
         {!canEdit ? <Alert tone="info">You can view this post. {post.status === "approved" || post.status === "in_review" ? "An owner or manager can reopen it for editing." : "Only its creator, a manager or an owner can edit it."}</Alert> : null}
 
         <div className="grid gap-5 lg:grid-cols-5">
@@ -232,14 +268,21 @@ export function PostStudio({ orgId, postId }: { orgId: string; postId: string })
           </Card>
 
           <Card className="lg:col-span-2">
-            <CardHeader title="Photos" description={`Up to ${MAX_MEDIA_PER_POST} images, 3 MB each. The first one is used in previews.`} />
+            <CardHeader title="Photos and video" description={post.storage ? `Up to ${MAX_MEDIA_PER_POST} files: photos up to 8 MB, videos up to 300 MB. The first photo is used in previews.` : `Up to ${MAX_MEDIA_PER_POST} photos, 3 MB each. Video upload needs file storage, which is not connected yet.`} />
             <CardBody className="space-y-3">
               {post.media.length ? (
                 <ul className="grid grid-cols-3 gap-2">
                   {post.media.map((m) => (
                     <li key={m.id} className="relative overflow-hidden rounded-[var(--radius-control)] border border-app-border">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={m.url} alt={m.name} className="aspect-square w-full object-cover" />
+                      {m.kind === "video" ? (
+                        <div className="relative">
+                          <video src={m.url} preload="metadata" muted className="aspect-square w-full bg-black object-cover" aria-label={m.name} />
+                          <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white"><Film className="size-3" aria-hidden="true" /> Video</span>
+                        </div>
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={m.url} alt={m.name} className="aspect-square w-full object-cover" />
+                      )}
                       {canEdit ? (
                         <button type="button" aria-label={`Remove ${m.name}`} onClick={() => void removeImage(m.id)} className="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white hover:bg-black">
                           <X className="size-3.5" aria-hidden="true" />
@@ -256,9 +299,9 @@ export function PostStudio({ orgId, postId }: { orgId: string; postId: string })
               )}
               {canEdit && post.media.length < MAX_MEDIA_PER_POST ? (
                 <>
-                  <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" id="onepost-files" onChange={(e) => void addImages(e.target.files)} />
+                  <input ref={fileRef} type="file" accept={post.storage ? "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" : "image/jpeg,image/png,image/webp"} multiple className="sr-only" id="onepost-files" onChange={(e) => void addFiles(e.target.files)} />
                   <Button variant="secondary" loading={busy === "media"} onClick={() => fileRef.current?.click()}>
-                    <Upload aria-hidden="true" /> Add photos
+                    <Upload aria-hidden="true" /> {busy === "media" && pct ? `Uploading ${pct}%` : post.storage ? "Add photos or video" : "Add photos"}
                   </Button>
                 </>
               ) : null}
@@ -359,6 +402,8 @@ export function PostStudio({ orgId, postId }: { orgId: string; postId: string })
           </CardBody>
         </Card>
 
+        {hasVersions && ["approved", "scheduled", "failed", "published"].includes(post.status) ? <PublishPanel orgId={orgId} post={post} onChanged={() => void reload()} /> : null}
+
         <Card>
           <CardHeader title="Activity" />
           <CardBody>
@@ -381,7 +426,7 @@ export function PostStudio({ orgId, postId }: { orgId: string; postId: string })
         </Card>
 
         <p className="text-caption text-app-subtle">
-          Nothing here is published or sent anywhere. <Link href="/onepost" className="text-app-primary hover:underline">Back to all posts</Link>
+          <Link href="/onepost" className="text-app-primary hover:underline">Back to all posts</Link>
         </p>
       </div>
 

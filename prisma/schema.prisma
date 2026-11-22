@@ -88,6 +88,7 @@ model Organization {
   socialAssets            SocialAsset[]
   onePostBrand            OnePostBrand?
   onePosts                OnePost[]
+  onePostConnections      OnePostConnection[]
   jobs                    Job[]
   candidates              Candidate[]
   employees               Employee[]
@@ -2746,8 +2747,11 @@ model OnePost {
   createdById      String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+  scheduledAt      DateTime?
+  publishedAt      DateTime?
 
   organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deliveries   OnePostDelivery[]
   media        OnePostMedia[]
   versions     OnePostVersion[]
   events       OnePostEvent[]
@@ -2763,9 +2767,13 @@ model OnePostMedia {
   name           String
   mimeType       String
   sizeBytes      Int
-  bytes          Bytes
+  bytes          Bytes // empty when the file lives in Blob storage
   position       Int      @default(0)
   createdAt      DateTime @default(now())
+  kind           String   @default("image") // image | video
+  storage        String   @default("db") // db | blob
+  blobUrl        String   @default("")
+  blobPath       String   @default("")
 
   post OnePost @relation(fields: [postId], references: [id], onDelete: Cascade)
 
@@ -2810,4 +2818,66 @@ model OnePostEvent {
 
   @@index([postId, createdAt])
   @@index([organizationId])
+}
+
+/** A connected publishing account that is not Facebook/Instagram (those reuse the Channels connection). */
+model OnePostConnection {
+  id               String    @id @default(cuid())
+  organizationId   String
+  provider         String // linkedin | gbp | wordpress
+  status           String    @default("active") // active | needs_target | expired
+  encryptedAccess  String    @default("")
+  encryptedRefresh String    @default("")
+  expiresAt        DateTime?
+  scopes           String    @default("")
+  externalId       String    @default("") // LinkedIn author URN, Google "accounts/…/locations/…", WordPress site URL
+  externalName     String    @default("")
+  settings         String    @default("{}")
+  connectedById    String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, provider])
+}
+
+/** One-time OAuth state, so a callback can only complete a sign-in this workspace and person started. */
+model OnePostOAuthState {
+  id             String   @id @default(cuid())
+  stateHash      String   @unique
+  organizationId String
+  userId         String
+  provider       String
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+/** One channel's publication of a post: queued, retried with back-off, and kept as the record of what went out. */
+model OnePostDelivery {
+  id             String    @id @default(cuid())
+  organizationId String
+  postId         String
+  channel        String // facebook | instagram | linkedin | gbp | wordpress
+  connectionId   String    @default("") // OnePostConnection id ("" for Facebook/Instagram)
+  status         String    @default("queued") // queued | publishing | published | failed | cancelled
+  scheduledAt    DateTime
+  nextAttemptAt  DateTime
+  attempts       Int       @default(0)
+  snapshot       String    @default("{}") // exactly what was approved and will be sent
+  externalId     String    @default("")
+  externalUrl    String    @default("")
+  error          String    @default("")
+  publishedAt    DateTime?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  post OnePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([organizationId, scheduledAt])
+  @@index([postId])
 }

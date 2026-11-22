@@ -116,6 +116,8 @@ export const ORG_PERMISSIONS = {
   "onepost:read": ["CLIENT_OWNER", "MANAGER", "AGENT"],
   "onepost:write": ["CLIENT_OWNER", "MANAGER", "AGENT"], // create posts, edit and regenerate versions (agents: own drafts only)
   "onepost:brand": ["CLIENT_OWNER", "MANAGER"], // edit the brand profile
+  "onepost:connect": ["CLIENT_OWNER"], // connect or disconnect publishing accounts
+  "onepost:publish": ["CLIENT_OWNER", "MANAGER"], // publish, schedule, cancel and retry an approved post
 } as const satisfies Record<string, readonly OrgRole[]>;
 
 export type OrgPermission = keyof typeof ORG_PERMISSIONS;

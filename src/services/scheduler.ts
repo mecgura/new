@@ -4,6 +4,7 @@ import { runBillingCycle } from "@/services/billing/billing";
 import { purgeOldApiLogs } from "@/services/api/keys";
 import { runDueAutomations } from "@/services/automations/engine";
 import { runDueSocialPosts } from "@/services/social/posts";
+import { runDueOnePost } from "@/services/onepost/delivery";
 import { escalateBreaches } from "@/services/support/tickets";
 import { runHealthAlerts } from "@/services/admin/system-health";
 import { checkInboxBreaches } from "@/services/inbox/sla";
@@ -17,8 +18,9 @@ export async function runScheduledWork(budgetMs = 50_000) {
   const apiLogsPurged = await purgeOldApiLogs();
   const billing = await runBillingCycle();
   const social = await runDueSocialPosts().catch(() => ({ due: 0, published: 0 }));
+  const onepost = await runDueOnePost().catch(() => ({ due: 0, published: 0, failed: 0 }));
   const supportEscalated = await escalateBreaches().catch(() => 0);
   const healthAlerts = await runHealthAlerts().catch(() => 0);
   const inboxSlaAlerts = await checkInboxBreaches().catch(() => 0);
-  return { automations, campaigns, webhooks, apiLogsPurged, billing, social, supportEscalated, healthAlerts, inboxSlaAlerts };
+  return { automations, campaigns, webhooks, apiLogsPurged, billing, social, onepost, supportEscalated, healthAlerts, inboxSlaAlerts };
 }

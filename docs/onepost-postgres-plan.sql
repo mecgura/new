@@ -43,6 +43,8 @@ CREATE TABLE "OnePost" (
     "createdById" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "scheduledAt" TIMESTAMP(3),
+    "publishedAt" TIMESTAMP(3),
 
     CONSTRAINT "OnePost_pkey" PRIMARY KEY ("id")
 );
@@ -58,6 +60,10 @@ CREATE TABLE "OnePostMedia" (
     "bytes" BYTEA NOT NULL,
     "position" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "kind" TEXT NOT NULL DEFAULT 'image',
+    "storage" TEXT NOT NULL DEFAULT 'db',
+    "blobUrl" TEXT NOT NULL DEFAULT '',
+    "blobPath" TEXT NOT NULL DEFAULT '',
 
     CONSTRAINT "OnePostMedia_pkey" PRIMARY KEY ("id")
 );
@@ -95,6 +101,62 @@ CREATE TABLE "OnePostEvent" (
     CONSTRAINT "OnePostEvent_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "OnePostConnection" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "provider" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'active',
+    "encryptedAccess" TEXT NOT NULL DEFAULT '',
+    "encryptedRefresh" TEXT NOT NULL DEFAULT '',
+    "expiresAt" TIMESTAMP(3),
+    "scopes" TEXT NOT NULL DEFAULT '',
+    "externalId" TEXT NOT NULL DEFAULT '',
+    "externalName" TEXT NOT NULL DEFAULT '',
+    "settings" TEXT NOT NULL DEFAULT '{}',
+    "connectedById" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "OnePostConnection_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "OnePostOAuthState" (
+    "id" TEXT NOT NULL,
+    "stateHash" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "provider" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "OnePostOAuthState_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "OnePostDelivery" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "postId" TEXT NOT NULL,
+    "channel" TEXT NOT NULL,
+    "connectionId" TEXT NOT NULL DEFAULT '',
+    "status" TEXT NOT NULL DEFAULT 'queued',
+    "scheduledAt" TIMESTAMP(3) NOT NULL,
+    "nextAttemptAt" TIMESTAMP(3) NOT NULL,
+    "attempts" INTEGER NOT NULL DEFAULT 0,
+    "snapshot" TEXT NOT NULL DEFAULT '{}',
+    "externalId" TEXT NOT NULL DEFAULT '',
+    "externalUrl" TEXT NOT NULL DEFAULT '',
+    "error" TEXT NOT NULL DEFAULT '',
+    "publishedAt" TIMESTAMP(3),
+    "createdById" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "OnePostDelivery_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "OnePostBrand_organizationId_key" ON "OnePostBrand"("organizationId");
 
@@ -122,6 +184,24 @@ CREATE INDEX "OnePostEvent_postId_createdAt_idx" ON "OnePostEvent"("postId", "cr
 -- CreateIndex
 CREATE INDEX "OnePostEvent_organizationId_idx" ON "OnePostEvent"("organizationId");
 
+-- CreateIndex
+CREATE INDEX "OnePostConnection_organizationId_provider_idx" ON "OnePostConnection"("organizationId", "provider");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "OnePostOAuthState_stateHash_key" ON "OnePostOAuthState"("stateHash");
+
+-- CreateIndex
+CREATE INDEX "OnePostOAuthState_expiresAt_idx" ON "OnePostOAuthState"("expiresAt");
+
+-- CreateIndex
+CREATE INDEX "OnePostDelivery_status_nextAttemptAt_idx" ON "OnePostDelivery"("status", "nextAttemptAt");
+
+-- CreateIndex
+CREATE INDEX "OnePostDelivery_organizationId_scheduledAt_idx" ON "OnePostDelivery"("organizationId", "scheduledAt");
+
+-- CreateIndex
+CREATE INDEX "OnePostDelivery_postId_idx" ON "OnePostDelivery"("postId");
+
 -- AddForeignKey
 ALTER TABLE "OnePostBrand" ADD CONSTRAINT "OnePostBrand_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -136,4 +216,10 @@ ALTER TABLE "OnePostVersion" ADD CONSTRAINT "OnePostVersion_postId_fkey" FOREIGN
 
 -- AddForeignKey
 ALTER TABLE "OnePostEvent" ADD CONSTRAINT "OnePostEvent_postId_fkey" FOREIGN KEY ("postId") REFERENCES "OnePost"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "OnePostConnection" ADD CONSTRAINT "OnePostConnection_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "OnePostDelivery" ADD CONSTRAINT "OnePostDelivery_postId_fkey" FOREIGN KEY ("postId") REFERENCES "OnePost"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

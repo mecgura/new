@@ -32,6 +32,7 @@ import {
 } from "@/lib/onepost";
 import { DEMO_MODEL, OnePostAi } from "@/services/onepost/ai";
 import type { BrandFacts, PostFacts } from "@/services/onepost/prompts";
+import { BLOB_URL_RE, IMAGE_TYPES, MAX_BLOB_IMAGE_BYTES, MAX_BLOB_VIDEO_BYTES, VIDEO_TYPES, blobConfigured, blobPrefix, deleteBlobs, headBlob, putBlob } from "@/services/onepost/storage";
 
 // ---------------------------------------------------------------------------
 // Input schemas
@@ -205,7 +206,7 @@ async function loadFull(organizationId: string, id: string) {
   return db.onePost.findFirst({
     where: { id, organizationId },
     include: {
-      media: { select: { id: true, name: true, mimeType: true, sizeBytes: true, position: true }, orderBy: { position: "asc" } },
+      media: { select: { id: true, name: true, mimeType: true, sizeBytes: true, position: true, kind: true, storage: true, blobUrl: true }, orderBy: { position: "asc" } },
       versions: { orderBy: { createdAt: "asc" } },
       events: { orderBy: { createdAt: "desc" }, take: 40 },
     },
@@ -253,13 +254,14 @@ async function detailDto(a: OrgAccess, p: FullPost) {
     approvedAt: p.approvedAt,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
-    media: p.media.map((m) => ({ id: m.id, name: m.name, mimeType: m.mimeType, sizeBytes: m.sizeBytes, url: `/api/organizations/${p.organizationId}/onepost/posts/${p.id}/media/${m.id}` })),
+    media: p.media.map((m) => ({ id: m.id, name: m.name, kind: m.kind as "image" | "video", mimeType: m.mimeType, sizeBytes: m.sizeBytes, url: m.storage === "blob" && m.blobUrl ? m.blobUrl : `/api/organizations/${p.organizationId}/onepost/posts/${p.id}/media/${m.id}` })),
     versions: p.versions
       .filter((v) => isChannel(v.channel))
       .map((v) => ({ channel: v.channel as Channel, content: parseJson<unknown>(v.content, {}), checks: parseJson<string[]>(v.checks, []), model: v.model, generation: v.generation, edited: Boolean(v.editedAt), updatedAt: v.updatedAt })),
     events: p.events.map((e) => ({ id: e.id, action: e.action, note: e.note, actor: e.actorUserId ? names.get(e.actorUserId) ?? "Someone" : "System", createdAt: e.createdAt })),
-    can: { edit: canEditPost(a, row), delete: canDeletePost(a, row), actions: flowActionsFor(p.status as PostStatus, roleOf(a)).map((k) => ({ key: k, label: FLOW_ACTION_LABELS[k] })) },
+    can: { edit: canEditPost(a, row), delete: canDeletePost(a, row), publish: isManagerUp(a), actions: flowActionsFor(p.status as PostStatus, roleOf(a)).map((k) => ({ key: k, label: FLOW_ACTION_LABELS[k] })) },
     live: await OnePostAi.isLive(),
+    storage: blobConfigured(),
   };
 }
 export type PostDetail = Awaited<ReturnType<typeof detailDto>>;
@@ -311,7 +313,9 @@ export async function deletePost(a: OrgAccess, id: string, req?: Request) {
   await assertServiceEnabled(a.organizationId, "ONEPOST");
   const p = await loadPost(a, id);
   if (!canDeletePost(a, p)) throw new ApiError("FORBIDDEN", "You can't delete this post.");
+  const blobs = (await db.onePostMedia.findMany({ where: { postId: id, organizationId: a.organizationId, storage: "blob" }, select: { blobUrl: true } })).map((m) => m.blobUrl);
   await db.onePost.delete({ where: { id } });
+  await deleteBlobs(blobs);
   await log(a, "onepost.deleted", id, { title: p.title }, req);
 }
 
@@ -326,7 +330,14 @@ export async function addMedia(a: OrgAccess, postId: string, input: { name: stri
   const count = await db.onePostMedia.count({ where: { postId, organizationId: a.organizationId } });
   if (count >= MAX_MEDIA_PER_POST) throw new ApiError("VALIDATION_ERROR", `A post can have up to ${MAX_MEDIA_PER_POST} images.`);
   const img = decodeImage(input.image, MAX_MEDIA_BYTES, "Images");
-  await db.onePostMedia.create({ data: { organizationId: a.organizationId, postId, name: input.name.slice(0, 120) || "Image", mimeType: img.type, sizeBytes: img.bytes.length, bytes: img.bytes, position: count } });
+  const name = input.name.slice(0, 120) || "Image";
+  // With Blob storage connected, photos go there (channels need a public link); otherwise they stay in the database for preview only.
+  if (blobConfigured()) {
+    const b = await putBlob(a.organizationId, postId, name, img.bytes, img.type);
+    await db.onePostMedia.create({ data: { organizationId: a.organizationId, postId, name, mimeType: img.type, sizeBytes: img.bytes.length, bytes: new Uint8Array(0), position: count, kind: "image", storage: "blob", blobUrl: b.url, blobPath: b.pathname } });
+  } else {
+    await db.onePostMedia.create({ data: { organizationId: a.organizationId, postId, name, mimeType: img.type, sizeBytes: img.bytes.length, bytes: img.bytes, position: count } });
+  }
   await resetApproval(a, p);
   await log(a, "onepost.updated", postId, { media: "added" }, req);
   return getPost(a, postId);
@@ -336,8 +347,10 @@ export async function removeMedia(a: OrgAccess, postId: string, mediaId: string,
   await assertServiceEnabled(a.organizationId, "ONEPOST");
   const p = await loadPost(a, postId);
   if (!canEditPost(a, p)) throw new ApiError("FORBIDDEN", "You can't edit this post right now.");
-  const r = await db.onePostMedia.deleteMany({ where: { id: mediaId, postId, organizationId: a.organizationId } });
-  if (!r.count) throw new ApiError("NOT_FOUND", "Image not found.");
+  const m = await db.onePostMedia.findFirst({ where: { id: mediaId, postId, organizationId: a.organizationId }, select: { storage: true, blobUrl: true } });
+  if (!m) throw new ApiError("NOT_FOUND", "File not found.");
+  await db.onePostMedia.deleteMany({ where: { id: mediaId, postId, organizationId: a.organizationId } });
+  if (m.storage === "blob") await deleteBlobs([m.blobUrl]);
   await resetApproval(a, p);
   await log(a, "onepost.updated", postId, { media: "removed" }, req);
   return getPost(a, postId);
@@ -345,9 +358,48 @@ export async function removeMedia(a: OrgAccess, postId: string, mediaId: string,
 
 export async function mediaFile(a: OrgAccess, postId: string, mediaId: string) {
   await assertServiceEnabled(a.organizationId, "ONEPOST");
-  const m = await db.onePostMedia.findFirst({ where: { id: mediaId, postId, organizationId: a.organizationId }, select: { mimeType: true, bytes: true } });
+  const m = await db.onePostMedia.findFirst({ where: { id: mediaId, postId, organizationId: a.organizationId }, select: { mimeType: true, bytes: true, storage: true, blobUrl: true } });
   if (!m) throw new ApiError("NOT_FOUND", "Image not found.");
   return m;
+}
+
+/** Checked before the browser is given an upload token: the person may edit this post, and it has room for another file. */
+export async function assertMayUpload(a: OrgAccess, postId: string) {
+  await assertServiceEnabled(a.organizationId, "ONEPOST");
+  const p = await loadPost(a, postId);
+  if (!canEditPost(a, p)) throw new ApiError("FORBIDDEN", "You can't edit this post right now.");
+  if ((await db.onePostMedia.count({ where: { postId, organizationId: a.organizationId } })) >= MAX_MEDIA_PER_POST) throw new ApiError("VALIDATION_ERROR", `A post can have up to ${MAX_MEDIA_PER_POST} files.`);
+  return blobPrefix(a.organizationId, postId);
+}
+
+/**
+ * Records a file the browser uploaded straight to Blob (photos and videos). The link is checked against the store, the post's own folder,
+ * the file type and the size, so a person can only attach files that really are theirs, in this post.
+ */
+export async function registerBlobMedia(a: OrgAccess, postId: string, input: { url: string; name: string }, req?: Request) {
+  await assertServiceEnabled(a.organizationId, "ONEPOST");
+  const p = await loadPost(a, postId);
+  if (!canEditPost(a, p)) throw new ApiError("FORBIDDEN", "You can't edit this post right now.");
+  const count = await db.onePostMedia.count({ where: { postId, organizationId: a.organizationId } });
+  if (count >= MAX_MEDIA_PER_POST) throw new ApiError("VALIDATION_ERROR", `A post can have up to ${MAX_MEDIA_PER_POST} files.`);
+  if (!BLOB_URL_RE.test(input.url)) throw new ApiError("VALIDATION_ERROR", "That isn't an uploaded file.");
+  const h = await headBlob(input.url);
+  if (!h.pathname.startsWith(blobPrefix(a.organizationId, postId))) throw new ApiError("FORBIDDEN", "That file belongs to a different post.");
+  const type = h.contentType.toLowerCase();
+  const kind = IMAGE_TYPES.includes(type) ? "image" : VIDEO_TYPES.includes(type) ? "video" : null;
+  if (!kind) {
+    await deleteBlobs([h.url]);
+    throw new ApiError("VALIDATION_ERROR", "Use a JPG, PNG or WebP photo, or an MP4, MOV or WebM video.");
+  }
+  if (h.size > (kind === "image" ? MAX_BLOB_IMAGE_BYTES : MAX_BLOB_VIDEO_BYTES)) {
+    await deleteBlobs([h.url]);
+    throw new ApiError("VALIDATION_ERROR", kind === "image" ? "Photos can be up to 8 MB." : "Videos can be up to 300 MB.");
+  }
+  if (await db.onePostMedia.findFirst({ where: { organizationId: a.organizationId, blobUrl: h.url }, select: { id: true } })) throw new ApiError("CONFLICT", "That file is already attached.");
+  await db.onePostMedia.create({ data: { organizationId: a.organizationId, postId, name: input.name.slice(0, 120) || "File", mimeType: type, sizeBytes: h.size, bytes: new Uint8Array(0), position: count, kind, storage: "blob", blobUrl: h.url, blobPath: h.pathname } });
+  await resetApproval(a, p);
+  await log(a, "onepost.updated", postId, { media: "added", kind }, req);
+  return getPost(a, postId);
 }
 
 // ---------------------------------------------------------------------------

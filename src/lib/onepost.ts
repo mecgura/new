@@ -409,7 +409,7 @@ export const FLOW_FROM: Record<FlowAction, PostStatus[]> = {
   submit: ["draft", "changes_requested"],
   approve: ["draft", "in_review", "changes_requested"],
   request_changes: ["in_review"],
-  reopen: ["in_review", "approved"],
+  reopen: ["in_review", "approved", "failed"],
 };
 export const FLOW_TO: Record<FlowAction, PostStatus> = { submit: "in_review", approve: "approved", request_changes: "changes_requested", reopen: "draft" };
 

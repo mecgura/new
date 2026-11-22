@@ -335,6 +335,7 @@ describe("5. public and secret-protected surfaces", () => {
         "/api/integrations/[provider]/[cid]",
         "/api/m/track",
         "/api/m/unsubscribe",
+        "/api/onepost/oauth/[provider]/callback", // OAuth return: needs the signed-in session AND a one-time state tied to that person; otherwise it redirects to sign-in
         "/api/f/[token]",
         "/api/f/[token]/google",
         "/api/lp-image/[id]",

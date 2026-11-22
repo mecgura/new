@@ -9,10 +9,14 @@ import { apiFetch } from "@/lib/client-api";
 import { LANGUAGES, MAX_LOGO_BYTES, POST_TYPES, STATUSES, STATUS_LABELS, STATUS_TONES, TONES } from "@/lib/onepost";
 import type { BrandDto, PostSummary } from "@/services/onepost/posts";
 import { EMPTY_POST, PostForm, type PostFields } from "@/components/onepost/post-form";
+import { OnePostCalendar } from "@/components/onepost/calendar";
+import { ConnectionsPanel } from "@/components/onepost/connections-panel";
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 const TABS = [
   { id: "posts", label: "Posts" },
+  { id: "calendar", label: "Calendar" },
+  { id: "connections", label: "Connections" },
   { id: "brand", label: "Brand profile" },
 ];
 const readFile = (f: File) =>
@@ -25,11 +29,11 @@ const readFile = (f: File) =>
 
 type BrandForm = Omit<BrandDto, "hasLogo" | "logoUrl">;
 
-export function OnePostApp({ orgId, canBrand }: { orgId: string; canBrand: boolean }) {
+export function OnePostApp({ orgId, canBrand, canConnect, canPublish, initialTab = "posts", flash }: { orgId: string; canBrand: boolean; canConnect: boolean; canPublish: boolean; initialTab?: string; flash?: { connected?: string; message?: string; error?: string } }) {
   const base = `/api/organizations/${orgId}/onepost`;
   const router = useRouter();
   const toast = useToast();
-  const [tab, setTab] = React.useState("posts");
+  const [tab, setTab] = React.useState(TABS.some((t) => t.id === initialTab) ? initialTab : "posts");
   const [data, setData] = React.useState<{ posts: PostSummary[]; counts: Record<string, number> } | null>(null);
   const [error, setError] = React.useState("");
   const [status, setStatus] = React.useState("");
@@ -120,7 +124,7 @@ export function OnePostApp({ orgId, canBrand }: { orgId: string; canBrand: boole
     <>
       <PageHeader
         title="OnePost"
-        description="Write once. Get a ready version for your website, Instagram, Facebook, LinkedIn, YouTube, Google, WhatsApp, ads and press release."
+        description="Write once. Get a ready version for your website, Instagram, Facebook, LinkedIn, YouTube, Google, WhatsApp, ads and press release, then publish or schedule it after approval."
         actions={
           <Button
             onClick={() => {
@@ -190,6 +194,14 @@ export function OnePostApp({ orgId, canBrand }: { orgId: string; canBrand: boole
             </ul>
           )}
         </div>
+      </TabPanel>
+
+      <TabPanel id="calendar" active={tab === "calendar"}>
+        {tab === "calendar" ? <OnePostCalendar orgId={orgId} canMove={canPublish} /> : null}
+      </TabPanel>
+
+      <TabPanel id="connections" active={tab === "connections"}>
+        {tab === "connections" ? <ConnectionsPanel orgId={orgId} canConnect={canConnect} flash={flash} /> : null}
       </TabPanel>
 
       <TabPanel id="brand" active={tab === "brand"}>
