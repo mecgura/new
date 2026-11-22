@@ -73,7 +73,7 @@ async function tenant() {
   return { org, owner, agent, O: { orgId: org.id } };
 }
 type T = Awaited<ReturnType<typeof tenant>>;
-const P = (t: T, postId: string, extra: Record<string, string> = {}) => ctx({ ...t.O, postId, ...extra });
+const P = <E extends Record<string, string> = Record<never, never>>(t: T, postId: string, extra?: E) => ctx({ ...t.O, postId, ...(extra as E) });
 async function newPost(t: T) {
   actAs(t.owner);
   return ((await json(await postsRoute.POST(body({ title: "Winter camp", brief: "Camp on 5 December in Shimla." }), ctx(t.O)))).body.post as { id: string }).id;

@@ -36,6 +36,7 @@ import { youtubeSetThumbnail, youtubeUpload } from "@/providers/onepost/youtube"
 import { pickPhoto } from "@/lib/onepost-media";
 import { accessTokenFor } from "@/services/onepost/connections";
 import { PUBLISHABLE, syncPostState } from "@/services/onepost/state";
+import { listHandoffs } from "@/services/onepost/handoff";
 import { blobConfigured, fetchBlobBytes, putBlob } from "@/services/onepost/storage";
 
 const MAX_AHEAD_DAYS = 180;
@@ -117,6 +118,7 @@ export async function publishOptions(a: OrgAccess, postId: string) {
     options,
     deliveries: deliveries.map(deliveryDto),
     canQueue: PUBLISHABLE.includes(post.status),
+    handoffs: await listHandoffs(a.organizationId, postId),
   };
 }
 
