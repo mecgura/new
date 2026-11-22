@@ -263,6 +263,6 @@ describe("OnePost files in Blob storage", () => {
     const id = await approvedPost(t);
     const r = await json(await publishRoute.GET(req("/x"), P(t, id)));
     expect(r.status).toBe(200);
-    expect(((r.body.options as { channel: string }[]).map((o) => o.channel))).toEqual(["facebook", "instagram", "linkedin", "gbp", "wordpress"]);
+    expect(((r.body.options as { channel: string }[]).map((o) => o.channel))).toEqual(["facebook", "instagram", "linkedin", "gbp", "wordpress", "youtube"]);
   });
 });

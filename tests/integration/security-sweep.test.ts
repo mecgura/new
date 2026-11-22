@@ -335,6 +335,10 @@ describe("5. public and secret-protected surfaces", () => {
         "/api/integrations/[provider]/[cid]",
         "/api/m/track",
         "/api/m/unsubscribe",
+        "/api/onepost-review/[token]", // client review link: the long random token is the key; expires, single decision
+        "/api/onepost-review/[token]/media/[mediaId]",
+        "/api/onepost/p/[token]/open", // email open pixel: always a 1x1 image
+        "/api/onepost/unsub/[token]", // press-contact unsubscribe: confirm step, token only
         "/api/onepost/oauth/[provider]/callback", // OAuth return: needs the signed-in session AND a one-time state tied to that person; otherwise it redirects to sign-in
         "/api/f/[token]",
         "/api/f/[token]/google",

@@ -45,6 +45,12 @@ CREATE TABLE "OnePost" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "scheduledAt" TIMESTAMP(3),
     "publishedAt" TIMESTAMP(3),
+    "eventName" TEXT NOT NULL DEFAULT '',
+    "eventDate" TIMESTAMP(3),
+    "eventPlace" TEXT NOT NULL DEFAULT '',
+    "eventHighlights" TEXT NOT NULL DEFAULT '',
+    "eventGroupId" TEXT NOT NULL DEFAULT '',
+    "eventPhase" TEXT NOT NULL DEFAULT '',
 
     CONSTRAINT "OnePost_pkey" PRIMARY KEY ("id")
 );
@@ -64,6 +70,10 @@ CREATE TABLE "OnePostMedia" (
     "storage" TEXT NOT NULL DEFAULT 'db',
     "blobUrl" TEXT NOT NULL DEFAULT '',
     "blobPath" TEXT NOT NULL DEFAULT '',
+    "variantOf" TEXT NOT NULL DEFAULT '',
+    "ratio" TEXT NOT NULL DEFAULT '',
+    "watermarked" BOOLEAN NOT NULL DEFAULT false,
+    "thumbUrl" TEXT NOT NULL DEFAULT '',
 
     CONSTRAINT "OnePostMedia_pkey" PRIMARY KEY ("id")
 );
@@ -157,6 +167,63 @@ CREATE TABLE "OnePostDelivery" (
     CONSTRAINT "OnePostDelivery_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "OnePostApprovalLink" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "postId" TEXT NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "contentHash" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "decision" TEXT NOT NULL DEFAULT '',
+    "decisionNote" TEXT NOT NULL DEFAULT '',
+    "decidedBy" TEXT NOT NULL DEFAULT '',
+    "decidedAt" TIMESTAMP(3),
+    "revokedAt" TIMESTAMP(3),
+    "createdById" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "OnePostApprovalLink_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "OnePostContact" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "outlet" TEXT NOT NULL DEFAULT '',
+    "email" TEXT NOT NULL,
+    "city" TEXT NOT NULL DEFAULT '',
+    "beat" TEXT NOT NULL DEFAULT '',
+    "optedOut" BOOLEAN NOT NULL DEFAULT false,
+    "optToken" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "OnePostContact_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "OnePostPitch" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "postId" TEXT NOT NULL,
+    "contactId" TEXT NOT NULL,
+    "subject" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'queued',
+    "error" TEXT NOT NULL DEFAULT '',
+    "sentAt" TIMESTAMP(3),
+    "openedAt" TIMESTAMP(3),
+    "openCount" INTEGER NOT NULL DEFAULT 0,
+    "trackToken" TEXT NOT NULL,
+    "coverageUrl" TEXT NOT NULL DEFAULT '',
+    "coverageNote" TEXT NOT NULL DEFAULT '',
+    "createdById" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "OnePostPitch_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "OnePostBrand_organizationId_key" ON "OnePostBrand"("organizationId");
 
@@ -202,6 +269,30 @@ CREATE INDEX "OnePostDelivery_organizationId_scheduledAt_idx" ON "OnePostDeliver
 -- CreateIndex
 CREATE INDEX "OnePostDelivery_postId_idx" ON "OnePostDelivery"("postId");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "OnePostApprovalLink_tokenHash_key" ON "OnePostApprovalLink"("tokenHash");
+
+-- CreateIndex
+CREATE INDEX "OnePostApprovalLink_postId_idx" ON "OnePostApprovalLink"("postId");
+
+-- CreateIndex
+CREATE INDEX "OnePostApprovalLink_organizationId_idx" ON "OnePostApprovalLink"("organizationId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "OnePostContact_optToken_key" ON "OnePostContact"("optToken");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "OnePostContact_organizationId_email_key" ON "OnePostContact"("organizationId", "email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "OnePostPitch_trackToken_key" ON "OnePostPitch"("trackToken");
+
+-- CreateIndex
+CREATE INDEX "OnePostPitch_postId_idx" ON "OnePostPitch"("postId");
+
+-- CreateIndex
+CREATE INDEX "OnePostPitch_organizationId_createdAt_idx" ON "OnePostPitch"("organizationId", "createdAt");
+
 -- AddForeignKey
 ALTER TABLE "OnePostBrand" ADD CONSTRAINT "OnePostBrand_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -222,4 +313,16 @@ ALTER TABLE "OnePostConnection" ADD CONSTRAINT "OnePostConnection_organizationId
 
 -- AddForeignKey
 ALTER TABLE "OnePostDelivery" ADD CONSTRAINT "OnePostDelivery_postId_fkey" FOREIGN KEY ("postId") REFERENCES "OnePost"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "OnePostApprovalLink" ADD CONSTRAINT "OnePostApprovalLink_postId_fkey" FOREIGN KEY ("postId") REFERENCES "OnePost"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "OnePostContact" ADD CONSTRAINT "OnePostContact_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "OnePostPitch" ADD CONSTRAINT "OnePostPitch_postId_fkey" FOREIGN KEY ("postId") REFERENCES "OnePost"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "OnePostPitch" ADD CONSTRAINT "OnePostPitch_contactId_fkey" FOREIGN KEY ("contactId") REFERENCES "OnePostContact"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

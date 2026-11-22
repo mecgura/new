@@ -11,11 +11,12 @@ import type { ConnectionDto } from "@/services/onepost/connections";
 type Data = {
   connections: ConnectionDto[];
   channels: { facebook: { name: string } | null; instagram: { name: string } | null };
-  configured: { linkedin: boolean; gbp: boolean };
-  missingEnv: { linkedin: string; gbp: string };
+  configured: Record<OAuthP, boolean>;
+  missingEnv: Record<OAuthP, string>;
   storage: boolean;
 };
 type Target = { id: string; name: string };
+type OAuthP = "linkedin" | "gbp" | "youtube" | "gsc";
 
 const STATUS = { active: ["success", "Connected"], needs_target: ["warning", "Choose where to post"], expired: ["danger", "Expired. Reconnect"] } as const;
 
@@ -43,7 +44,7 @@ export function ConnectionsPanel({ orgId, canConnect, flash }: { orgId: string; 
     return () => window.clearTimeout(id);
   }, [load]);
 
-  async function connect(provider: "linkedin" | "gbp") {
+  async function connect(provider: OAuthP) {
     setBusy(provider);
     const r = await apiFetch<{ url: string }>(`${base}/connections/oauth/${provider}`, { method: "POST", body: {} });
     if (!r.ok) {
@@ -95,6 +96,12 @@ export function ConnectionsPanel({ orgId, canConnect, flash }: { orgId: string; 
     void load();
   }
 
+  async function setPrivacy(conn: ConnectionDto, ytPrivacy: "public" | "unlisted" | "private") {
+    const r = await apiFetch(`${base}/connections/${conn.id}`, { method: "PATCH", body: { ytPrivacy } });
+    if (!r.ok) return toast(r.error, "error");
+    void load();
+  }
+
   async function remove() {
     if (!removing) return;
     setBusy("remove");
@@ -130,13 +137,19 @@ export function ConnectionsPanel({ orgId, canConnect, flash }: { orgId: string; 
                 <option value="publish">Publish live</option>
                 <option value="draft">Save as draft</option>
               </Select>
+            ) : conn.provider === "youtube" ? (
+              <Select aria-label="Who can see new videos" value={conn.ytPrivacy} onChange={(e) => void setPrivacy(conn, e.target.value as "public" | "unlisted" | "private")} className="w-44">
+                <option value="public">Public</option>
+                <option value="unlisted">Unlisted</option>
+                <option value="private">Private (only me)</option>
+              </Select>
             ) : (
               <Button size="sm" variant="secondary" loading={busy === conn.id} onClick={() => void choose(conn)}>
-                {conn.provider === "gbp" ? "Choose location" : conn.pages ? "Choose account" : "Account"}
+                {conn.provider === "gbp" ? "Choose location" : conn.provider === "gsc" ? "Choose website" : conn.pages ? "Choose account" : "Account"}
               </Button>
             )}
             {conn.provider !== "wordpress" ? (
-              <Button size="sm" variant="secondary" onClick={() => void connect(conn.provider as "linkedin" | "gbp")}>
+              <Button size="sm" variant="secondary" onClick={() => void connect(conn.provider as OAuthP)}>
                 Reconnect
               </Button>
             ) : null}
@@ -149,7 +162,7 @@ export function ConnectionsPanel({ orgId, canConnect, flash }: { orgId: string; 
     );
   };
 
-  const section = (provider: "linkedin" | "gbp", blurb: string) => (
+  const section = (provider: OAuthP, blurb: string) => (
     <Card>
       <CardHeader
         title={PROVIDER_LABELS[provider]}
@@ -169,6 +182,8 @@ export function ConnectionsPanel({ orgId, canConnect, flash }: { orgId: string; 
         ))}
         {provider === "linkedin" && by("linkedin").some((c) => !c.pages) ? <p className="text-caption text-app-subtle">Posts go to your personal profile. Posting to a Company Page needs LinkedIn&apos;s approval of MECGURA&apos;s app for page access.</p> : null}
         {provider === "gbp" ? <p className="text-caption text-app-subtle">Google must approve Business Profile API access for MECGURA before posts can be published. Until then, connecting works but posting is refused by Google.</p> : null}
+        {provider === "youtube" ? <p className="text-caption text-app-subtle">Videos are uploaded to your channel. Until Google approves MECGURA&apos;s YouTube app, uploads from a new app can be forced to Private. Long videos can take more than the server&apos;s time limit; use a short video or upload very large ones in YouTube Studio.</p> : null}
+        {provider === "gsc" ? <p className="text-caption text-app-subtle">Read-only. Used for search clicks and keywords in Reports. Nothing is changed on your site.</p> : null}
       </CardBody>
     </Card>
   );
@@ -209,6 +224,8 @@ export function ConnectionsPanel({ orgId, canConnect, flash }: { orgId: string; 
 
       {section("linkedin", "Posts to your LinkedIn profile (or a Company Page once LinkedIn approves it).")}
       {section("gbp", "“What's new” posts on your Google Business Profile location.")}
+      {section("youtube", "Uploads approved videos to your YouTube channel.")}
+      {section("gsc", "Shows how your website performs in Google Search (clicks and keywords).")}
 
       <Card>
         <CardHeader
@@ -233,7 +250,7 @@ export function ConnectionsPanel({ orgId, canConnect, flash }: { orgId: string; 
       <Modal
         open={Boolean(picking)}
         onClose={() => setPicking(null)}
-        title={picking?.conn.provider === "gbp" ? "Choose the business location" : "Choose where to post"}
+        title={picking?.conn.provider === "gbp" ? "Choose the business location" : picking?.conn.provider === "gsc" ? "Choose the website" : "Choose where to post"}
         footer={
           <>
             <Button variant="ghost" onClick={() => setPicking(null)}>

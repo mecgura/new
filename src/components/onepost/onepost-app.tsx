@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PenLine, Plus, Trash2, Upload } from "lucide-react";
+import { CalendarPlus, PenLine, Plus, Trash2, Upload } from "lucide-react";
 import { Alert, Badge, Button, Card, CardBody, CardHeader, EmptyState, ErrorState, Field, Input, LoadingState, Modal, PageHeader, Select, TabPanel, Tabs, Textarea, useToast } from "@/components/ds";
 import { apiFetch } from "@/lib/client-api";
 import { LANGUAGES, MAX_LOGO_BYTES, POST_TYPES, STATUSES, STATUS_LABELS, STATUS_TONES, TONES } from "@/lib/onepost";
@@ -11,11 +11,17 @@ import type { BrandDto, PostSummary } from "@/services/onepost/posts";
 import { EMPTY_POST, PostForm, type PostFields } from "@/components/onepost/post-form";
 import { OnePostCalendar } from "@/components/onepost/calendar";
 import { ConnectionsPanel } from "@/components/onepost/connections-panel";
+import { PrPanel } from "@/components/onepost/pr-panel";
+import { ReportsPanel } from "@/components/onepost/reports-panel";
+import { EventCampaignModal } from "@/components/onepost/event-campaign";
+import { phaseOf } from "@/lib/onepost-event";
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 const TABS = [
   { id: "posts", label: "Posts" },
   { id: "calendar", label: "Calendar" },
+  { id: "pr", label: "PR" },
+  { id: "reports", label: "Reports" },
   { id: "connections", label: "Connections" },
   { id: "brand", label: "Brand profile" },
 ];
@@ -43,6 +49,7 @@ export function OnePostApp({ orgId, canBrand, canConnect, canPublish, initialTab
   const [brandErrors, setBrandErrors] = React.useState<Record<string, string>>({});
   const [savingBrand, setSavingBrand] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
+  const [eventOpen, setEventOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<PostFields>(EMPTY_POST);
   const [draftErrors, setDraftErrors] = React.useState<Record<string, string>>({});
   const [saving, setSaving] = React.useState(false);
@@ -126,6 +133,8 @@ export function OnePostApp({ orgId, canBrand, canConnect, canPublish, initialTab
         title="OnePost"
         description="Write once. Get a ready version for your website, Instagram, Facebook, LinkedIn, YouTube, Google, WhatsApp, ads and press release, then publish or schedule it after approval."
         actions={
+          <div className="flex flex-wrap gap-2">
+          {canPublish ? <Button variant="secondary" onClick={() => setEventOpen(true)}><CalendarPlus aria-hidden="true" /> Event campaign</Button> : null}
           <Button
             onClick={() => {
               setDraft({ ...EMPTY_POST, language: brand?.language ?? "en", tone: brand?.tone ?? "friendly", city: brand?.city ?? "" });
@@ -135,6 +144,7 @@ export function OnePostApp({ orgId, canBrand, canConnect, canPublish, initialTab
           >
             <Plus aria-hidden="true" /> New post
           </Button>
+          </div>
         }
       />
       <Tabs label="OnePost sections" items={TABS} value={tab} onValueChange={setTab} />
@@ -181,6 +191,7 @@ export function OnePostApp({ orgId, canBrand, canConnect, canPublish, initialTab
                         {STATUS_LABELS[p.status]}
                       </Badge>
                     </div>
+                    {p.eventName ? <p className="mt-2 text-small text-app-text">{p.eventName}{p.eventPhase ? <span className="text-app-muted"> · {phaseOf(p.eventPhase)?.label ?? p.eventPhase}</span> : null}</p> : null}
                     <p className="mt-2 text-small text-app-muted">
                       {POST_TYPES.find((t) => t.key === p.postType)?.label ?? "General"} · {LANGUAGES.find((l) => l.key === p.language)?.label ?? p.language}
                     </p>
@@ -198,6 +209,14 @@ export function OnePostApp({ orgId, canBrand, canConnect, canPublish, initialTab
 
       <TabPanel id="calendar" active={tab === "calendar"}>
         {tab === "calendar" ? <OnePostCalendar orgId={orgId} canMove={canPublish} /> : null}
+      </TabPanel>
+
+      <TabPanel id="pr" active={tab === "pr"}>
+        {tab === "pr" ? <PrPanel orgId={orgId} canManage={canPublish} /> : null}
+      </TabPanel>
+
+      <TabPanel id="reports" active={tab === "reports"}>
+        {tab === "reports" ? <ReportsPanel orgId={orgId} /> : null}
       </TabPanel>
 
       <TabPanel id="connections" active={tab === "connections"}>
@@ -299,6 +318,7 @@ export function OnePostApp({ orgId, canBrand, canConnect, canPublish, initialTab
         </div>
       </TabPanel>
 
+      <EventCampaignModal orgId={orgId} open={eventOpen} onClose={() => setEventOpen(false)} />
       <Modal
         open={creating}
         onClose={() => setCreating(false)}

@@ -13,6 +13,9 @@ import { ChannelPreview } from "@/components/onepost/previews";
 import { VersionEditor } from "@/components/onepost/version-editor";
 import { PostForm, type PostFields } from "@/components/onepost/post-form";
 import { PublishPanel } from "@/components/onepost/publish-panel";
+import { PostExtras } from "@/components/onepost/post-extras";
+import { MediaTools } from "@/components/onepost/media-tools";
+import { EventStrip } from "@/components/onepost/event-strip";
 
 const MB = 1024 * 1024;
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
@@ -283,6 +286,7 @@ export function PostStudio({ orgId, postId }: { orgId: string; postId: string })
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={m.url} alt={m.name} className="aspect-square w-full object-cover" />
                       )}
+                      {m.ratio ? <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">{m.ratio}{m.watermarked ? " · logo" : ""}</span> : null}
                       {canEdit ? (
                         <button type="button" aria-label={`Remove ${m.name}`} onClick={() => void removeImage(m.id)} className="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white hover:bg-black">
                           <X className="size-3.5" aria-hidden="true" />
@@ -305,6 +309,7 @@ export function PostStudio({ orgId, postId }: { orgId: string; postId: string })
                   </Button>
                 </>
               ) : null}
+              <MediaTools orgId={orgId} post={post} canEdit={canEdit} hasLogo={Boolean(brand?.hasLogo)} onPost={adopt} />
               {post.videoUrl ? <p className="break-all text-small text-app-muted">Video link: {post.videoUrl}</p> : null}
             </CardBody>
           </Card>
@@ -402,7 +407,11 @@ export function PostStudio({ orgId, postId }: { orgId: string; postId: string })
           </CardBody>
         </Card>
 
+        <EventStrip orgId={orgId} post={post} canEdit={canEdit} onChanged={() => void reload()} />
+
         {hasVersions && ["approved", "scheduled", "failed", "published"].includes(post.status) ? <PublishPanel orgId={orgId} post={post} onChanged={() => void reload()} /> : null}
+
+        {hasVersions ? <PostExtras orgId={orgId} post={post} /> : null}
 
         <Card>
           <CardHeader title="Activity" />

@@ -1,4 +1,4 @@
-# OnePost — Content & PR Studio (Phases 1 and 2)
+# OnePost — Content & PR Studio (Phases 1 to 4)
 
 Write a post once, get an editable version for ten channels, preview them side by side, and move the post through approval.
 Phase 1: write, preview, edit and approve. Phase 2 (below): connect accounts and publish or schedule an **approved** post. Nothing is ever published without a person approving it first and confirming the channels.
@@ -92,3 +92,62 @@ Scheduling runs inside the existing scheduler tick (`runScheduledWork`), so no n
 
 ## Not in Phase 2
 Video posting to Facebook and Instagram (the existing Social Media publishing code posts photos and text only), YouTube, WhatsApp campaign hand-off, the client approval link, Event Mode, Media Studio (Phase 3). LinkedIn Company Pages need LinkedIn's approval first.
+
+---
+
+# Phases 3 and 4: Media Studio, YouTube, WhatsApp hand-off, client review, Event Mode, PR, SEO, reports
+
+## What is in Phases 3 and 4
+
+- **Media Studio.** Resized copies of a photo (1:1, 4:5, 9:16, 16:9), optionally with the brand logo. Each channel gets the shape it likes (Instagram 4:5, Facebook/LinkedIn/Google/blog/YouTube 16:9). Video cover frame picker. Originals are never changed.
+- **YouTube.** Uploads an approved video (title, description, tags) with a privacy setting chosen in Connections (public / unlisted / private) and the cover frame as thumbnail.
+- **WhatsApp hand-off.** Turns the approved WhatsApp text into a **draft** template in WhatsApp → Templates. It is never submitted to Meta and never sent.
+- **Client review link.** A private link for a client without a login. Only a hash of the link is stored. It expires, works once (approve or ask for changes), and stops working if the post changes after the link was made.
+- **Event Mode.** One event becomes five drafts (teaser, live update, recap blog, gallery post, press release) sharing the event's facts. "Use these photos in all event posts" copies a post's photos to its siblings.
+- **PR / News.** Media contacts (add, edit, CSV import, unsubscribe), press releases as PDF or Word, pitch emails to chosen contacts after approval, open tracking (rough), coverage links, per-release numbers.
+- **SEO.** Google Search Console (read-only): clicks, impressions, top keywords.
+- **Monthly report.** Posts, publishing results by channel, failures, per-post links, press numbers, search numbers; JSON in the app and PDF download.
+
+## New environment variables
+
+| Name | For |
+|---|---|
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | Google Business Profile, YouTube and Search Console (one Google app). Redirect URIs: `/api/onepost/oauth/gbp/callback`, `/api/onepost/oauth/youtube/callback`, `/api/onepost/oauth/gsc/callback` |
+| `RESEND_API_KEY`, `EMAIL_FROM` | Pitch emails to journalists. Without them the PR tab says email is not set up and nothing is sent. |
+| `BLOB_READ_WRITE_TOKEN` | Already used in Phase 2 (media and video). Keep it marked Sensitive in Vercel. |
+
+Keys shown as "not configured" in the app are simply missing: every screen works and tells the person what is missing.
+
+## Database
+
+Phases 1 to 4 only **add**: 11 new tables and foreign keys from the new tables to `Organization`. No existing table or column is altered, renamed or dropped. The exact Postgres statements are in `docs/onepost-postgres-plan.sql`. Take a Neon backup before the first production deploy.
+
+## Rules that still hold
+
+- Nothing is published, emailed or submitted without a person approving it first.
+- Every table carries `organizationId`; every route checks the workspace.
+- Tokens are encrypted; review links and unsubscribe/open links store only random tokens.
+- The Social Media module and `src/providers/meta` are untouched; Facebook/Instagram posting reuses them.
+
+## Test checklist (Phases 3 and 4)
+
+1. Upload a photo, make 1:1 and 4:5 copies with the logo; the Instagram post uses the 4:5 copy.
+2. Upload a video, pick a cover frame; (with Google keys) publish to YouTube as Private first.
+3. Approve a post with a WhatsApp version → "Create WhatsApp draft" → the template appears as a draft.
+4. Send a post for review → create a client link → open it in a private window → approve or ask for changes.
+5. New event campaign → five drafts appear with the event name and phase.
+6. PR tab → add a contact, download the press release (Word, and PDF for English) → approve → email yourself first.
+7. Click the unsubscribe link in that email → confirm → the contact shows "Unsubscribed" and is skipped next time.
+8. Reports → pick the month → download the PDF.
+
+## Not done / limits (honest list)
+
+- **Not tested against the live services.** LinkedIn, Google Business Profile, YouTube, Search Console and Resend are covered by tests with mocked responses. They need real keys and, for Google and LinkedIn, the providers' own API approvals.
+- **LinkedIn**: the API version defaults to `202606` (`LINKEDIN_API_VERSION`) and was not checked live. Company Page posting needs LinkedIn's approval.
+- **Google Business Profile** and **YouTube**: Google may require an audit. Until then YouTube can force new uploads to Private.
+- **Facebook/Instagram video**: the existing Social Media code posts photos and text only, so videos are not posted there. Changing it needs your OK.
+- **YouTube large videos**: limited by the server's function time (about 55 seconds). Upload very large files in YouTube Studio.
+- **PDF** export supports English (Latin) text only. Hindi or Punjabi text: use the Word file.
+- **Open tracking** is a rough signal (some mail apps block or pre-load the pixel).
+- **Reach** (people who saw each post) is not collected from any channel; reports say so.
+- **WordPress**: self-hosted sites only (Application Passwords), not wordpress.com.
