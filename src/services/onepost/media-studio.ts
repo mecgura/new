@@ -7,6 +7,7 @@ import type { OrgAccess } from "@/lib/session";
 import { RATIOS, RATIO_KEYS, type Ratio } from "@/lib/onepost-media";
 import { assertServiceEnabled } from "@/services/whatsapp/guards";
 import { BLOB_URL_RE, IMAGE_TYPES, MAX_BLOB_IMAGE_BYTES, blobConfigured, blobPrefix, deleteBlobs, fetchBlobBytes, headBlob, putBlob } from "@/services/onepost/storage";
+import { deleteUnreferencedBlobs } from "@/services/onepost/blob-gc";
 import { canEditPost, getPost, resetApprovalFor } from "@/services/onepost/posts";
 
 export const variantsSchema = z.object({ ratios: z.array(z.enum(RATIO_KEYS)).min(1).max(RATIO_KEYS.length), watermark: z.boolean().default(false) });
@@ -75,7 +76,7 @@ export async function createVariants(a: OrgAccess, postId: string, mediaId: stri
     }
     made.push(ratio);
   }
-  await deleteBlobs(dropped);
+  await deleteUnreferencedBlobs(a.organizationId, dropped);
   await resetApprovalFor(a, post);
   await audit({ action: "onepost.updated", actorUserId: a.user.id, organizationId: a.organizationId, targetType: "onepost", targetId: postId, metadata: { media: "variants", ratios: made, watermark: input.watermark }, req });
   return getPost(a, postId);
@@ -98,7 +99,7 @@ export async function setVideoThumbnail(a: OrgAccess, postId: string, mediaId: s
   }
   const old = m.thumbUrl;
   await db.onePostMedia.update({ where: { id: m.id }, data: { thumbUrl: h.url } });
-  if (old && old !== h.url) await deleteBlobs([old]);
+  if (old && old !== h.url) await deleteUnreferencedBlobs(a.organizationId, [old]);
   await resetApprovalFor(a, post);
   await audit({ action: "onepost.updated", actorUserId: a.user.id, organizationId: a.organizationId, targetType: "onepost", targetId: postId, metadata: { media: "thumbnail" }, req });
   return getPost(a, postId);

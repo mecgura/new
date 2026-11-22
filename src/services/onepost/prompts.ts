@@ -1,4 +1,5 @@
 import { CHANNEL_LABELS, GBP_CTAS, LANGUAGES, POST_TYPES, TONES, type Channel, type Language, type PostType, type Tone } from "@/lib/onepost";
+import { phaseOf } from "@/lib/onepost-event";
 
 export type BrandFacts = {
   businessName: string;
@@ -26,6 +27,12 @@ export type PostFacts = {
   spokespersonQuote: string;
   videoUrl: string;
   hasMedia: boolean;
+  /** Event Mode: which part of the event campaign this post is, and the event's facts. */
+  eventPhase?: string;
+  eventName?: string;
+  eventDate?: string;
+  eventPlace?: string;
+  eventHighlights?: string;
 };
 
 export type GenerateInput = {
@@ -109,6 +116,9 @@ export function buildPrompt(input: GenerateInput): { system: string; user: strin
     post.spokespersonQuote ? `Spokesperson quote (use exactly as given): ${post.spokespersonQuote}` : "",
     post.videoUrl ? `Video link: ${post.videoUrl}` : "",
     post.hasMedia ? "The post comes with photos or a video." : "",
+    post.eventPhase ? `Event campaign part: ${phaseOf(post.eventPhase)?.label ?? post.eventPhase}. ${phaseOf(post.eventPhase)?.guide ?? ""}` : "",
+    post.eventName ? `Event: ${post.eventName}${post.eventDate ? ` on ${post.eventDate}` : ""}${post.eventPlace ? ` at ${post.eventPlace}` : ""}` : "",
+    post.eventHighlights ? `Event highlights (the only facts you may use about the event):\n${post.eventHighlights}` : "",
     input.instruction ? `\nThe client asked for this change: ${input.instruction}` : "",
     input.avoid ? `\nDo not reuse wording from these other versions. Use clearly different sentences and structure:\n${input.avoid}` : "",
   ]

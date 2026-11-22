@@ -31,6 +31,9 @@ import {
   type PostStatus,
 } from "@/lib/onepost";
 import { DEMO_MODEL, OnePostAi } from "@/services/onepost/ai";
+import { phaseChannels } from "@/lib/onepost-event";
+import { siblingsOf } from "@/services/onepost/event-siblings";
+import { deleteUnreferencedBlobs } from "@/services/onepost/blob-gc";
 import type { BrandFacts, PostFacts } from "@/services/onepost/prompts";
 import { BLOB_URL_RE, IMAGE_TYPES, MAX_BLOB_IMAGE_BYTES, MAX_BLOB_VIDEO_BYTES, VIDEO_TYPES, blobConfigured, blobPrefix, deleteBlobs, headBlob, putBlob } from "@/services/onepost/storage";
 
@@ -216,7 +219,10 @@ async function loadFull(organizationId: string, id: string) {
   });
 }
 
-const summary = (orgId: string, p: { id: string; title: string; postType: string; language: string; status: string; reviewNote: string; createdById: string | null; createdAt: Date; updatedAt: Date; _count?: { versions: number; media: number } }) => ({
+const summary = (orgId: string, p: { id: string; title: string; postType: string; language: string; status: string; reviewNote: string; createdById: string | null; createdAt: Date; updatedAt: Date; eventName: string; eventPhase: string; eventGroupId: string; _count?: { versions: number; media: number } }) => ({
+  eventName: p.eventName,
+  eventPhase: p.eventPhase,
+  eventGroupId: p.eventGroupId,
   id: p.id,
   title: p.title,
   postType: p.postType,
@@ -249,6 +255,13 @@ async function detailDto(a: OrgAccess, p: FullPost) {
     spokespersonName: p.spokespersonName,
     spokespersonQuote: p.spokespersonQuote,
     videoUrl: p.videoUrl,
+    eventName: p.eventName,
+    eventPlace: p.eventPlace,
+    eventDate: p.eventDate,
+    eventHighlights: p.eventHighlights,
+    eventGroupId: p.eventGroupId,
+    eventPhase: p.eventPhase,
+    siblings: await siblingsOf(p.organizationId, p.eventGroupId),
     status: p.status as PostStatus,
     reviewNote: p.reviewNote,
     createdById: p.createdById,
@@ -317,8 +330,9 @@ export async function deletePost(a: OrgAccess, id: string, req?: Request) {
   const p = await loadPost(a, id);
   if (!canDeletePost(a, p)) throw new ApiError("FORBIDDEN", "You can't delete this post.");
   const blobs = (await db.onePostMedia.findMany({ where: { postId: id, organizationId: a.organizationId, storage: "blob" }, select: { blobUrl: true } })).map((m) => m.blobUrl);
+  const thumbs = (await db.onePostMedia.findMany({ where: { postId: id, organizationId: a.organizationId, thumbUrl: { not: "" } }, select: { thumbUrl: true } })).map((m) => m.thumbUrl);
   await db.onePost.delete({ where: { id } });
-  await deleteBlobs(blobs);
+  await deleteUnreferencedBlobs(a.organizationId, [...blobs, ...thumbs]);
   await log(a, "onepost.deleted", id, { title: p.title }, req);
 }
 
@@ -350,10 +364,12 @@ export async function removeMedia(a: OrgAccess, postId: string, mediaId: string,
   await assertServiceEnabled(a.organizationId, "ONEPOST");
   const p = await loadPost(a, postId);
   if (!canEditPost(a, p)) throw new ApiError("FORBIDDEN", "You can't edit this post right now.");
-  const m = await db.onePostMedia.findFirst({ where: { id: mediaId, postId, organizationId: a.organizationId }, select: { storage: true, blobUrl: true } });
+  const m = await db.onePostMedia.findFirst({ where: { id: mediaId, postId, organizationId: a.organizationId }, select: { id: true, storage: true, blobUrl: true, thumbUrl: true, variantOf: true } });
   if (!m) throw new ApiError("NOT_FOUND", "File not found.");
-  await db.onePostMedia.deleteMany({ where: { id: mediaId, postId, organizationId: a.organizationId } });
-  if (m.storage === "blob") await deleteBlobs([m.blobUrl]);
+  // Removing an original photo removes its resized copies too.
+  const copies = await db.onePostMedia.findMany({ where: { postId, organizationId: a.organizationId, variantOf: m.id }, select: { id: true, blobUrl: true, thumbUrl: true } });
+  await db.onePostMedia.deleteMany({ where: { id: { in: [m.id, ...copies.map((c) => c.id)] }, postId, organizationId: a.organizationId } });
+  await deleteUnreferencedBlobs(a.organizationId, [m.blobUrl, m.thumbUrl, ...copies.flatMap((c) => [c.blobUrl, c.thumbUrl])]);
   await resetApproval(a, p);
   await log(a, "onepost.updated", postId, { media: "removed" }, req);
   return getPost(a, postId);
@@ -409,7 +425,7 @@ export async function registerBlobMedia(a: OrgAccess, postId: string, input: { u
 // AI conversion
 // ---------------------------------------------------------------------------
 
-async function facts(organizationId: string, p: { title: string; brief: string; postType: string; language: string; tone: string; city: string; keywords: string; spokespersonName: string; spokespersonQuote: string; videoUrl: string; id: string }) {
+async function facts(organizationId: string, p: { title: string; brief: string; postType: string; language: string; tone: string; city: string; keywords: string; spokespersonName: string; spokespersonQuote: string; videoUrl: string; id: string; eventPhase: string; eventName: string; eventDate: Date | null; eventPlace: string; eventHighlights: string }) {
   const [b, org, media] = await Promise.all([
     db.onePostBrand.findUnique({ where: { organizationId } }),
     db.organization.findUnique({ where: { id: organizationId }, select: { name: true } }),
@@ -428,7 +444,7 @@ async function facts(organizationId: string, p: { title: string; brief: string; 
     contactEmail: b?.contactEmail ?? "",
     contactPhone: b?.contactPhone ?? "",
   };
-  const post: PostFacts = { title: p.title, brief: p.brief, postType: p.postType, language: p.language, tone: p.tone, city: p.city, keywords: p.keywords, spokespersonName: p.spokespersonName, spokespersonQuote: p.spokespersonQuote, videoUrl: p.videoUrl, hasMedia: media > 0 };
+  const post: PostFacts = { title: p.title, brief: p.brief, postType: p.postType, language: p.language, tone: p.tone, city: p.city, keywords: p.keywords, spokespersonName: p.spokespersonName, spokespersonQuote: p.spokespersonQuote, videoUrl: p.videoUrl, hasMedia: media > 0, eventPhase: p.eventPhase, eventName: p.eventName, eventDate: p.eventDate ? p.eventDate.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" }) : "", eventPlace: p.eventPlace, eventHighlights: p.eventHighlights };
   return { brand, post };
 }
 
@@ -450,7 +466,8 @@ export async function generateVersions(a: OrgAccess, postId: string, channels: C
   await assertServiceEnabled(a.organizationId, "ONEPOST");
   const p = await loadPost(a, postId);
   if (!canEditPost(a, p)) throw new ApiError("FORBIDDEN", "You can't edit this post right now.");
-  const wanted = (channels?.length ? [...new Set(channels)] : [...CHANNEL_KEYS]) as Channel[];
+  // An event post writes only the channels that suit its part of the campaign; any other post writes all ten.
+  const wanted = (channels?.length ? [...new Set(channels)] : p.eventPhase ? phaseChannels(p.eventPhase) : [...CHANNEL_KEYS]) as Channel[];
   const { brand, post } = await facts(a.organizationId, p);
   if (wanted.includes("press_release") && post.spokespersonQuote && !post.spokespersonName) {
     throw new ApiError("VALIDATION_ERROR", "Add the name of the person who said the quote, so the press release can credit them.", { details: { spokespersonName: ["Required with a quote"] } });
