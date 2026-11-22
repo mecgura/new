@@ -11,6 +11,7 @@ import {
   MAX_ATTEMPTS,
   PUBLISH_CHANNEL_KEYS,
   PUBLISH_LABELS,
+  PUBLISH_PROVIDER,
   PublishError,
   channelProblem,
   dateToIstInput,
@@ -31,6 +32,8 @@ import { MetaApiError } from "@/providers/meta/graph";
 import { linkedinPublish } from "@/providers/onepost/linkedin";
 import { googlePublish } from "@/providers/onepost/google-business";
 import { wpPublish } from "@/providers/onepost/wordpress";
+import { youtubeSetThumbnail, youtubeUpload } from "@/providers/onepost/youtube";
+import { pickPhoto } from "@/lib/onepost-media";
 import { accessTokenFor } from "@/services/onepost/connections";
 import { PUBLISHABLE, syncPostState } from "@/services/onepost/state";
 import { blobConfigured, fetchBlobBytes, putBlob } from "@/services/onepost/storage";
@@ -81,7 +84,7 @@ async function resolveTarget(organizationId: string, channel: PublishChannel): P
     const acct = await db.channelAccount.findFirst({ where: { organizationId, kind, status: "active", encryptedToken: { not: "" } }, select: { id: true, name: true } });
     return acct ? { connectionId: "", label: acct.name } : { problem: `No ${channel === "facebook" ? "Facebook Page" : "Instagram account"} connected. Connect it in Channels.` };
   }
-  const c = await db.onePostConnection.findFirst({ where: { organizationId, provider: channel === "wordpress" ? "wordpress" : channel === "gbp" ? "gbp" : "linkedin", status: { not: "expired" } }, orderBy: { createdAt: "asc" } });
+  const c = await db.onePostConnection.findFirst({ where: { organizationId, provider: PUBLISH_PROVIDER[channel] || "none", status: { not: "expired" } }, orderBy: { createdAt: "asc" } });
   if (!c) return { problem: `${PUBLISH_LABELS[channel]} isn't connected. Connect it in OnePost → Connections.` };
   if (c.status === "needs_target" || !c.externalId) return { problem: `Choose which ${channel === "gbp" ? "business location" : "account"} to use in OnePost → Connections.` };
   return { connectionId: c.id, label: c.externalName || c.externalId };
@@ -279,7 +282,10 @@ export async function processDelivery(id: string): Promise<DeliveryStatus | "ski
   try {
     if (!isPublishChannel(channel)) throw new PublishError("Unknown channel.", false);
     const snap = parse<Snapshot>(d.snapshot, {} as Snapshot);
-    const images = (await db.onePostMedia.findMany({ where: { postId: d.postId, organizationId: org, kind: "image", id: { in: snap.mediaIds ?? [] } }, orderBy: { position: "asc" }, select: { id: true } })).map((m) => m.id);
+    const rows = await db.onePostMedia.findMany({ where: { postId: d.postId, organizationId: org, id: { in: snap.mediaIds ?? [] } }, orderBy: { position: "asc" }, select: { id: true, kind: true, variantOf: true, ratio: true, watermarked: true, position: true, sizeBytes: true, mimeType: true, blobUrl: true, thumbUrl: true, storage: true } });
+    // The photo in the shape this channel likes best (a resized copy if one was made), else the original.
+    const photo = pickPhoto(channel, rows);
+    const images = photo ? [photo.id] : [];
     let result: { id: string; url: string };
     if (channel === "facebook" || channel === "instagram") {
       const acct = await db.channelAccount.findFirst({ where: { organizationId: org, kind: channel === "facebook" ? "messenger" : "instagram", status: "active", encryptedToken: { not: "" } } });
@@ -300,6 +306,17 @@ export async function processDelivery(id: string): Promise<DeliveryStatus | "ski
         const token = await accessTokenFor(conn);
         const c = snap.content as ContentOf<"gbp">;
         result = await googlePublish(token, conn.externalId, { summary: c.text, languageCode: GBP_LANG[snap.language] ?? "en-IN", cta: c.cta, ctaUrl: c.ctaUrl, imageUrl: images[0] ? await publicImageUrl(org, images[0]) : undefined });
+      } else if (channel === "youtube") {
+        const token = await accessTokenFor(conn);
+        const video = rows.find((m) => m.kind === "video" && !m.variantOf);
+        if (!video || video.storage !== "blob" || !video.blobUrl) throw new PublishError("The video was removed, or isn't in file storage.", false);
+        const c = parseContent("youtube", snap.content);
+        const privacy = parse<{ ytPrivacy?: "public" | "unlisted" | "private" }>(conn.settings, {}).ytPrivacy ?? "public";
+        result = await youtubeUpload(token, { title: c.title, description: c.description, tags: c.tags, privacy, videoUrl: video.blobUrl, size: video.sizeBytes, contentType: video.mimeType });
+        if (video.thumbUrl) {
+          const bytes = await fetchBlobBytes(video.thumbUrl).catch(() => null);
+          if (bytes) await youtubeSetThumbnail(token, result.id, { bytes, contentType: "image/jpeg" });
+        }
       } else {
         const c = parseContent("blog", snap.content);
         const [user, pass] = (() => {

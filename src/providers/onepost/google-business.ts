@@ -2,10 +2,12 @@ import { PublishError } from "@/lib/onepost-publish";
 import { bearer, http } from "@/providers/onepost/http";
 import { oauthConfig } from "@/providers/onepost/config";
 
+type GoogleKind = "gbp" | "youtube" | "gsc";
+
 export type GoogleTokens = { accessToken: string; expiresIn: number; refreshToken: string; scope: string };
 
-export function googleAuthUrl(state: string) {
-  const c = oauthConfig("gbp");
+export function googleAuthUrl(state: string, kind: GoogleKind = "gbp") {
+  const c = oauthConfig(kind);
   const u = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   u.searchParams.set("client_id", c.clientId);
   u.searchParams.set("redirect_uri", c.redirectUri);
@@ -19,7 +21,7 @@ export function googleAuthUrl(state: string) {
 }
 
 async function tokenRequest(form: Record<string, string>, keepRefresh = ""): Promise<GoogleTokens> {
-  const c = oauthConfig("gbp");
+  const c = oauthConfig("gbp"); // the same Google client for every Google product
   const r = await http<{ access_token?: string; expires_in?: number; refresh_token?: string; scope?: string }>("https://oauth2.googleapis.com/token", {
     label: "Google",
     method: "POST",
@@ -30,7 +32,7 @@ async function tokenRequest(form: Record<string, string>, keepRefresh = ""): Pro
   return { accessToken: r.json.access_token, expiresIn: r.json.expires_in ?? 3600, refreshToken: r.json.refresh_token ?? keepRefresh, scope: r.json.scope ?? "" };
 }
 
-export const googleExchange = (code: string) => tokenRequest({ grant_type: "authorization_code", code, redirect_uri: oauthConfig("gbp").redirectUri });
+export const googleExchange = (code: string, kind: GoogleKind = "gbp") => tokenRequest({ grant_type: "authorization_code", code, redirect_uri: oauthConfig(kind).redirectUri });
 export const googleRefresh = (refreshToken: string) => tokenRequest({ grant_type: "refresh_token", refresh_token: refreshToken }, refreshToken);
 
 /** Business accounts the person manages, each with its locations. */

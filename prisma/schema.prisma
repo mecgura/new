@@ -89,6 +89,7 @@ model Organization {
   onePostBrand            OnePostBrand?
   onePosts                OnePost[]
   onePostConnections      OnePostConnection[]
+  onePostContacts         OnePostContact[]
   jobs                    Job[]
   candidates              Candidate[]
   employees               Employee[]
@@ -2749,9 +2750,17 @@ model OnePost {
   updatedAt        DateTime  @updatedAt
   scheduledAt      DateTime?
   publishedAt      DateTime?
+  eventName        String    @default("")
+  eventDate        DateTime?
+  eventPlace       String    @default("")
+  eventHighlights  String    @default("")
+  eventGroupId     String    @default("")
+  eventPhase       String    @default("") // teaser | live | recap | gallery | press
 
   organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   deliveries   OnePostDelivery[]
+  approvalLinks OnePostApprovalLink[]
+  pitches      OnePostPitch[]
   media        OnePostMedia[]
   versions     OnePostVersion[]
   events       OnePostEvent[]
@@ -2774,6 +2783,10 @@ model OnePostMedia {
   storage        String   @default("db") // db | blob
   blobUrl        String   @default("")
   blobPath       String   @default("")
+  variantOf      String   @default("") // id of the original photo this is a resized copy of
+  ratio          String   @default("") // 1:1 | 4:5 | 9:16 | 16:9
+  watermarked    Boolean  @default(false)
+  thumbUrl       String   @default("") // chosen cover frame for a video
 
   post OnePost @relation(fields: [postId], references: [id], onDelete: Cascade)
 
@@ -2880,4 +2893,71 @@ model OnePostDelivery {
   @@index([status, nextAttemptAt])
   @@index([organizationId, scheduledAt])
   @@index([postId])
+}
+
+/** A review link for a client who has no login: they can approve or ask for changes on one specific post. */
+model OnePostApprovalLink {
+  id             String    @id @default(cuid())
+  organizationId String
+  postId         String
+  tokenHash      String    @unique
+  contentHash    String // fingerprint of what the client was shown; the link stops working if the post changes
+  expiresAt      DateTime
+  decision       String    @default("") // approved | changes_requested
+  decisionNote   String    @default("")
+  decidedBy      String    @default("") // the name the client typed
+  decidedAt      DateTime?
+  revokedAt      DateTime?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+
+  post OnePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([organizationId])
+}
+
+/** A journalist or outlet the workspace may send press releases to. */
+model OnePostContact {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  outlet         String   @default("")
+  email          String
+  city           String   @default("")
+  beat           String   @default("")
+  optedOut       Boolean  @default(false)
+  optToken       String   @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pitches      OnePostPitch[]
+
+  @@unique([organizationId, email])
+}
+
+/** One pitch email to one contact: sent, opened (when the mail client loads the pixel) and covered (a link a person enters). */
+model OnePostPitch {
+  id             String    @id @default(cuid())
+  organizationId String
+  postId         String
+  contactId      String
+  subject        String
+  status         String    @default("queued") // queued | sent | failed
+  error          String    @default("")
+  sentAt         DateTime?
+  openedAt       DateTime?
+  openCount      Int       @default(0)
+  trackToken     String    @unique
+  coverageUrl    String    @default("")
+  coverageNote   String    @default("")
+  createdById    String?
+  createdAt      DateTime  @default(now())
+
+  post    OnePost        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  contact OnePostContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([organizationId, createdAt])
 }

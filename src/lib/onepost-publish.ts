@@ -8,6 +8,7 @@ export const PUBLISH_CHANNELS = [
   { key: "linkedin", label: "LinkedIn", version: "linkedin", via: "connection" },
   { key: "gbp", label: "Google Business Profile", version: "gbp", via: "connection" },
   { key: "wordpress", label: "WordPress blog", version: "blog", via: "connection" },
+  { key: "youtube", label: "YouTube", version: "youtube", via: "connection" },
 ] as const satisfies readonly { key: string; label: string; version: Channel; via: "channels" | "connection" }[];
 export type PublishChannel = (typeof PUBLISH_CHANNELS)[number]["key"];
 export const PUBLISH_CHANNEL_KEYS = PUBLISH_CHANNELS.map((c) => c.key) as [PublishChannel, ...PublishChannel[]];
@@ -15,9 +16,14 @@ export const PUBLISH_LABELS = Object.fromEntries(PUBLISH_CHANNELS.map((c) => [c.
 export const versionFor = (c: PublishChannel): Channel => PUBLISH_CHANNELS.find((x) => x.key === c)!.version;
 export const isPublishChannel = (v: unknown): v is PublishChannel => typeof v === "string" && (PUBLISH_CHANNEL_KEYS as string[]).includes(v);
 
-export const CONNECTION_PROVIDERS = ["linkedin", "gbp", "wordpress"] as const;
+export const CONNECTION_PROVIDERS = ["linkedin", "gbp", "wordpress", "youtube", "gsc"] as const;
 export type ConnectionProvider = (typeof CONNECTION_PROVIDERS)[number];
-export const PROVIDER_LABELS: Record<ConnectionProvider, string> = { linkedin: "LinkedIn", gbp: "Google Business Profile", wordpress: "WordPress" };
+export const PROVIDER_LABELS: Record<ConnectionProvider, string> = { linkedin: "LinkedIn", gbp: "Google Business Profile", wordpress: "WordPress", youtube: "YouTube", gsc: "Google Search Console" };
+/** Providers that sign in through OAuth (the others use a login the person types once). */
+export const OAUTH_PROVIDERS = ["linkedin", "gbp", "youtube", "gsc"] as const;
+export type OAuthProvider = (typeof OAUTH_PROVIDERS)[number];
+export const isOAuthProvider = (v: unknown): v is OAuthProvider => typeof v === "string" && (OAUTH_PROVIDERS as readonly string[]).includes(v);
+export const PUBLISH_PROVIDER: Record<PublishChannel, ConnectionProvider | ""> = { facebook: "", instagram: "", linkedin: "linkedin", gbp: "gbp", wordpress: "wordpress", youtube: "youtube" };
 export const isProvider = (v: unknown): v is ConnectionProvider => typeof v === "string" && (CONNECTION_PROVIDERS as readonly string[]).includes(v);
 
 export const DELIVERY_STATUSES = ["queued", "publishing", "published", "failed", "cancelled"] as const;
@@ -101,6 +107,8 @@ export function textFor(channel: PublishChannel, content: unknown): string {
       return String(c.text ?? "");
     case "wordpress":
       return String(c.headline ?? "");
+    case "youtube":
+      return String(c.title ?? "");
   }
 }
 
@@ -110,7 +118,11 @@ export type MediaRef = { id: string; kind: "image" | "video"; url: string; mimeT
 export function channelProblem(channel: PublishChannel, content: unknown, media: MediaRef[]): string {
   const images = media.filter((m) => m.kind === "image");
   if (channel === "instagram" && !images.length) return "Instagram needs a photo. Add one to the post.";
-  if (channel === "wordpress") {
+  if (channel === "youtube" && !media.some((m) => m.kind === "video")) return "YouTube needs a video. Upload one to the post.";
+  if (channel === "youtube") {
+    const c = content as { title?: string; description?: string };
+    if (!c.title?.trim() || !c.description?.trim()) return "The YouTube version is incomplete.";
+  } else if (channel === "wordpress") {
     const c = content as { body?: string; slug?: string };
     if (!c.body?.trim() || !c.slug) return "The blog version is incomplete.";
   } else if (!textFor(channel, content).trim()) return "This version is empty.";
@@ -123,6 +135,7 @@ export function channelProblem(channel: PublishChannel, content: unknown, media:
 
 /** A one-line, plain-language reason when only videos were added and the channel needs a photo or none. */
 export function videoNote(channel: PublishChannel, media: MediaRef[]): string {
+  if (channel === "youtube") return "";
   return media.some((m) => m.kind === "video") ? `Videos are not posted to ${PUBLISH_LABELS[channel]} yet. The text${media.some((m) => m.kind === "image") ? " and photo" : ""} will be posted.` : "";
 }
 

@@ -115,6 +115,9 @@ async function resetApproval(a: OrgAccess, post: PostRow) {
   await logEvent(a, post.id, "approval_reset", post.status === "approved" ? "Edited after approval: approval removed" : "Edited during review: sent back to draft");
 }
 
+/** Same as resetApproval, for the Media Studio service (a change to the post's files sends an approved post back to draft). */
+export const resetApprovalFor = (a: OrgAccess, post: PostRow) => resetApproval(a, post);
+
 const parseJson = <T,>(s: string, fallback: T): T => {
   try {
     return JSON.parse(s) as T;
@@ -206,7 +209,7 @@ async function loadFull(organizationId: string, id: string) {
   return db.onePost.findFirst({
     where: { id, organizationId },
     include: {
-      media: { select: { id: true, name: true, mimeType: true, sizeBytes: true, position: true, kind: true, storage: true, blobUrl: true }, orderBy: { position: "asc" } },
+      media: { select: { id: true, name: true, mimeType: true, sizeBytes: true, position: true, kind: true, storage: true, blobUrl: true, variantOf: true, ratio: true, watermarked: true, thumbUrl: true }, orderBy: { position: "asc" } },
       versions: { orderBy: { createdAt: "asc" } },
       events: { orderBy: { createdAt: "desc" }, take: 40 },
     },
@@ -254,7 +257,7 @@ async function detailDto(a: OrgAccess, p: FullPost) {
     approvedAt: p.approvedAt,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
-    media: p.media.map((m) => ({ id: m.id, name: m.name, kind: m.kind as "image" | "video", mimeType: m.mimeType, sizeBytes: m.sizeBytes, url: m.storage === "blob" && m.blobUrl ? m.blobUrl : `/api/organizations/${p.organizationId}/onepost/posts/${p.id}/media/${m.id}` })),
+    media: p.media.map((m) => ({ id: m.id, name: m.name, kind: m.kind as "image" | "video", variantOf: m.variantOf, ratio: m.ratio, watermarked: m.watermarked, thumbUrl: m.thumbUrl, mimeType: m.mimeType, sizeBytes: m.sizeBytes, url: m.storage === "blob" && m.blobUrl ? m.blobUrl : `/api/organizations/${p.organizationId}/onepost/posts/${p.id}/media/${m.id}` })),
     versions: p.versions
       .filter((v) => isChannel(v.channel))
       .map((v) => ({ channel: v.channel as Channel, content: parseJson<unknown>(v.content, {}), checks: parseJson<string[]>(v.checks, []), model: v.model, generation: v.generation, edited: Boolean(v.editedAt), updatedAt: v.updatedAt })),
@@ -327,7 +330,7 @@ export async function addMedia(a: OrgAccess, postId: string, input: { name: stri
   await assertServiceEnabled(a.organizationId, "ONEPOST");
   const p = await loadPost(a, postId);
   if (!canEditPost(a, p)) throw new ApiError("FORBIDDEN", "You can't edit this post right now.");
-  const count = await db.onePostMedia.count({ where: { postId, organizationId: a.organizationId } });
+  const count = await db.onePostMedia.count({ where: { postId, organizationId: a.organizationId, variantOf: "" } });
   if (count >= MAX_MEDIA_PER_POST) throw new ApiError("VALIDATION_ERROR", `A post can have up to ${MAX_MEDIA_PER_POST} images.`);
   const img = decodeImage(input.image, MAX_MEDIA_BYTES, "Images");
   const name = input.name.slice(0, 120) || "Image";
@@ -368,7 +371,7 @@ export async function assertMayUpload(a: OrgAccess, postId: string) {
   await assertServiceEnabled(a.organizationId, "ONEPOST");
   const p = await loadPost(a, postId);
   if (!canEditPost(a, p)) throw new ApiError("FORBIDDEN", "You can't edit this post right now.");
-  if ((await db.onePostMedia.count({ where: { postId, organizationId: a.organizationId } })) >= MAX_MEDIA_PER_POST) throw new ApiError("VALIDATION_ERROR", `A post can have up to ${MAX_MEDIA_PER_POST} files.`);
+  if ((await db.onePostMedia.count({ where: { postId, organizationId: a.organizationId, variantOf: "" } })) >= MAX_MEDIA_PER_POST) throw new ApiError("VALIDATION_ERROR", `A post can have up to ${MAX_MEDIA_PER_POST} files.`);
   return blobPrefix(a.organizationId, postId);
 }
 
@@ -380,7 +383,7 @@ export async function registerBlobMedia(a: OrgAccess, postId: string, input: { u
   await assertServiceEnabled(a.organizationId, "ONEPOST");
   const p = await loadPost(a, postId);
   if (!canEditPost(a, p)) throw new ApiError("FORBIDDEN", "You can't edit this post right now.");
-  const count = await db.onePostMedia.count({ where: { postId, organizationId: a.organizationId } });
+  const count = await db.onePostMedia.count({ where: { postId, organizationId: a.organizationId, variantOf: "" } });
   if (count >= MAX_MEDIA_PER_POST) throw new ApiError("VALIDATION_ERROR", `A post can have up to ${MAX_MEDIA_PER_POST} files.`);
   if (!BLOB_URL_RE.test(input.url)) throw new ApiError("VALIDATION_ERROR", "That isn't an uploaded file.");
   const h = await headBlob(input.url);

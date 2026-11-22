@@ -1,5 +1,6 @@
 import { siteConfig } from "@/config/site";
 import { toErrorResponse } from "@/lib/api";
+import { isOAuthProvider } from "@/lib/onepost-publish";
 import { completeOAuth } from "@/services/onepost/connections";
 
 type Ctx = { params: Promise<{ provider: string }> };
@@ -9,7 +10,7 @@ const back = (query: Record<string, string>) => Response.redirect(`${siteConfig.
 /** LinkedIn and Google send the person back here. The one-time state ties the sign-in to the person and workspace that started it. */
 export async function GET(req: Request, { params }: Ctx) {
   const { provider } = await params;
-  if (provider !== "linkedin" && provider !== "gbp") return Response.redirect(`${siteConfig.url}/onepost`, 302);
+  if (!isOAuthProvider(provider)) return Response.redirect(`${siteConfig.url}/onepost`, 302);
   const url = new URL(req.url);
   try {
     const r = await completeOAuth(provider, { code: url.searchParams.get("code"), state: url.searchParams.get("state"), error: url.searchParams.get("error") }, req);

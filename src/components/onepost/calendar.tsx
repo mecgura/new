@@ -18,7 +18,7 @@ const timeFmt = (iso: string) => {
   const p = istParts(new Date(iso));
   return `${pad(p.hour)}:${pad(p.minute)}`;
 };
-const SHORT: Record<PublishChannel, string> = { facebook: "FB", instagram: "IG", linkedin: "in", gbp: "GBP", wordpress: "WP" };
+const SHORT: Record<PublishChannel, string> = { facebook: "FB", instagram: "IG", linkedin: "in", gbp: "GBP", wordpress: "WP", youtube: "YT" };
 const STATUS_CLASS: Record<DeliveryStatus, string> = {
   queued: "border-app-info/40 bg-app-info/10",
   publishing: "border-app-info/40 bg-app-info/10",

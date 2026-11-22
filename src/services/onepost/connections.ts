@@ -6,7 +6,7 @@ import { audit } from "@/lib/audit";
 import { decryptSecret, encryptSecret, isEncryptionConfigured, sha256 } from "@/lib/crypto";
 import type { OrgAccess } from "@/lib/session";
 import { requireOrgAccess, requireUser } from "@/lib/session";
-import { PublishError, type ConnectionProvider } from "@/lib/onepost-publish";
+import { PROVIDER_LABELS, PublishError, type ConnectionProvider, type OAuthProvider } from "@/lib/onepost-publish";
 import { assertServiceEnabled } from "@/services/whatsapp/guards";
 import { socialAccounts } from "@/services/social/posts";
 import { blobConfigured } from "@/services/onepost/storage";
@@ -15,6 +15,8 @@ import { MISSING_ENV, oauthConfig, oauthConfigured } from "@/providers/onepost/c
 import { linkedinAuthUrl, linkedinExchange, linkedinOrganizations, linkedinProfile, linkedinRefresh } from "@/providers/onepost/linkedin";
 import { googleAuthUrl, googleExchange, googleLocations, googleRefresh } from "@/providers/onepost/google-business";
 import { normaliseSite, wpVerify } from "@/providers/onepost/wordpress";
+import { youtubeChannel } from "@/providers/onepost/youtube";
+import { gscSites } from "@/providers/onepost/search-console";
 
 const STATE_MINUTES = 10;
 
@@ -28,7 +30,7 @@ const parse = <T,>(s: string, fallback: T): T => {
 };
 
 const toDto = (c: Row) => {
-  const settings = parse<{ wpStatus?: "publish" | "draft"; username?: string }>(c.settings, {});
+  const settings = parse<{ wpStatus?: "publish" | "draft"; username?: string; ytPrivacy?: "public" | "unlisted" | "private" }>(c.settings, {});
   return {
     id: c.id,
     provider: c.provider as ConnectionProvider,
@@ -37,6 +39,7 @@ const toDto = (c: Row) => {
     expiresAt: c.expiresAt,
     pages: c.provider === "linkedin" && c.scopes.split(/[\s,]+/).includes("w_organization_social"),
     wpStatus: settings.wpStatus ?? "publish",
+    ytPrivacy: settings.ytPrivacy ?? "public",
     username: settings.username ?? "",
     createdAt: c.createdAt,
   };
@@ -50,8 +53,8 @@ export async function listConnections(a: OrgAccess) {
     connections: rows.map(toDto),
     // Facebook and Instagram are the accounts already connected in Channels (the Social Media module uses the same ones).
     channels: await socialAccounts(a.organizationId),
-    configured: { linkedin: oauthConfigured("linkedin"), gbp: oauthConfigured("gbp") },
-    missingEnv: { linkedin: MISSING_ENV.linkedin, gbp: MISSING_ENV.gbp },
+    configured: { linkedin: oauthConfigured("linkedin"), gbp: oauthConfigured("gbp"), youtube: oauthConfigured("youtube"), gsc: oauthConfigured("gsc") },
+    missingEnv: { linkedin: MISSING_ENV.linkedin, gbp: MISSING_ENV.gbp, youtube: MISSING_ENV.youtube, gsc: MISSING_ENV.gsc },
     storage: blobConfigured(),
   };
 }
@@ -60,18 +63,18 @@ export async function listConnections(a: OrgAccess) {
 // OAuth (LinkedIn, Google Business Profile)
 // ---------------------------------------------------------------------------
 
-export async function startOAuth(a: OrgAccess, provider: "linkedin" | "gbp") {
+export async function startOAuth(a: OrgAccess, provider: OAuthProvider) {
   await assertServiceEnabled(a.organizationId, "ONEPOST");
   if (!isEncryptionConfigured()) throw new ApiError("SERVICE_UNAVAILABLE", "Secure credential storage isn't configured on this server yet.");
-  if (!oauthConfigured(provider)) throw new ApiError("SERVICE_UNAVAILABLE", `${provider === "linkedin" ? "LinkedIn" : "Google"} sign-in isn't set up on this server yet. MECGURA needs to add ${MISSING_ENV[provider]}.`);
+  if (!oauthConfigured(provider)) throw new ApiError("SERVICE_UNAVAILABLE", `${PROVIDER_LABELS[provider]} sign-in isn't set up on this server yet. MECGURA needs to add ${MISSING_ENV[provider]}.`);
   const state = randomBytes(32).toString("base64url");
   await db.onePostOAuthState.deleteMany({ where: { expiresAt: { lt: new Date() } } });
   await db.onePostOAuthState.create({ data: { stateHash: sha256(state), organizationId: a.organizationId, userId: a.user.id, provider, expiresAt: new Date(Date.now() + STATE_MINUTES * 60_000) } });
-  return { url: provider === "linkedin" ? linkedinAuthUrl(state) : googleAuthUrl(state) };
+  return { url: provider === "linkedin" ? linkedinAuthUrl(state) : googleAuthUrl(state, provider) };
 }
 
 /** The sign-in came back from the provider. Returns where to send the person next (never throws for provider-side refusals). */
-export async function completeOAuth(provider: "linkedin" | "gbp", params: { code?: string | null; state?: string | null; error?: string | null }, req?: Request): Promise<{ ok: boolean; message: string }> {
+export async function completeOAuth(provider: OAuthProvider, params: { code?: string | null; state?: string | null; error?: string | null }, req?: Request): Promise<{ ok: boolean; message: string }> {
   const user = await requireUser();
   if (params.error) return { ok: false, message: params.error === "access_denied" || params.error === "user_cancelled_authorize" ? "You cancelled the connection." : `The provider refused the connection (${params.error.slice(0, 60)}).` };
   if (!params.code || !params.state) return { ok: false, message: "The sign-in was incomplete. Please try again." };
@@ -87,13 +90,19 @@ export async function completeOAuth(provider: "linkedin" | "gbp", params: { code
       const me = await linkedinProfile(t.accessToken);
       await upsertConnection(access, "linkedin", { accessToken: t.accessToken, refreshToken: t.refreshToken, expiresIn: t.expiresIn, scopes: t.scope, externalId: me.urn, externalName: `${me.name} (personal profile)`, status: "active" }, req);
     } else {
-      const t = await googleExchange(params.code);
-      await upsertConnection(access, "gbp", { accessToken: t.accessToken, refreshToken: t.refreshToken, expiresIn: t.expiresIn, scopes: t.scope || oauthConfig("gbp").scopes.join(" "), externalId: "", externalName: "", status: "needs_target" }, req);
+      const t = await googleExchange(params.code, provider);
+      const base = { accessToken: t.accessToken, refreshToken: t.refreshToken, expiresIn: t.expiresIn, scopes: t.scope || oauthConfig(provider).scopes.join(" ") };
+      if (provider === "youtube") {
+        const ch = await youtubeChannel(t.accessToken);
+        await upsertConnection(access, "youtube", { ...base, externalId: ch.id, externalName: ch.name, status: "active", settings: { ytPrivacy: "public" } }, req);
+      } else {
+        await upsertConnection(access, provider, { ...base, externalId: "", externalName: "", status: "needs_target" }, req);
+      }
     }
   } catch (e) {
     return { ok: false, message: e instanceof PublishError ? e.message : "Could not finish connecting. Please try again." };
   }
-  return { ok: true, message: provider === "gbp" ? "Google connected. Now choose the business location." : "LinkedIn connected." };
+  return { ok: true, message: provider === "gbp" ? "Google connected. Now choose the business location." : provider === "gsc" ? "Google connected. Now choose the website." : `${PROVIDER_LABELS[provider]} connected.` };
 }
 
 async function upsertConnection(a: OrgAccess, provider: ConnectionProvider, v: { accessToken: string; refreshToken: string; expiresIn: number; scopes: string; externalId: string; externalName: string; status: string; settings?: object }, req?: Request) {
@@ -136,7 +145,7 @@ export async function accessTokenFor(c: Row): Promise<string> {
     return t.accessToken;
   }
   await db.onePostConnection.update({ where: { id: c.id }, data: { status: "expired" } });
-  throw new PublishError(`The ${c.provider === "linkedin" ? "LinkedIn" : "Google"} connection has expired. Reconnect it in OnePost → Connections.`, false, true);
+  throw new PublishError(`The ${PROVIDER_LABELS[c.provider as ConnectionProvider] ?? "account"} connection has expired. Reconnect it in OnePost → Connections.`, false, true);
 }
 
 export async function listTargets(a: OrgAccess, id: string) {
@@ -146,6 +155,8 @@ export async function listTargets(a: OrgAccess, id: string) {
   try {
     const token = await accessTokenFor(c);
     if (c.provider === "gbp") return { targets: (await googleLocations(token)).map((t) => ({ id: t.id, name: t.name })) };
+    if (c.provider === "gsc") return { targets: await gscSites(token) };
+    if (c.provider === "youtube") return { targets: [{ id: c.externalId, name: c.externalName || "YouTube channel" }] };
     const personUrn = c.externalId.startsWith("urn:li:person:") ? c.externalId : (await linkedinProfile(token)).urn;
     const orgs = c.scopes.split(/[\s,]+/).includes("w_organization_social") ? await linkedinOrganizations(token) : [];
     return { targets: [{ id: personUrn, name: "Your personal profile" }, ...orgs.map((o) => ({ id: o.urn, name: o.name }))] };
@@ -197,11 +208,12 @@ export async function connectWordPress(a: OrgAccess, input: z.infer<typeof wordp
   }
 }
 
-export const connectionSettingsSchema = z.object({ wpStatus: z.enum(["publish", "draft"]) });
-export async function updateWordPressStatus(a: OrgAccess, id: string, wpStatus: "publish" | "draft") {
+export const connectionSettingsSchema = z.object({ wpStatus: z.enum(["publish", "draft"]).optional(), ytPrivacy: z.enum(["public", "unlisted", "private"]).optional() });
+export async function updateConnectionSettings(a: OrgAccess, id: string, input: z.infer<typeof connectionSettingsSchema>) {
   const c = await loadConnection(a, id);
-  if (c.provider !== "wordpress") throw new ApiError("VALIDATION_ERROR", "Only WordPress connections have this setting.");
-  const settings = { ...parse<Record<string, unknown>>(c.settings, {}), wpStatus };
+  if (input.wpStatus && c.provider !== "wordpress") throw new ApiError("VALIDATION_ERROR", "Only WordPress connections have this setting.");
+  if (input.ytPrivacy && c.provider !== "youtube") throw new ApiError("VALIDATION_ERROR", "Only YouTube connections have this setting.");
+  const settings = { ...parse<Record<string, unknown>>(c.settings, {}), ...(input.wpStatus ? { wpStatus: input.wpStatus } : {}), ...(input.ytPrivacy ? { ytPrivacy: input.ytPrivacy } : {}) };
   return toDto(await db.onePostConnection.update({ where: { id }, data: { settings: JSON.stringify(settings) } }));
 }
 

@@ -1,8 +1,8 @@
 import { siteConfig } from "@/config/site";
-import type { ConnectionProvider } from "@/lib/onepost-publish";
+import type { ConnectionProvider, OAuthProvider } from "@/lib/onepost-publish";
 
 /** OAuth app credentials come from server env only. They are created by MECGURA in each provider's developer console. */
-export function oauthConfig(provider: "linkedin" | "gbp") {
+export function oauthConfig(provider: OAuthProvider) {
   const redirectUri = `${siteConfig.url}/api/onepost/oauth/${provider}/callback`;
   if (provider === "linkedin") {
     return {
@@ -14,16 +14,16 @@ export function oauthConfig(provider: "linkedin" | "gbp") {
       redirectUri,
     };
   }
-  return {
-    clientId: process.env.GOOGLE_OAUTH_CLIENT_ID?.trim() ?? "",
-    clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? "",
-    scopes: ["https://www.googleapis.com/auth/business.manage"],
-    apiVersion: "",
-    redirectUri,
+  // One Google OAuth client serves Business Profile, YouTube and Search Console; each asks only for its own scope.
+  const scopes: Record<"gbp" | "youtube" | "gsc", string[]> = {
+    gbp: ["https://www.googleapis.com/auth/business.manage"],
+    youtube: ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"],
+    gsc: ["https://www.googleapis.com/auth/webmasters.readonly"],
   };
+  return { clientId: process.env.GOOGLE_OAUTH_CLIENT_ID?.trim() ?? "", clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? "", scopes: scopes[provider], apiVersion: "", redirectUri };
 }
 
-export const oauthConfigured = (p: "linkedin" | "gbp") => {
+export const oauthConfigured = (p: OAuthProvider) => {
   const c = oauthConfig(p);
   return Boolean(c.clientId && c.clientSecret);
 };
@@ -31,5 +31,7 @@ export const oauthConfigured = (p: "linkedin" | "gbp") => {
 export const MISSING_ENV: Record<ConnectionProvider, string> = {
   linkedin: "LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET",
   gbp: "GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET",
+  youtube: "GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET",
+  gsc: "GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET",
   wordpress: "",
 };
