@@ -86,6 +86,8 @@ model Organization {
   agreements              ClientAgreement[]
   socialPosts             SocialPost[]
   socialAssets            SocialAsset[]
+  onePostBrand            OnePostBrand?
+  onePosts                OnePost[]
   jobs                    Job[]
   candidates              Candidate[]
   employees               Employee[]
@@ -2693,4 +2695,119 @@ model SponsoredStat {
   ad SponsoredAd @relation(fields: [adId], references: [id], onDelete: Cascade)
 
   @@unique([adId, day])
+}
+
+// ---------------------------------------------------------------------------
+// OnePost — Content & PR Studio (phase 1: brand profile, posts, AI versions, approval)
+// ---------------------------------------------------------------------------
+
+/** One brand profile per workspace: the facts and voice every generated version is written from. */
+model OnePostBrand {
+  id              String   @id @default(cuid())
+  organizationId  String   @unique
+  businessName    String   @default("")
+  services        String   @default("")
+  city            String   @default("")
+  website         String   @default("")
+  about           String   @default("") // company boilerplate used in press releases
+  tone            String   @default("friendly")
+  language        String   @default("en")
+  defaultHashtags String   @default("")
+  contactName     String   @default("")
+  contactEmail    String   @default("")
+  contactPhone    String   @default("")
+  logoType        String   @default("")
+  logo            Bytes?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+/** The idea a client creates once. Status: draft -> in_review -> approved (-> scheduled -> published / failed in later phases). */
+model OnePost {
+  id               String    @id @default(cuid())
+  organizationId   String
+  title            String
+  brief            String    @default("")
+  postType         String    @default("general") // general | offer | event | product_launch | news
+  language         String    @default("en") // en | hi | pa | hinglish
+  tone             String    @default("friendly")
+  city             String    @default("")
+  keywords         String    @default("")
+  spokespersonName String    @default("")
+  spokespersonQuote String   @default("") // only a quote the client supplied is ever used in a press release
+  videoUrl         String    @default("")
+  status           String    @default("draft")
+  reviewNote       String    @default("")
+  submittedAt      DateTime?
+  approvedAt       DateTime?
+  approvedById     String?
+  createdById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  media        OnePostMedia[]
+  versions     OnePostVersion[]
+  events       OnePostEvent[]
+
+  @@index([organizationId, status, updatedAt])
+  @@index([organizationId, createdAt])
+}
+
+model OnePostMedia {
+  id             String   @id @default(cuid())
+  organizationId String
+  postId         String
+  name           String
+  mimeType       String
+  sizeBytes      Int
+  bytes          Bytes
+  position       Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  post OnePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, position])
+  @@index([organizationId])
+}
+
+/** One editable, channel-specific version of a post. `content` is the channel's structured JSON. */
+model OnePostVersion {
+  id             String   @id @default(cuid())
+  organizationId String
+  postId         String
+  channel        String // blog | instagram | facebook | linkedin | youtube | gbp | whatsapp | ads | press_release | pitch_email
+  content        String   @default("{}")
+  checks         String   @default("[]") // JSON warnings (length limits, duplicate wording, policy hints)
+  model          String   @default("") // "demo" when no AI key is configured
+  inputTokens    Int      @default(0)
+  outputTokens   Int      @default(0)
+  generation     Int      @default(1)
+  editedById     String?
+  editedAt       DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  post OnePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, channel])
+  @@index([organizationId])
+}
+
+/** Who did what to a post (status changes, edits, generations). */
+model OnePostEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  postId         String
+  actorUserId    String?
+  action         String
+  note           String   @default("")
+  createdAt      DateTime @default(now())
+
+  post OnePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+  @@index([organizationId])
 }

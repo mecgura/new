@@ -4,6 +4,7 @@ export const SERVICES = [
   { key: "WHATSAPP_AUTOMATION", label: "WhatsApp Automation", description: "Inbox, templates, campaigns and flows" },
   { key: "CRM", label: "CRM", description: "Contacts, leads and pipelines" },
   { key: "SOCIAL_MEDIA", label: "Social Media Management", description: "Content calendar: plan, schedule and publish Facebook and Instagram posts" },
+  { key: "ONEPOST", label: "OnePost — Content & PR Studio", description: "Write once, get a version for every channel: website blog, Instagram, Facebook, LinkedIn, YouTube, Google Business Profile, WhatsApp, ads and press release, with preview and approval before anything goes out" },
   { key: "AI_ASSISTANT", label: "AI Assistant", description: "AI Agent: automatic replies, lead qualification and appointment requests (also needs a plan that includes it)" },
   { key: "OMNICHANNEL", label: "Omnichannel inbox", description: "Email, website chat, Messenger and Instagram in the shared inbox" },
   { key: "ADS_MANAGER", label: "Ads Manager", description: "Create and run click-to-WhatsApp ads from MECGURA and see chats and cost per chat (needs Meta approval for other businesses' ad accounts)" },
@@ -19,7 +20,7 @@ export const SERVICES = [
 ] as const;
 
 /** Services that switch a whole module on or off in the client's sidebar and APIs (the rest are labels or plan features). */
-export const GATED_SERVICES = ["OMNICHANNEL", "AI_CALLING", "AI_ASSISTANT", "ADS_MANAGER", "AUTOMATION_PACK", "SOCIAL_MEDIA", "LOYALTY", "REVIEWS", "LANDING_PAGES", "FOOD_ORDERING", "SPONSORED_ADS"] as const;
+export const GATED_SERVICES = ["OMNICHANNEL", "AI_CALLING", "AI_ASSISTANT", "ADS_MANAGER", "AUTOMATION_PACK", "SOCIAL_MEDIA", "LOYALTY", "REVIEWS", "LANDING_PAGES", "FOOD_ORDERING", "SPONSORED_ADS", "ONEPOST"] as const;
 
 /** Listed so the package can be planned, but nothing sits behind it yet: shown disabled and never saved as on. */
 export const isComingSoon = (s: { description: string }) => s.description.startsWith("Coming soon");

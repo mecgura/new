@@ -1,6 +1,6 @@
-import { PanelRight, UtensilsCrossed, Activity, ShieldAlert, Newspaper, BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, LayoutTemplate, LifeBuoy, Mail, Plug, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, TrendingUp, Users, UsersRound, Webhook, Workflow, type LucideIcon, IndianRupee } from "lucide-react";
+import { PenLine, PanelRight, UtensilsCrossed, Activity, ShieldAlert, Newspaper, BarChart3, Bot, Building2, CalendarDays, Contact, CreditCard, FileSignature, FileText, Gauge, Gift, GitBranch, Globe, Handshake, Inbox, KeyRound, Landmark, LayoutDashboard, LayoutTemplate, LifeBuoy, Mail, Plug, Megaphone, MessageCircle, PartyPopper, Phone, Rocket, ScrollText, Settings, Sparkles, Star, Target, TrendingUp, Users, UsersRound, Webhook, Workflow, type LucideIcon, IndianRupee } from "lucide-react";
 
-export type NavService = "WHATSAPP_AUTOMATION" | "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "SOCIAL_MEDIA" | "LOYALTY" | "REVIEWS" | "LANDING_PAGES" | "FOOD_ORDERING" | "SPONSORED_ADS";
+export type NavService = "WHATSAPP_AUTOMATION" | "OMNICHANNEL" | "AI_CALLING" | "AI_ASSISTANT" | "ADS_MANAGER" | "SOCIAL_MEDIA" | "LOYALTY" | "REVIEWS" | "LANDING_PAGES" | "FOOD_ORDERING" | "SPONSORED_ADS" | "ONEPOST";
 
 export type NavItem = {
   label: string;
@@ -46,6 +46,7 @@ export const CLIENT_NAV: NavSection[] = [
       { label: "AI Agent", icon: Bot, href: "/ai", service: "AI_ASSISTANT" },
       { label: "AI Calling", icon: Phone, href: "/voice", service: "AI_CALLING" },
       { label: "Social Media", icon: CalendarDays, href: "/social", service: "SOCIAL_MEDIA" },
+      { label: "OnePost", icon: PenLine, href: "/onepost", service: "ONEPOST" },
       { label: "Analytics", icon: BarChart3, href: "/analytics" },
       { label: "Industry packs", icon: Sparkles, href: "/packs", service: "WHATSAPP_AUTOMATION" },
     ],

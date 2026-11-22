@@ -112,6 +112,10 @@ export const ORG_PERMISSIONS = {
   // Social media
   "social:manage": ["CLIENT_OWNER", "MANAGER"], // plan, schedule and publish posts
   "social:approve": ["CLIENT_OWNER"], // approve posts when approval is required
+  // OnePost — Content & PR Studio. Who can submit, approve or delete is decided per post status in src/lib/onepost.ts (flowActionsFor): agents draft, managers also send for review, only owners approve.
+  "onepost:read": ["CLIENT_OWNER", "MANAGER", "AGENT"],
+  "onepost:write": ["CLIENT_OWNER", "MANAGER", "AGENT"], // create posts, edit and regenerate versions (agents: own drafts only)
+  "onepost:brand": ["CLIENT_OWNER", "MANAGER"], // edit the brand profile
 } as const satisfies Record<string, readonly OrgRole[]>;
 
 export type OrgPermission = keyof typeof ORG_PERMISSIONS;
