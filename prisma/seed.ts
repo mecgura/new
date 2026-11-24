@@ -8,6 +8,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { demoWorkflow } from "../src/lib/automations";
 import { BLOG_STARTERS } from "./blog-starters";
 import { BLOG_STARTERS_HINGLISH } from "./blog-starters-hinglish";
+import { BLOG_STARTERS_ONEPOST } from "./blog-starters-onepost";
 
 const dbUrl = process.env.DATABASE_URL ?? "file:./dev.db";
 const adapter = dbUrl.startsWith("postgres")
@@ -45,6 +46,7 @@ async function main() {
   await repriceNov2026();
   await seedBlogStarters();
   await seedBlogStartersHinglish();
+  await seedBlogOnePost();
   await fixHinglishItalics();
   await backfillClientDefaults();
   await grandfatherAiAssistant();
@@ -110,6 +112,20 @@ async function seedBlogStarters() {
   }
   await db.siteSetting.create({ data: { key, value: new Date().toISOString() } });
   console.log(`Published ${added} starter blog article(s).`);
+}
+
+/** One time: content and PR articles (existing slugs are skipped; admins can edit or delete them). */
+async function seedBlogOnePost() {
+  const key = "migration:blog_onepost_2026_11";
+  if (await db.siteSetting.findUnique({ where: { key } })) return;
+  let added = 0;
+  for (const s of BLOG_STARTERS_ONEPOST) {
+    if (await db.blogPost.findUnique({ where: { slug: s.slug } })) continue;
+    await db.blogPost.create({ data: { ...s, status: "published", publishedAt: new Date() } });
+    added++;
+  }
+  await db.siteSetting.create({ data: { key, value: new Date().toISOString() } });
+  console.log(`Published ${added} content/PR blog article(s).`);
 }
 
 /** One time: the Hinglish starter articles (same rules as the English ones: existing slugs are skipped; admins can edit or delete them). */
